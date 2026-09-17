@@ -1,6 +1,7 @@
 #include "TheLastInvestigationGameModeBase.h"
 #include "UI/SMainMenu.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Kismet/GameplayStatics.h"
 #include "Engine/GameViewportClient.h"
 #include "GameFramework/PlayerController.h"
 
@@ -41,8 +42,7 @@ void ATheLastInvestigationGameModeBase::EndPlay(const EEndPlayReason::Type EndPl
 
 void ATheLastInvestigationGameModeBase::HandleNewGameClicked()
 {
-	// TODO: OpenLevel to the room once it exists — next step on the roadmap.
-	UE_LOG(LogTemp, Log, TEXT("New Game pressed — no playable level yet."));
+	UGameplayStatics::OpenLevel(this, FName(TEXT("Room01")));
 }
 
 void ATheLastInvestigationGameModeBase::HandleQuitClicked()

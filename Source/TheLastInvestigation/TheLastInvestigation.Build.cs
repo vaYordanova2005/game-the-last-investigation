@@ -11,6 +11,7 @@ public class TheLastInvestigation : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"InputCore",
+			"EnhancedInput",
 			"Slate",
 			"SlateCore",
 			"UMG",
