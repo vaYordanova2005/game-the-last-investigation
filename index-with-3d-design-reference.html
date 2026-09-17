@@ -1,0 +1,257 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pythia Bookshop</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="fx.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- ═══ SITE BACKDROP — the oracle smoke, behind every page ═══ -->
+      <div class="site-bg" aria-hidden="true">
+        <canvas class="site-bg-canvas" data-bg-canvas></canvas>
+        <div class="site-bg-veil"></div>
+        <div class="site-embers" data-embers></div>
+      </div>
+     <div class="topbar" data-topbar>
+      <header class="logo-band">
+        <button class="logo-wrap" type="button" data-page-link="home" aria-label="Go to homepage">
+          <span class="logo-text">
+            <strong class="wordmark" data-split="PYTHIA">PYTHIA</strong>
+            <small>Δελφοί · the oracle of stories</small>
+          </span>
+        </button>
+      </header>
+
+
+      <section class="search-band" aria-label="Search books">
+        <input class="search-inp" type="search" data-search placeholder="Search by title, author, genre..." />
+        <button class="search-btn" type="button" data-search-button>Search</button>
+      </section>
+
+      <nav class="nav-band" aria-label="Main pages">
+        <button class="genre-main-btn" type="button" data-toggle="genre-menu">Genres</button>
+        <button class="nav-band-btn" type="button" data-page-link="profile">Profile</button>
+        <button class="nav-band-btn" type="button" data-page-link="favorites">Favorites</button>
+        <button class="nav-band-btn" type="button" data-page-link="community">Community</button>
+        <button class="nav-band-btn" type="button" data-page-link="orders">📦 Orders</button>
+        <button class="nav-band-btn" type="button" data-page-link="cart">Cart <span class="cart-badge" data-cart-count>0</span></button>
+        <div class="genre-dd" data-genre-menu></div>
+      </nav>
+     </div>
+
+      <main>
+        <section id="page-home" class="page active">
+
+
+
+
+          <nav class="genre-band" aria-label="Genres">
+            <button class="qgenre active" type="button" data-genre="all">All</button>
+            <button class="qgenre" type="button" data-genre="Science Fiction">Sci-Fi</button>
+            <button class="qgenre" type="button" data-genre="Horror">Horror</button>
+            <button class="qgenre" type="button" data-genre="Romance">Romance</button>
+            <button class="qgenre" type="button" data-genre="Mystery">Mystery</button>
+            <button class="qgenre" type="button" data-genre="Classic">Classic</button>
+          </nav>
+
+          <div class="books-area">
+            <div class="books-top">
+              <div>
+                <p class="section-kicker">Featured catalogue</p>
+                <h1>Books for curious readers</h1>
+              </div>
+              <button class="filter-btn" type="button" data-toggle="filter-panel">Filters</button>
+            </div>
+            <aside class="filter-panel" data-filter-panel>
+              <label>Price min <input type="number" min="0" data-price-min value="0" /></label>
+              <label>Price max <input type="number" min="0" data-price-max value="100" /></label>
+              <label>Year
+                <select data-year-filter>
+                  <option value="all">All</option>
+                  <option value="2024">2024</option>
+                  <option value="2023">2023</option>
+                  <option value="2022">2022</option>
+                  <option value="older">Older</option>
+                </select>
+              </label>
+              <label>Sort
+                <select data-sort>
+                  <option value="popular">Most popular</option>
+                  <option value="new">Newest</option>
+                  <option value="price-asc">Price ascending</option>
+                  <option value="price-desc">Price descending</option>
+                </select>
+              </label>
+            </aside>
+            <div class="books-grid" data-books-grid></div>
+          </div>
+        </section>
+
+        <section id="page-detail" class="page">
+          <div class="detail">
+            <button class="back-btn" type="button" data-page-link="home">Back</button>
+            <div data-detail-content></div>
+          </div>
+        </section>
+
+        <section id="page-cart" class="page">
+          <div class="cart-pg">
+            <button class="back-btn" type="button" data-page-link="home">Back</button>
+            <h1 class="cart-title">Cart</h1>
+            <div data-cart-items></div>
+            <div data-cart-summary></div>
+          </div>
+        </section>
+
+        <section id="page-checkout" class="page">
+          <div class="checkout-pg">
+            <button class="back-btn" type="button" data-page-link="home">Back</button>
+            <form class="checkout-form" data-checkout-form>
+              <div>
+                <p class="section-kicker">Order details</p>
+                <h1>Checkout</h1>
+              </div>
+              <div class="checkout-grid">
+                <label>Full name <input name="name" required placeholder="Jane Reader" /></label>
+                <label>Email <input name="email" type="email" required placeholder="jane@example.com" /></label>
+                <label>City <input name="city" required placeholder="Sofia" /></label>
+                <label>Street / district <input name="street" required placeholder="Book Lane" /></label>
+                <label>Number <input name="number" required placeholder="12A" /></label>
+                <label>Payment method
+                  <select name="payment" required>
+                    <option value="card">Card</option>
+                    <option value="cash_on_delivery">Cash on delivery</option>
+                    <option value="bank_transfer">Bank transfer</option>
+                  </select>
+                </label>
+              </div>
+              <label class="check-line"><input type="checkbox" name="invoice" /> I need an invoice</label>
+              <label class="promo-line">Discount code <input data-promo-code placeholder="BOOK10" /></label>
+              <button class="co-btn" type="button" data-apply-promo>Apply code</button>
+              <div class="checkout-summary" data-checkout-summary></div>
+              <button class="co-btn" type="submit">Place order</button>
+              <p class="form-message" data-order-message></p>
+            </form>
+          </div>
+        </section>
+
+        <!-- ORDERS HISTORY -->
+        <section id="page-orders" class="page">
+          <div class="orders-pg">
+            <button class="back-btn" type="button" data-page-link="home">← Back</button>
+            <h1 class="orders-title">📦 My Orders</h1>
+            <div data-orders-list></div>
+          </div>
+        </section>
+
+        <section id="page-community" class="page">
+          <div class="comm-pg">
+            <button class="back-btn" type="button" data-page-link="home">Back</button>
+            <h1 class="comm-title">Community chat</h1>
+            <div class="chat-box" data-chat-box></div>
+            <div class="chat-row">
+              <input class="chat-in" data-chat-input placeholder="Write a message..." />
+              <button class="csend" type="button" data-send-chat>Send</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="page-favorites" class="page">
+          <div class="favs-pg">
+            <button class="back-btn" type="button" data-page-link="home">Back</button>
+            <h1 class="favs-title">Favorite books</h1>
+            <div class="books-grid" data-favorites-grid></div>
+          </div>
+        </section>
+
+        <section id="page-profile" class="page">
+          <div class="prof-pg">
+            <button class="back-btn" type="button" data-page-link="home">Back</button>
+            <h1 class="prof-title">Profile</h1>
+            <div class="prof-card">
+              <div class="auth-tabs" data-auth-tabs>
+                <button class="auth-tab active" type="button" data-auth-tab="signin">Sign in</button>
+                <button class="auth-tab" type="button" data-auth-tab="signup">Sign up</button>
+              </div>
+
+              <form class="auth-form" data-signin-form>
+                <h2>Sign in</h2>
+                <label>Email <input name="email" type="email" required placeholder="reader@example.com" /></label>
+                <label>Password <input name="password" type="password" required placeholder="Password" /></label>
+                <button class="co-btn" type="submit">Sign in</button>
+                <p class="form-message" data-signin-message></p>
+              </form>
+
+              <form class="auth-form hidden" data-signup-form>
+                <h2>Create account</h2>
+                <label>Username <input name="username" required placeholder="reader123" /></label>
+                <label>Full name <input name="fullName" required placeholder="Jane Reader" /></label>
+                <label>Email <input name="email" type="email" required placeholder="jane@example.com" /></label>
+                <label>Password <input name="password" type="password" minlength="6" required placeholder="At least 6 characters" /></label>
+                <label>Account type
+                  <select name="role" required>
+                    <option value="client">Client</option>
+                    <option value="seller">Seller</option>
+                  </select>
+                </label>
+                <button class="co-btn" type="submit">Sign up</button>
+                <p class="form-message" data-signup-message></p>
+              </form>
+
+              <section class="profile-panel hidden" data-profile-panel>
+                <div class="profile-head">
+                  <div class="avatar" data-profile-avatar>S</div>
+                  <div>
+                    <h2 data-profile-name>Reader</h2>
+                    <p class="muted" data-profile-email>reader@example.com</p>
+                    <span class="role-pill" data-profile-role>Client</span>
+                  </div>
+                </div>
+                <button class="small-btn" type="button" data-signout>Sign out</button>
+                <div class="role-box">
+                  <h2>Permissions</h2>
+                  <ul data-role-permissions></ul>
+                </div>
+                <form class="seller-form" data-book-form>
+                  <h2>Add a book</h2>
+                  <input name="title" placeholder="Title" required />
+                  <input name="author" placeholder="Author" required />
+                  <input name="genre" placeholder="Genre" required />
+                  <input name="year" type="number" placeholder="Year" required />
+                  <input name="price" type="number" min="1" step="0.01" placeholder="Price EUR" required />
+                  <input name="coverUrl" type="url" placeholder="Cover image URL (optional)" />
+                  <textarea name="description" placeholder="Description"></textarea>
+                  <button class="co-btn" type="submit">Add book</button>
+                </form>
+              </section>
+            </div>
+          </div>
+        </section>
+      </main>
+      <!-- Order success modal -->
+      <div class="order-modal-overlay" id="order-modal" aria-modal="true" role="dialog" aria-label="Order placed">
+        <div class="order-modal-box">
+          <div class="order-modal-check">✓</div>
+          <h2 class="order-modal-title">Order placed!</h2>
+          <p class="order-modal-sub" id="order-modal-sub"></p>
+          <p class="order-modal-email" id="order-modal-email"></p>
+          <button class="co-btn order-modal-btn" id="order-modal-close">Continue shopping</button>
+        </div>
+      </div>
+
+      <div class="toast" data-toast></div>
+    </div>
+
+    <!-- ═══ FX LAYER ═══ -->
+    <div class="scroll-progress" data-progress aria-hidden="true"><i></i></div>
+    <div class="cursor-dot" data-cursor-dot aria-hidden="true"></div>
+    <div class="cursor-ring" data-cursor-ring aria-hidden="true"></div>
+    <div class="curtain" data-curtain aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+    <script src="app.js"></script>
+    <script src="fx.js"></script>
+  </body>
+</html>

@@ -1,0 +1,23 @@
+# Local project notes/history — never pushed
+CLAUDE.md
+
+# Unreal Engine
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+Build/
+
+# Per-user editor scratch, not shared
+Content/Developers/
+Content/Collections/
+
+# Visual Studio
+.vs/
+*.sln
+*.suo
+*.VC.db
+*.opensdf
+*.sdf
+*.opendb
+*.ipch
