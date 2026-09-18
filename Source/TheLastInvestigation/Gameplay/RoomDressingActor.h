@@ -104,6 +104,8 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPlaster;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWallpaper;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWallpaperFaded;
+	/** The damp-blackened plaster that shows through wherever the paper has come away. */
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPlasterDark;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatCeiling;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFloorboards;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFloorboardsWorn;

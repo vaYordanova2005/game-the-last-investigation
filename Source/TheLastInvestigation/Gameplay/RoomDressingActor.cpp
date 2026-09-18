@@ -50,6 +50,7 @@ void ARoomDressingActor::CacheMaterials(FRoomBuilder& Build)
 	MatPlaster = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.44f, 0.42f, 0.38f));
 	MatWallpaper = Build.Surface(RoomSurfaces::Wallpaper, FLinearColor(0.66f, 0.63f, 0.58f));
 	MatWallpaperFaded = Build.Surface(RoomSurfaces::Wallpaper, FLinearColor(0.42f, 0.40f, 0.36f));
+	MatPlasterDark = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.17f, 0.16f, 0.14f));
 	MatCeiling = Build.Surface(RoomSurfaces::Ceiling, FLinearColor(0.38f, 0.37f, 0.34f));
 	MatFloorboards = Build.Surface(RoomSurfaces::Floorboards, FLinearColor(0.70f, 0.67f, 0.62f));
 	MatFloorboardsWorn = Build.Surface(RoomSurfaces::Floorboards, FLinearColor(0.44f, 0.40f, 0.36f));
@@ -266,58 +267,134 @@ void ARoomDressingActor::BuildWalls(FRoomBuilder& Build)
 			WallPanel(Side, U, V, Random.FRandRange(1.5f, 3.f), Random.FRandRange(50.f, 160.f), MatVoid, Random.FRandRange(-14.f, 14.f));
 		}
 
-		// Layer 2: wallpaper, in strips, with roughly a third of them torn away entirely.
+		// A piece of covering that has let go along its top edge and hangs away from the wall.
+		//
+		// This is the whole trick to a wall that reads as *peeling* rather than as patterned: a
+		// flat panel of any colour is still a flat wall, but an edge standing a few centimetres
+		// proud catches the lantern along its lip and throws a hard shadow behind it. So each one
+		// gets a pivot at the tear line and is built hanging from it — the pivot's roll is how far
+		// it has curled away, and for some of them the wind keeps moving it.
+		auto AddPeel = [&](EWallSide Side, float U, float V, float Width, float Length, float Curl, bool bWindMoved, UMaterialInterface* Mat)
+		{
+			USceneComponent* Pivot = NewObject<USceneComponent>(this, MakeUniqueObjectName(this, USceneComponent::StaticClass(), TEXT("PeelPivot")));
+			Pivot->SetMobility(EComponentMobility::Movable);
+			Pivot->AttachToComponent(DressingRoot, FAttachmentTransformRules::KeepRelativeTransform);
+
+			FVector PivotLocation;
+			FRotator PivotRotation;
+			switch (Side)
+			{
+			case EWallSide::North: PivotLocation = FVector(U, -DepthHalf + FaceInset + 1.f, V); PivotRotation = FRotator(0.f, 0.f, 0.f); break;
+			case EWallSide::South: PivotLocation = FVector(U, DepthHalf - FaceInset - 1.f, V); PivotRotation = FRotator(0.f, 180.f, 0.f); break;
+			case EWallSide::East:  PivotLocation = FVector(WidthHalf - FaceInset - 1.f, U, V); PivotRotation = FRotator(0.f, 270.f, 0.f); break;
+			default:               PivotLocation = FVector(-WidthHalf + FaceInset + 1.f, U, V); PivotRotation = FRotator(0.f, 90.f, 0.f); break;
+			}
+			PivotRotation.Roll = Curl;
+			Pivot->SetRelativeLocationAndRotation(PivotLocation, PivotRotation);
+			Pivot->RegisterComponent();
+			AddInstanceComponent(Pivot);
+
+			FRoomBuilder PeelBuild(this, Pivot);
+			PeelBuild.Box(FVector(-1.f, 0.f, -Length * 0.5f), FRotator::ZeroRotator, FVector(1.4f, Width, Length), Mat, /*bBlockingCollision*/ false);
+
+			if (bWindMoved)
+			{
+				WindMovedParts.Add(Pivot);
+				WindPartPhases.Add(Random.FRandRange(0.f, 100.f));
+			}
+		};
+
+		// Layer 2: wallpaper, in strips, with getting on for half of them torn away entirely.
 		const float StripWidth = 52.f;
 		const int32 StripCount = FMath::FloorToInt((HalfLength * 2.f) / StripWidth);
 		for (int32 i = 0; i < StripCount; ++i)
 		{
 			const float U = -HalfLength + StripWidth * (i + 0.5f);
 
-			if (Random.FRand() < 0.3f)
+			if (Random.FRand() < 0.42f)
 			{
 				continue; // torn off long ago; bare plaster shows here
 			}
 
 			// Paper survives from the skirting up to a ragged line — damp comes from below, and the
 			// top of the wall is where it lets go first.
-			const float TopV = Random.FRandRange(Setup.Height * 0.45f, Setup.Height * 0.98f);
+			const float TopV = Random.FRandRange(Setup.Height * 0.4f, Setup.Height * 0.98f);
 			if (SpotBlocked(Side, U, TopV * 0.5f, StripWidth * 0.5f, TopV * 0.5f))
 			{
 				continue;
 			}
 
-			UMaterialInterface* PaperMat = Random.FRand() < 0.35f ? Cast<UMaterialInterface>(MatWallpaperFaded) : Cast<UMaterialInterface>(MatWallpaper);
-			WallPanel(Side, U, TopV * 0.5f, StripWidth - 2.f, TopV, PaperMat);
+			UMaterialInterface* PaperMat = Random.FRand() < 0.4f ? Cast<UMaterialInterface>(MatWallpaperFaded) : Cast<UMaterialInterface>(MatWallpaper);
 
-			// Layer 3: a loose flap hanging off the top of some strips, which the wind moves.
-			if (Random.FRand() < 0.4f)
+			// The strip is not cut off level. A single panel gives a dead straight horizontal edge
+			// that reads as wallpaper *hung* to that height; three teeth of differing height read
+			// as paper that tore.
+			const int32 Teeth = 3;
+			const float ToothWidth = (StripWidth - 2.f) / Teeth;
+			for (int32 Tooth = 0; Tooth < Teeth; ++Tooth)
 			{
-				USceneComponent* Pivot = NewObject<USceneComponent>(this, MakeUniqueObjectName(this, USceneComponent::StaticClass(), TEXT("PeelPivot")));
-				Pivot->SetMobility(EComponentMobility::Movable);
-				Pivot->AttachToComponent(DressingRoot, FAttachmentTransformRules::KeepRelativeTransform);
-
-				FVector PivotLocation;
-				FRotator PivotRotation;
-				switch (Side)
-				{
-				case EWallSide::North: PivotLocation = FVector(U, -DepthHalf + FaceInset + 1.f, TopV); PivotRotation = FRotator(0.f, 0.f, 0.f); break;
-				case EWallSide::South: PivotLocation = FVector(U, DepthHalf - FaceInset - 1.f, TopV); PivotRotation = FRotator(0.f, 180.f, 0.f); break;
-				case EWallSide::East:  PivotLocation = FVector(WidthHalf - FaceInset - 1.f, U, TopV); PivotRotation = FRotator(0.f, 270.f, 0.f); break;
-				default:               PivotLocation = FVector(-WidthHalf + FaceInset + 1.f, U, TopV); PivotRotation = FRotator(0.f, 90.f, 0.f); break;
-				}
-				Pivot->SetRelativeLocationAndRotation(PivotLocation, PivotRotation);
-				Pivot->RegisterComponent();
-				AddInstanceComponent(Pivot);
-
-				// Built hanging straight down from the pivot; the pivot's roll is what peels it
-				// away from the wall each time a gust comes through.
-				FRoomBuilder PeelBuild(this, Pivot);
-				const float FlapLength = Random.FRandRange(30.f, 85.f);
-				PeelBuild.Box(FVector(-1.f, 0.f, -FlapLength * 0.5f), FRotator::ZeroRotator, FVector(1.5f, StripWidth - 6.f, FlapLength), MatWallpaperFaded, /*bBlockingCollision*/ false);
-
-				WindMovedParts.Add(Pivot);
-				WindPartPhases.Add(Random.FRandRange(0.f, 100.f));
+				const float ToothTop = TopV * Random.FRandRange(0.78f, 1.04f);
+				WallPanel(Side, U - (StripWidth - 2.f) * 0.5f + ToothWidth * (Tooth + 0.5f), ToothTop * 0.5f, ToothWidth - 0.6f, ToothTop, PaperMat);
 			}
+
+			// Layer 3: what is hanging off the tear. Most strips have something; about half of
+			// those are loose enough for the draught from the broken pane to keep moving them,
+			// and the rest have curled where they dried and stayed there.
+			if (Random.FRand() < 0.72f)
+			{
+				const bool bWindMoved = Random.FRand() < 0.5f;
+				AddPeel(Side, U + Random.FRandRange(-8.f, 8.f), TopV * Random.FRandRange(0.82f, 0.98f),
+					Random.FRandRange(StripWidth * 0.4f, StripWidth - 6.f),
+					Random.FRandRange(26.f, 92.f),
+					bWindMoved ? Random.FRandRange(4.f, 12.f) : Random.FRandRange(16.f, 46.f),
+					bWindMoved,
+					MatWallpaperFaded);
+			}
+
+			// A corner lifting halfway up the strip — smaller, tighter curls, the kind that start
+			// at a seam. These are what fill the wall between the big tears.
+			if (Random.FRand() < 0.55f)
+			{
+				AddPeel(Side, U + Random.FRandRange(-16.f, 16.f), Random.FRandRange(TopV * 0.25f, TopV * 0.8f),
+					Random.FRandRange(9.f, 22.f), Random.FRandRange(8.f, 26.f),
+					Random.FRandRange(22.f, 58.f), /*bWindMoved*/ false, PaperMat);
+			}
+		}
+
+		// Flakes of the paint under the paper, lifting off the bare plaster. Small, and there are
+		// a lot of them: individually they are nothing, together they are the difference between a
+		// wall that is dirty and a wall that is coming apart.
+		for (int32 Flake = 0; Flake < 16; ++Flake)
+		{
+			const float FlakeU = Random.FRandRange(-HalfLength, HalfLength);
+			// Biased low and high — damp rises from the floor and comes down from the ceiling, and
+			// the middle of a wall is the last part to go.
+			const float FlakeV = Random.FRand() < 0.55f
+				? Random.FRandRange(22.f, Setup.Height * 0.4f)
+				: Random.FRandRange(Setup.Height * 0.62f, Setup.Height - 18.f);
+
+			if (SpotBlocked(Side, FlakeU, FlakeV, 20.f, 20.f))
+			{
+				continue;
+			}
+
+			AddPeel(Side, FlakeU, FlakeV, Random.FRandRange(5.f, 17.f), Random.FRandRange(5.f, 19.f),
+				Random.FRandRange(18.f, 64.f), /*bWindMoved*/ false,
+				Random.FRand() < 0.5f ? Cast<UMaterialInterface>(MatPlaster) : Cast<UMaterialInterface>(MatWallpaperFaded));
+		}
+
+		// And what is behind all of it: plaster the damp has blackened, showing wherever something
+		// has come away. Without this the exposed areas are all one clean colour and the peeling
+		// has nothing to have exposed.
+		for (int32 Patch = 0; Patch < 6; ++Patch)
+		{
+			const float PatchU = Random.FRandRange(-HalfLength, HalfLength);
+			const float PatchV = Random.FRandRange(30.f, Setup.Height - 30.f);
+			if (SpotBlocked(Side, PatchU, PatchV, 50.f, 50.f))
+			{
+				continue;
+			}
+			WallPanel(Side, PatchU, PatchV, Random.FRandRange(30.f, 90.f), Random.FRandRange(34.f, 110.f), MatPlasterDark, Random.FRandRange(-5.f, 5.f));
 		}
 
 		// Blotches. The wallpaper strips above give the wall a vertical grain, and a wall that is
@@ -343,7 +420,7 @@ void ARoomDressingActor::BuildWalls(FRoomBuilder& Build)
 					BlotchV + Random.FRandRange(-34.f, 34.f),
 					Random.FRandRange(26.f, 78.f),
 					Random.FRandRange(24.f, 70.f),
-					Random.FRand() < 0.25f ? Cast<UMaterialInterface>(MatMold) : Cast<UMaterialInterface>(MatWallpaperFaded),
+					Random.FRand() < 0.3f ? Cast<UMaterialInterface>(MatMold) : Cast<UMaterialInterface>(MatPlasterDark),
 					Random.FRandRange(-6.f, 6.f));
 			}
 		}
