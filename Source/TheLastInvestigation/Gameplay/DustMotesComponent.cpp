@@ -30,9 +30,10 @@ void UDustMotesComponent::BeginPlay()
 	}
 
 	FRoomBuilder Build(Owner, Parent);
-	// Bright albedo is right here: a mote is only ever seen as a lit speck against darkness, so it
-	// needs to catch what little light reaches it. Rough, because dust is not glossy.
-	UMaterialInstanceDynamic* MoteMat = Build.Material(FLinearColor(0.62f, 0.58f, 0.50f), 1.f);
+	// Kept dim and fully rough. A mote is a speck catching the edge of the lantern, not a light
+	// source: at high albedo the spheres blow out into visible glowing balls the moment the player
+	// walks past them.
+	UMaterialInstanceDynamic* MoteMat = Build.Material(FLinearColor(0.20f, 0.19f, 0.17f), 1.f);
 	Motes = Build.Instances(FRoomShapes::Sphere(), MoteMat);
 	if (!Motes)
 	{
@@ -54,7 +55,7 @@ void UDustMotesComponent::BeginPlay()
 
 		Positions.Add(Position);
 		Phases.Add(Random.FRandRange(0.f, 200.f));
-		Sizes.Add(Random.FRandRange(0.7f, 2.1f)); // sub-centimetre specks
+		Sizes.Add(Random.FRandRange(0.35f, 0.9f)); // millimetre specks — anything larger reads as a floating ball
 
 		Motes->AddInstance(FTransform(FRotator::ZeroRotator, Position, FVector(Sizes[i] / 100.f)));
 	}

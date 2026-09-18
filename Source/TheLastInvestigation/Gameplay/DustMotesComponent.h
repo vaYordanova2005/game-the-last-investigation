@@ -47,7 +47,7 @@ private:
 	float WindStrength = 0.f;
 
 	UPROPERTY(EditAnywhere, Category = "Dust")
-	int32 MoteCount = 520;
+	int32 MoteCount = 300;
 
 	/** Baseline sink rate. Dust settles; the noise field is what keeps it alive on the way down. */
 	UPROPERTY(EditAnywhere, Category = "Dust")

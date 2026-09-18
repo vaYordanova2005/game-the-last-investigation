@@ -1,0 +1,3 @@
+# Unreal binary assets — never line-ending-converted, never merged by git.
+*.uasset binary
+*.umap binary

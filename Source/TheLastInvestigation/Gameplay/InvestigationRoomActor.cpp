@@ -47,8 +47,20 @@ AInvestigationRoomActor::AInvestigationRoomActor()
 	// brief is built on, and it would then blow out the whole frame on every lightning flash.
 	PP.bOverride_AutoExposureMethod = true;
 	PP.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+
+	// In manual mode the exposure comes from the camera settings, so they are set explicitly
+	// rather than left at their daylight defaults and then dragged into range with a huge EV
+	// bias. Fast film, a slow shutter and a wide aperture — how you would actually photograph a
+	// room lit by one flame. EV100 works out around 3.6, which puts a lantern-lit wall a little
+	// under middle grey: dark, but readable.
+	PP.bOverride_CameraISO = true;
+	PP.CameraISO = 800.f;
+	PP.bOverride_CameraShutterSpeed = true;
+	PP.CameraShutterSpeed = 30.f; // 1/30s
+	PP.bOverride_DepthOfFieldFstop = true;
+	PP.DepthOfFieldFstop = 1.8f;
 	PP.bOverride_AutoExposureBias = true;
-	PP.AutoExposureBias = 10.5f;
+	PP.AutoExposureBias = 0.f; // trim knob — this is the dial to turn if the room reads too dark or too bright
 
 	// Lumen, explicitly, so the room does not depend on a project-setting default. The single
 	// bounce off a lantern-lit floorboard is most of what keeps the darkness readable instead of
@@ -103,16 +115,17 @@ UStaticMeshComponent* AInvestigationRoomActor::AddSlab(const FString& Name, cons
 
 void AInvestigationRoomActor::ApplySurfaceMaterial()
 {
-	// BasicShapeMaterial ships near-white, which reads as a blown-out void under any lighting.
-	// It exposes a "Color" parameter, so a dynamic instance can tint every surface to a dusty
-	// grey-brown in code — no Material Editor graph needed. The dressing then covers most of
-	// these faces with plaster, wallpaper and floorboards; this is what shows through the gaps.
+	// The base must be loaded by name, NOT taken from the cube's own material slot. /Engine/
+	// BasicShapes/Cube ships with a WorldGridMaterial instance assigned — the 1m checkerboard —
+	// and tinting that just gives a tinted checkerboard on every wall in the room. BasicShapeMaterial
+	// is the plain lit one, and it exposes "Color" and "Roughness" so a dynamic instance can dress
+	// it in code without a Material Editor graph.
 	if (!CubeMesh || Surfaces.Num() == 0)
 	{
 		return;
 	}
 
-	UMaterialInterface* BaseMaterial = Surfaces[0]->GetMaterial(0);
+	UMaterialInterface* BaseMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 	if (!BaseMaterial)
 	{
 		return;
