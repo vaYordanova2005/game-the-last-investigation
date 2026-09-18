@@ -383,6 +383,89 @@ void ARoomDressingActor::BuildWalls(FRoomBuilder& Build)
 				Random.FRand() < 0.5f ? Cast<UMaterialInterface>(MatPlaster) : Cast<UMaterialInterface>(MatWallpaperFaded));
 		}
 
+		// What came off, on the floor under where it came off from.
+		//
+		// The wall being torn is only half the story — a room where the covering has peeled for
+		// decades has the pieces lying at the foot of the wall, because nothing has been in here
+		// to sweep them up. They are also what makes the peeling read as having *happened* rather
+		// than as a texture: the floor is the evidence.
+		for (int32 Piece = 0; Piece < 7; ++Piece)
+		{
+			const float PieceU = Random.FRandRange(-HalfLength, HalfLength);
+			const float Distance = Random.FRandRange(9.f, 58.f);
+
+			// Nothing across the threshold — the door has to be able to swing — and nothing on top
+			// of the detective while he is still lying there.
+			if (SpotBlocked(Side, PieceU, 6.f, 30.f, 6.f))
+			{
+				continue;
+			}
+
+			FVector2D Spot;
+			float AlongWallYaw = 0.f;
+			switch (Side)
+			{
+			case EWallSide::North: Spot = FVector2D(PieceU, -DepthHalf + FaceInset + Distance); AlongWallYaw = 0.f; break;
+			case EWallSide::South: Spot = FVector2D(PieceU, DepthHalf - FaceInset - Distance); AlongWallYaw = 0.f; break;
+			case EWallSide::East:  Spot = FVector2D(WidthHalf - FaceInset - Distance, PieceU); AlongWallYaw = 90.f; break;
+			default:               Spot = FVector2D(-WidthHalf + FaceInset + Distance, PieceU); AlongWallYaw = 90.f; break;
+			}
+
+			if (FVector2D::DistSquared(Spot, Setup.WakeSpot) < FMath::Square(90.f))
+			{
+				continue;
+			}
+
+			UMaterialInterface* PieceMat = Random.FRand() < 0.55f
+				? Cast<UMaterialInterface>(MatWallpaperFaded)
+				: Cast<UMaterialInterface>(Random.FRand() < 0.5f ? MatPlaster : MatPlasterDark);
+
+			const float Length = Random.FRandRange(14.f, 46.f);
+			const float Width = Random.FRandRange(8.f, 26.f);
+			const float Yaw = AlongWallYaw + Random.FRandRange(-38.f, 38.f);
+
+			if (Random.FRand() < 0.3f)
+			{
+				// Still leaning where it slid down the wall and stopped, one edge on the boards
+				// and the rest of it against the skirting.
+				const float Lean = Random.FRandRange(58.f, 78.f);
+				Build.Box(
+					FVector(Spot.X, Spot.Y, 6.f + FMath::Cos(FMath::DegreesToRadians(Lean)) * Length * 0.5f),
+					FRotator(Side == EWallSide::East || Side == EWallSide::West ? Lean : 0.f, Yaw,
+						Side == EWallSide::East || Side == EWallSide::West ? 0.f : Lean),
+					FVector(Width, 1.4f, Length),
+					PieceMat,
+					/*bBlockingCollision*/ false);
+				continue;
+			}
+
+			// Lying flat, with the far end curled up off the boards the way dried paper does —
+			// that lifted edge is the only part of it the lantern will actually catch.
+			Build.Box(
+				FVector(Spot.X, Spot.Y, 5.6f),
+				FRotator(Random.FRandRange(-4.f, 4.f), Yaw, Random.FRandRange(-4.f, 4.f)),
+				FVector(Length, Width, 1.2f),
+				PieceMat,
+				/*bBlockingCollision*/ false);
+
+			if (Random.FRand() < 0.65f)
+			{
+				const float CurlLength = Length * Random.FRandRange(0.28f, 0.5f);
+				const float CurlAngle = Random.FRandRange(22.f, 55.f);
+				const float Radians = FMath::DegreesToRadians(Yaw);
+				const float Offset = (Length - CurlLength) * 0.5f;
+				Build.Box(
+					FVector(
+						Spot.X + FMath::Cos(Radians) * Offset,
+						Spot.Y + FMath::Sin(Radians) * Offset,
+						5.6f + FMath::Sin(FMath::DegreesToRadians(CurlAngle)) * CurlLength * 0.5f),
+					FRotator(CurlAngle, Yaw, 0.f),
+					FVector(CurlLength, Width * Random.FRandRange(0.8f, 1.f), 1.2f),
+					PieceMat,
+					/*bBlockingCollision*/ false);
+			}
+		}
+
 		// And what is behind all of it: plaster the damp has blackened, showing wherever something
 		// has come away. Without this the exposed areas are all one clean colour and the peeling
 		// has nothing to have exposed.
