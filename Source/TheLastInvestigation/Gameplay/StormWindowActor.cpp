@@ -5,6 +5,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/PointLightComponent.h"
+#include "Components/RectLightComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
 namespace
@@ -20,17 +21,13 @@ AStormWindowActor::AStormWindowActor()
 	SetRootComponent(StormRoot);
 	StormRoot->SetMobility(EComponentMobility::Movable);
 
-	StormAmbientLight = CreateDefaultSubobject<UDirectionalLightComponent>(TEXT("StormAmbientLight"));
-	StormAmbientLight->SetupAttachment(StormRoot);
-	StormAmbientLight->SetMobility(EComponentMobility::Movable);
-	StormAmbientLight->SetIntensity(0.25f); // lux — overcast midnight, just enough to shape the window
-	StormAmbientLight->SetLightColor(FLinearColor(0.42f, 0.52f, 0.78f));
-	StormAmbientLight->SetCastShadows(true);
-
+	// One directional light, not two. A second one makes the renderer pick arbitrarily which is
+	// "the" light for volumetric fog and translucency, and complain about it on screen. So the
+	// storm's constant overcast glow is the same light as the lightning, just at its floor value.
 	LightningLight = CreateDefaultSubobject<UDirectionalLightComponent>(TEXT("LightningLight"));
 	LightningLight->SetupAttachment(StormRoot);
 	LightningLight->SetMobility(EComponentMobility::Movable);
-	LightningLight->SetIntensity(0.f);
+	LightningLight->SetIntensity(StormAmbientLux);
 	LightningLight->SetLightColor(LightningColor);
 	LightningLight->SetCastShadows(true); // the whole point: hard, long shadows thrown across the room
 
@@ -42,6 +39,18 @@ AStormWindowActor::AStormWindowActor()
 	LightningGlow->SetLightColor(LightningColor);
 	LightningGlow->SetAttenuationRadius(2400.f);
 	LightningGlow->SetCastShadows(false); // pure fill; the directional light already owns the shadows
+
+	SkyPortal = CreateDefaultSubobject<URectLightComponent>(TEXT("SkyPortal"));
+	SkyPortal->SetupAttachment(StormRoot);
+	SkyPortal->SetMobility(EComponentMobility::Movable);
+	SkyPortal->SetIntensityUnits(ELightUnits::Candelas);
+	// Cold, and a long way from white: everything the storm lights has to read as the opposite of
+	// the lantern, which is the room's whole colour idea.
+	SkyPortal->SetLightColor(FLinearColor(0.40f, 0.55f, 0.88f));
+	SkyPortal->SetCastShadows(true);
+	// Nearly fully open. Narrowing the barn doors keeps light off the side walls — including the
+	// door wall, which is the one the window is supposed to be printing itself onto.
+	SkyPortal->SetBarnDoorAngle(88.f);
 }
 
 void AStormWindowActor::Configure(const FStormWindowSetup& InSetup)
@@ -67,15 +76,26 @@ void AStormWindowActor::BeginPlay()
 	BuildWindow();
 	BuildOutsideWorld();
 	BuildRain();
+	BuildLightningBolts();
 
 	const float WindowCenterZ = (Setup.SillHeight + Setup.TopHeight) * 0.5f;
 
-	// Aimed down and across, from outside, so the flash rakes through the opening and stretches
-	// every object's shadow along the floor toward the far corner.
-	const FRotator StrikeAim(-32.f, 165.f, 0.f);
-	StormAmbientLight->SetRelativeRotation(StrikeAim);
+	// Aimed low and across rather than steeply down. The angle is chosen so the beam comes through
+	// the opening and lands on the door wall as a bright, muntin-barred rectangle — that patch is
+	// the composition's second subject — and so everything standing on the floor throws a long
+	// shadow away from the window instead of a short one under itself.
+	const FRotator StrikeAim(-13.f, 122.f, 0.f);
 	LightningLight->SetRelativeRotation(StrikeAim);
 	LightningGlow->SetRelativeLocation(FVector(220.f, 0.f, WindowCenterZ + 60.f));
+
+	// The sky, filling the opening from just outside the glass. Sized to the hole in the wall, so
+	// the light arriving in the room is exactly the shape of the window.
+	SkyPortal->SetRelativeLocation(FVector(Setup.WallThickness * 0.5f + 16.f, 0.f, WindowCenterZ));
+	SkyPortal->SetRelativeRotation(FRotator(0.f, 180.f, 0.f)); // emits along its own +X, so it faces the room
+	SkyPortal->SetSourceWidth(Setup.OpeningWidth);
+	SkyPortal->SetSourceHeight(Setup.TopHeight - Setup.SillHeight);
+	SkyPortal->SetAttenuationRadius(2000.f);
+	SkyPortal->SetIntensity(SkyPortalCandelas);
 
 	TimeUntilNextStrike = Random.FRandRange(1.2f, 2.4f); // one early strike, while the player is still getting oriented
 }
@@ -84,51 +104,175 @@ void AStormWindowActor::BuildWindow()
 {
 	FRoomBuilder Build(this, StormRoot);
 
-	UMaterialInstanceDynamic* FrameMat = Build.Material(RoomPalette::RottenWood, 0.95f);
-	UMaterialInstanceDynamic* GlassMat = Build.Material(RoomPalette::GlassShard, 0.25f);
-	UMaterialInstanceDynamic* ClothMat = Build.Material(RoomPalette::Cloth, 0.98f);
+	// The joinery is painted, not bare timber. It is the palest thing in the room and the only
+	// set of straight lines left in it, which is what makes the window read as a window from
+	// across the floor — before the lightning shows anything of what is behind it.
+	UMaterialInstanceDynamic* PaintMat = Build.Flat(RoomPalette::PaintedTrim, 0.62f);
+	UMaterialInstanceDynamic* PaintWornMat = Build.Flat(RoomPalette::PaintedTrim * 0.55f, 0.82f);
+	// Thin and nearly clear head-on. The grime is still there in the roughness, but the panes have
+	// to be *seen through* — the trees, the rain and the bolt behind them are the point of the
+	// window, and at a quarter opacity the glass was a sheet of frost with a view painted on it.
+	UMaterialInstanceDynamic* GlassMat = Build.Glass(FLinearColor(0.10f, 0.13f, 0.16f), 0.12f, 0.05f);
+	if (GlassMat)
+	{
+		GlassMat->SetScalarParameterValue(TEXT("RoughnessSmear"), 0.20f);
+	}
+	UMaterialInstanceDynamic* ShardMat = Build.Glass(FLinearColor(0.20f, 0.24f, 0.28f), 0.34f, 0.04f);
+	UMaterialInstanceDynamic* CrackMat = Build.Flat(FLinearColor(0.010f, 0.012f, 0.014f), 0.35f);
+	UMaterialInstanceDynamic* ClothMat = Build.Surface(RoomSurfaces::Linen, FLinearColor(0.34f, 0.34f, 0.32f));
+	UMaterialInstanceDynamic* IronMat = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(0.45f, 0.45f, 0.48f));
 
 	const float Height = Setup.TopHeight - Setup.SillHeight;
 	const float CenterZ = (Setup.SillHeight + Setup.TopHeight) * 0.5f;
 	const float HalfWidth = Setup.OpeningWidth * 0.5f;
-	const float FrameX = Setup.WallThickness * 0.5f + 3.f;
+	const float InnerX = -Setup.WallThickness * 0.5f; // the room-side face of the wall
+	const float SashX = 1.f;                          // the sash sits mid-reveal, glass roughly in the wall plane
 
-	// Frame: sill, head, two jambs, and a cross mullion splitting it into four panes.
-	Build.Box(FVector(FrameX, 0.f, Setup.SillHeight + 5.f), FRotator::ZeroRotator, FVector(14.f, Setup.OpeningWidth + 20.f, 12.f), FrameMat);
-	Build.Box(FVector(FrameX, 0.f, Setup.TopHeight - 4.f), FRotator::ZeroRotator, FVector(12.f, Setup.OpeningWidth + 20.f, 10.f), FrameMat);
-	Build.Box(FVector(FrameX, -HalfWidth - 4.f, CenterZ), FRotator::ZeroRotator, FVector(12.f, 10.f, Height), FrameMat);
-	Build.Box(FVector(FrameX, HalfWidth + 4.f, CenterZ), FRotator::ZeroRotator, FVector(12.f, 10.f, Height), FrameMat);
-	Build.Box(FVector(FrameX, 0.f, CenterZ), FRotator::ZeroRotator, FVector(8.f, 7.f, Height), FrameMat);
-	Build.Box(FVector(FrameX, 0.f, CenterZ), FRotator::ZeroRotator, FVector(8.f, Setup.OpeningWidth, 7.f), FrameMat);
+	// The reveal. The wall is twenty centimetres thick, so the opening is a short tunnel, and
+	// lining it is what gives the window depth instead of the look of a rectangle cut in card.
+	Build.Box(FVector(0.f, -HalfWidth - 3.f, CenterZ), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, 6.f, Height + 12.f), PaintMat);
+	Build.Box(FVector(0.f, HalfWidth + 3.f, CenterZ), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, 6.f, Height + 12.f), PaintMat);
+	Build.Box(FVector(0.f, 0.f, Setup.TopHeight + 3.f), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, Setup.OpeningWidth + 12.f, 6.f), PaintMat);
 
-	// Cracked glass. BasicShapeMaterial is opaque, so a full pane would black out the storm the
-	// player is meant to be watching. Instead the panes are modelled as what is *left* of the
-	// glass: jagged slivers clinging to the frame edges, with the middle blown out. Reads as a
-	// broken window and keeps the view. A real translucent, rain-streaked glass material needs
-	// the Material Editor and is noted as a follow-up.
-	for (int32 PaneY = 0; PaneY < 2; ++PaneY)
+	// The inner sill, projecting into the room and tilted a degree to shed water it has not had
+	// to shed in years. Deep enough to stand things on: it is where the key sits.
+	Build.Box(FVector(InnerX - 10.f, 0.f, Setup.SillHeight - 3.f), FRotator(-1.5f, 0.f, 0.f), FVector(Setup.WallThickness + 26.f, Setup.OpeningWidth + 24.f, 6.f), PaintMat);
+	Build.Box(FVector(InnerX - 20.f, 0.f, Setup.SillHeight - 9.f), FRotator::ZeroRotator, FVector(4.f, Setup.OpeningWidth + 18.f, 7.f), PaintWornMat, /*bBlockingCollision*/ false);
+
+	// Sash: the perimeter, then the muntin grid that divides it into small panes. The grid is the
+	// point of the whole assembly — it is the pattern the storm prints across the far wall.
+	const int32 Cols = 4;
+	const int32 Rows = 4;
+	const float SashW = 7.f;
+	const float MuntinW = 2.6f;
+	const float SashDepth = 5.f;
+
+	Build.Box(FVector(SashX, 0.f, Setup.SillHeight + SashW * 0.5f), FRotator::ZeroRotator, FVector(SashDepth, Setup.OpeningWidth, SashW), PaintMat);
+	Build.Box(FVector(SashX, 0.f, Setup.TopHeight - SashW * 0.5f), FRotator::ZeroRotator, FVector(SashDepth, Setup.OpeningWidth, SashW), PaintMat);
+	Build.Box(FVector(SashX, -HalfWidth + SashW * 0.5f, CenterZ), FRotator::ZeroRotator, FVector(SashDepth, SashW, Height), PaintMat);
+	Build.Box(FVector(SashX, HalfWidth - SashW * 0.5f, CenterZ), FRotator::ZeroRotator, FVector(SashDepth, SashW, Height), PaintMat);
+
+	const float InnerWidth = Setup.OpeningWidth - SashW * 2.f;
+	const float InnerHeight = Height - SashW * 2.f;
+	const float CellW = (InnerWidth - MuntinW * (Cols - 1)) / Cols;
+	const float CellH = (InnerHeight - MuntinW * (Rows - 1)) / Rows;
+	const float FirstY = -InnerWidth * 0.5f + CellW * 0.5f;
+	const float FirstZ = Setup.SillHeight + SashW + CellH * 0.5f;
+
+	auto CellCenter = [&](int32 Col, int32 Row)
 	{
-		for (int32 PaneZ = 0; PaneZ < 2; ++PaneZ)
-		{
-			const float PaneCenterY = (PaneY == 0 ? -1.f : 1.f) * HalfWidth * 0.5f;
-			const float PaneCenterZ = CenterZ + (PaneZ == 0 ? -1.f : 1.f) * Height * 0.25f;
+		return FVector2D(FirstY + Col * (CellW + MuntinW), FirstZ + Row * (CellH + MuntinW));
+	};
 
-			const int32 ShardCount = Random.RandRange(2, 4);
-			for (int32 i = 0; i < ShardCount; ++i)
+	for (int32 Col = 1; Col < Cols; ++Col)
+	{
+		const float Y = FirstY + (Col - 0.5f) * (CellW + MuntinW);
+		Build.Box(FVector(SashX, Y, CenterZ), FRotator::ZeroRotator, FVector(SashDepth - 1.f, MuntinW, InnerHeight), PaintMat, /*bBlockingCollision*/ false);
+	}
+	for (int32 Row = 1; Row < Rows; ++Row)
+	{
+		const float Z = FirstZ + (Row - 0.5f) * (CellH + MuntinW);
+		// The middle one is the meeting rail where the two sashes overlap, so it is heavier than
+		// the muntins above and below it.
+		const bool bMeetingRail = (Row == Rows / 2);
+		Build.Box(FVector(SashX, 0.f, Z), FRotator::ZeroRotator,
+			FVector(SashDepth - (bMeetingRail ? 0.f : 1.f), InnerWidth, bMeetingRail ? MuntinW * 2.4f : MuntinW),
+			PaintMat, /*bBlockingCollision*/ false);
+	}
+
+	// Glass. Two panes are gone — that is where the wind and the rain get in, and where the glass
+	// lying on the boards below came from — and one has taken a knock without letting go.
+	const FIntPoint BlownPanes[2] = { FIntPoint(0, 2), FIntPoint(2, 3) };
+	const FIntPoint CrackedPane(1, 1);
+
+	for (int32 Col = 0; Col < Cols; ++Col)
+	{
+		for (int32 Row = 0; Row < Rows; ++Row)
+		{
+			const FVector2D Center = CellCenter(Col, Row);
+			const FIntPoint Cell(Col, Row);
+			const bool bBlown = (BlownPanes[0] == Cell) || (BlownPanes[1] == Cell);
+
+			if (bBlown)
 			{
-				const float ShardWidth = Random.FRandRange(14.f, 34.f);
-				const float ShardHeight = Random.FRandRange(10.f, 30.f);
-				// Pushed out toward the pane's own corner, so the hole stays in the middle.
-				const FVector ShardLocation(
-					FrameX - 1.f,
-					PaneCenterY + FMath::Sign(PaneCenterY) * Random.FRandRange(HalfWidth * 0.18f, HalfWidth * 0.42f),
-					PaneCenterZ + (PaneZ == 0 ? -1.f : 1.f) * Random.FRandRange(Height * 0.08f, Height * 0.2f));
-				Build.Box(ShardLocation, FRotator(Random.FRandRange(-25.f, 25.f), 0.f, 0.f), FVector(1.5f, ShardWidth, ShardHeight), GlassMat, /*bBlockingCollision*/ false);
+				// What is left clinging to the rebate: a few slivers around the edge of an
+				// otherwise empty hole.
+				const int32 ShardCount = Random.RandRange(3, 5);
+				for (int32 i = 0; i < ShardCount; ++i)
+				{
+					const bool bVertical = Random.FRand() < 0.5f;
+					const float Along = Random.FRandRange(-0.34f, 0.34f);
+					const float Edge = Random.FRand() < 0.5f ? -0.42f : 0.42f;
+					const FVector ShardLocation(
+						SashX,
+						Center.X + (bVertical ? Edge : Along) * CellW,
+						Center.Y + (bVertical ? Along : Edge) * CellH);
+					Build.Box(ShardLocation, FRotator(Random.FRandRange(-9.f, 9.f), 0.f, Random.FRandRange(-24.f, 24.f)),
+						FVector(1.1f,
+							bVertical ? Random.FRandRange(4.f, 11.f) : Random.FRandRange(8.f, 18.f),
+							bVertical ? Random.FRandRange(8.f, 18.f) : Random.FRandRange(4.f, 11.f)),
+						ShardMat, /*bBlockingCollision*/ false);
+				}
+				continue;
+			}
+
+			// The pane itself throws no shadow. What should print on the far wall is the *grid* —
+			// the bars between the panes — and a translucent sheet casting its own dim rectangle
+			// over that pattern washes the whole effect out.
+			if (UStaticMeshComponent* Pane = Build.Box(FVector(SashX, Center.X, Center.Y), FRotator::ZeroRotator, FVector(1.2f, CellW + 1.f, CellH + 1.f), GlassMat, /*bBlockingCollision*/ false))
+			{
+				Pane->SetCastShadow(false);
+			}
+
+			if (Cell == CrackedPane)
+			{
+				// A spiderweb: lines running out from the point of impact, plus two rings across
+				// them. Drawn as dark slivers on the glass rather than as a texture — there is no
+				// Material Editor in this workflow, and at lantern range this reads correctly.
+				const FVector2D Impact(Center.X - CellW * 0.12f, Center.Y + CellH * 0.08f);
+				for (int32 i = 0; i < 9; ++i)
+				{
+					const float Angle = i * (360.f / 9.f) + Random.FRandRange(-9.f, 9.f);
+					const float Length = Random.FRandRange(CellH * 0.35f, CellH * 0.95f);
+					const float Radians = FMath::DegreesToRadians(Angle);
+					Build.Box(
+						FVector(SashX - 0.9f, Impact.X + FMath::Cos(Radians) * Length * 0.5f, Impact.Y + FMath::Sin(Radians) * Length * 0.5f),
+						FRotator(0.f, 0.f, Angle),
+						FVector(0.8f, 0.5f, Length),
+						CrackMat, /*bBlockingCollision*/ false);
+				}
+				for (int32 Ring = 0; Ring < 2; ++Ring)
+				{
+					const float Radius = CellH * (0.2f + Ring * 0.22f);
+					for (int32 i = 0; i < 9; ++i)
+					{
+						const float Angle = i * (360.f / 9.f) + 20.f;
+						const float Radians = FMath::DegreesToRadians(Angle);
+						Build.Box(
+							FVector(SashX - 0.9f, Impact.X + FMath::Cos(Radians) * Radius, Impact.Y + FMath::Sin(Radians) * Radius),
+							FRotator(0.f, 0.f, Angle + 90.f),
+							FVector(0.8f, 0.5f, Radius * 0.85f),
+							CrackMat, /*bBlockingCollision*/ false);
+					}
+				}
 			}
 		}
 	}
 
-	// Torn curtains, hung inside the room, moving with the wind coming through the broken panes.
+	// Curtain pole and its brackets. Iron, and long out of true.
+	const float PoleZ = Setup.TopHeight + 20.f;
+	const float PoleX = InnerX - 16.f;
+	Build.Cyl(FVector(PoleX, 0.f, PoleZ), FRotator(0.f, 0.f, 90.f), FVector(3.f, 3.f, Setup.OpeningWidth + 86.f), IronMat, /*bBlockingCollision*/ false);
+	for (int32 Side = 0; Side < 2; ++Side)
+	{
+		const float SideSign = Side == 0 ? -1.f : 1.f;
+		Build.Sph(FVector(PoleX, SideSign * (HalfWidth + 44.f), PoleZ), 7.f, IronMat);
+		Build.Box(FVector(PoleX + 8.f, SideSign * (HalfWidth + 38.f), PoleZ), FRotator::ZeroRotator, FVector(18.f, 4.f, 4.f), IronMat, /*bBlockingCollision*/ false);
+	}
+
+	// The curtains: heavy full drapes hung in folds, not the token strips the greybox had. They
+	// cover the outer quarter of the glass on each side, which is what frames the window — and
+	// half the storm light that reaches the room has to come past them.
 	for (int32 Side = 0; Side < 2; ++Side)
 	{
 		const float SideSign = Side == 0 ? -1.f : 1.f;
@@ -136,22 +280,41 @@ void AStormWindowActor::BuildWindow()
 		USceneComponent* Pivot = NewObject<USceneComponent>(this, MakeUniqueObjectName(this, USceneComponent::StaticClass(), TEXT("CurtainPivot")));
 		Pivot->SetMobility(EComponentMobility::Movable);
 		Pivot->AttachToComponent(StormRoot, FAttachmentTransformRules::KeepRelativeTransform);
-		// Pivot sits at the rail, so the curtain swings from its top edge like real hanging cloth.
-		Pivot->SetRelativeLocation(FVector(-Setup.WallThickness * 0.5f - 12.f, SideSign * (HalfWidth - 12.f), Setup.TopHeight + 6.f));
+		// The pivot is the pole, so the drape swings from its top edge like real hanging cloth.
+		Pivot->SetRelativeLocation(FVector(PoleX, SideSign * (HalfWidth + 16.f), PoleZ - 4.f));
 		Pivot->RegisterComponent();
 		AddInstanceComponent(Pivot);
 
 		FRoomBuilder CurtainBuild(this, Pivot);
-		const float CurtainHeight = Height + 30.f;
 
-		// Three ragged vertical strips of differing length: a curtain that has been torn, not cut.
-		for (int32 Strip = 0; Strip < 3; ++Strip)
+		// One drape is longer than the other; nothing in this house is a matched pair any more.
+		const float DrapeLength = (Height + 30.f) * (Side == 0 ? 1.f : 0.88f);
+		const int32 FoldCount = 5;
+		for (int32 Fold = 0; Fold < FoldCount; ++Fold)
 		{
-			const float StripLength = CurtainHeight * Random.FRandRange(0.55f, 1.f);
+			const float Inward = -SideSign * Fold * 7.f;
+			// The alternating depth is the whole trick: a flat sheet reads as cardboard, and this
+			// gives cloth the vertical banding of light and shadow that hanging folds actually have.
+			const float Depth = (Fold % 2 == 0) ? 7.5f : 3.f;
+			const float Bulge = (Fold % 2 == 0) ? -3.f : 1.5f;
+			const float Length = DrapeLength * Random.FRandRange(0.94f, 1.f);
+
 			CurtainBuild.Box(
-				FVector(Random.FRandRange(-2.f, 2.f), SideSign * -(Strip * 16.f), -StripLength * 0.5f),
-				FRotator(0.f, 0.f, Random.FRandRange(-4.f, 4.f)),
-				FVector(2.f, 15.f, StripLength),
+				FVector(Bulge, Inward, -Length * 0.5f),
+				FRotator(0.f, 0.f, Random.FRandRange(-2.5f, 2.5f)),
+				FVector(Depth, 14.f, Length), // wider than the spacing, so the folds overlap into one sheet
+				ClothMat,
+				/*bBlockingCollision*/ false);
+		}
+
+		// The hem, torn ragged where it has been dragging on the boards.
+		for (int32 i = 0; i < 4; ++i)
+		{
+			const float Inward = -SideSign * Random.FRandRange(0.f, 58.f);
+			CurtainBuild.Box(
+				FVector(Random.FRandRange(-2.f, 4.f), Inward, -DrapeLength - Random.FRandRange(4.f, 14.f)),
+				FRotator(0.f, 0.f, Random.FRandRange(-8.f, 8.f)),
+				FVector(4.f, Random.FRandRange(7.f, 14.f), Random.FRandRange(10.f, 26.f)),
 				ClothMat,
 				/*bBlockingCollision*/ false);
 		}
@@ -164,47 +327,134 @@ void AStormWindowActor::BuildOutsideWorld()
 {
 	FRoomBuilder Build(this, StormRoot);
 
-	UMaterialInstanceDynamic* SkyMat = Build.Material(RoomPalette::NightSky, 1.f);
-	UMaterialInstanceDynamic* GroundMat = Build.Material(FLinearColor(0.020f, 0.022f, 0.018f), 1.f);
-	UMaterialInstanceDynamic* TrunkMat = Build.Material(FLinearColor(0.022f, 0.019f, 0.016f), 1.f);
-	UMaterialInstanceDynamic* LeafMat = Build.Material(RoomPalette::Foliage, 1.f);
+	// The sky is emissive, not lit. It is the brightest thing in the frame and the only reason
+	// the treeline reads as a silhouette at all — a shaded backdrop at this albedo, lit by the
+	// same six lux that lights the room, would come out as black as the wall beside the window.
+	SkyMaterial = Build.Emissive(FLinearColor(0.42f, 0.52f, 0.68f), SkyGlowFloor);
+	UMaterialInstanceDynamic* GroundMat = Build.Flat(FLinearColor(0.020f, 0.022f, 0.018f), 1.f);
+	UMaterialInstanceDynamic* TrunkMat = Build.Flat(FLinearColor(0.016f, 0.014f, 0.012f), 1.f);
+	UMaterialInstanceDynamic* LeafMat = Build.Flat(RoomPalette::Foliage, 1.f);
 
 	// A backdrop far enough out that it never enters the lantern's reach — it exists so the player
 	// sees storm-lit distance through the window instead of the empty void past the level.
-	Build.Box(FVector(3200.f, 0.f, 900.f), FRotator::ZeroRotator, FVector(40.f, 6000.f, 3600.f), SkyMat, /*bBlockingCollision*/ false);
-	Build.Box(FVector(1600.f, 0.f, -40.f), FRotator::ZeroRotator, FVector(3400.f, 6000.f, 40.f), GroundMat, /*bBlockingCollision*/ false);
+	//
+	// Neither of these may cast a shadow, and that is not a performance nicety. The storm's light
+	// is a *directional* light: it arrives from beyond the treeline, so a sixty-metre slab of sky
+	// standing between it and the window puts the entire room inside one enormous shadow. That is
+	// precisely what it did — the window went black and not one photon of storm light reached the
+	// far wall.
+	if (UStaticMeshComponent* Sky = Build.Box(FVector(3200.f, 0.f, 900.f), FRotator::ZeroRotator, FVector(40.f, 6000.f, 3600.f), SkyMaterial, /*bBlockingCollision*/ false))
+	{
+		Sky->SetCastShadow(false);
+	}
+	if (UStaticMeshComponent* Ground = Build.Box(FVector(1600.f, 0.f, -40.f), FRotator::ZeroRotator, FVector(3400.f, 6000.f, 40.f), GroundMat, /*bBlockingCollision*/ false))
+	{
+		Ground->SetCastShadow(false);
+	}
 
-	// Treeline. Trunk plus stacked cones; each tree gets its own pivot at the base so it can bend
-	// in the wind rather than slide.
-	const int32 TreeCount = 9;
+	// Treeline. Dense and close: through a window this size the player sees a narrow cone, and it
+	// wants to be full of wet black branches rather than showing the gap between two of them.
+	// Trunk plus stacked cones, each on its own pivot at the base so it bends rather than slides.
+	const int32 TreeCount = 16;
 	for (int32 i = 0; i < TreeCount; ++i)
 	{
 		USceneComponent* Pivot = NewObject<USceneComponent>(this, MakeUniqueObjectName(this, USceneComponent::StaticClass(), TEXT("TreePivot")));
 		Pivot->SetMobility(EComponentMobility::Movable);
 		Pivot->AttachToComponent(StormRoot, FAttachmentTransformRules::KeepRelativeTransform);
-		Pivot->SetRelativeLocation(FVector(Random.FRandRange(550.f, 2200.f), Random.FRandRange(-1400.f, 1400.f), -40.f));
+		Pivot->SetRelativeLocation(FVector(Random.FRandRange(620.f, 2400.f), Random.FRandRange(-1100.f, 1100.f), -40.f));
 		Pivot->RegisterComponent();
 		AddInstanceComponent(Pivot);
 
 		FRoomBuilder TreeBuild(this, Pivot);
-		const float TreeHeight = Random.FRandRange(500.f, 900.f);
-		TreeBuild.Cyl(FVector(0.f, 0.f, TreeHeight * 0.5f), FRotator::ZeroRotator, FVector(Random.FRandRange(26.f, 44.f), Random.FRandRange(26.f, 44.f), TreeHeight), TrunkMat, /*bBlockingCollision*/ false);
+		const float TreeHeight = Random.FRandRange(500.f, 980.f);
+
+		// Nothing out here casts a shadow. A treeline is a solid wall to a light arriving almost
+		// horizontally, and with shadows on it simply switched the storm off — the room went black
+		// and the window with it.
+		auto NoShadow = [](UStaticMeshComponent* Part)
+		{
+			if (Part)
+			{
+				Part->SetCastShadow(false);
+			}
+		};
+
+		NoShadow(TreeBuild.Cyl(FVector(0.f, 0.f, TreeHeight * 0.5f), FRotator::ZeroRotator, FVector(Random.FRandRange(26.f, 44.f), Random.FRandRange(26.f, 44.f), TreeHeight), TrunkMat, /*bBlockingCollision*/ false));
 
 		const int32 CanopyLayers = Random.RandRange(2, 4);
 		for (int32 Layer = 0; Layer < CanopyLayers; ++Layer)
 		{
 			const float LayerFraction = 1.f - Layer * 0.22f;
-			TreeBuild.Add(
+			NoShadow(TreeBuild.Add(
 				FRoomShapes::Cone(),
 				FVector(0.f, 0.f, TreeHeight * (0.55f + Layer * 0.18f)),
 				FRotator::ZeroRotator,
 				FVector(TreeHeight * 0.62f * LayerFraction, TreeHeight * 0.62f * LayerFraction, TreeHeight * 0.45f * LayerFraction),
 				LeafMat,
-				/*bBlockingCollision*/ false);
+				/*bBlockingCollision*/ false));
 		}
 
 		Trees.Add(Pivot);
 		TreePhases.Add(Random.FRandRange(0.f, 100.f));
+	}
+}
+
+void AStormWindowActor::BuildLightningBolts()
+{
+	// Three bolts, built once and hidden. Each is a jagged walk downward with two forks off it —
+	// the shape matters less than the fact that it is different every strike, because a player
+	// who sees the same bolt twice stops believing in the weather.
+	const int32 BoltCount = 3;
+	for (int32 BoltIndex = 0; BoltIndex < BoltCount; ++BoltIndex)
+	{
+		USceneComponent* Pivot = NewObject<USceneComponent>(this, MakeUniqueObjectName(this, USceneComponent::StaticClass(), TEXT("BoltPivot")));
+		Pivot->SetMobility(EComponentMobility::Movable);
+		Pivot->AttachToComponent(StormRoot, FAttachmentTransformRules::KeepRelativeTransform);
+		Pivot->SetRelativeLocation(FVector(2400.f, 0.f, 0.f));
+		Pivot->RegisterComponent();
+		AddInstanceComponent(Pivot);
+
+		FRoomBuilder BoltBuild(this, Pivot);
+		UMaterialInstanceDynamic* BoltMat = BoltBuild.Emissive(RoomPalette::Lightning, 0.f);
+
+		// Draws one jagged run of segments between two heights, and returns where it ended so a
+		// fork can be hung off it.
+		auto DrawRun = [&](FVector From, float ToZ, int32 Segments, float Spread, float Thickness) -> FVector
+		{
+			FVector Current = From;
+			for (int32 i = 0; i < Segments; ++i)
+			{
+				const float Alpha = (i + 1) / static_cast<float>(Segments);
+				const FVector Next(
+					From.X + Random.FRandRange(-Spread, Spread),
+					From.Y + Random.FRandRange(-Spread, Spread) + (Alpha - 0.5f) * Spread,
+					FMath::Lerp(From.Z, ToZ, Alpha));
+
+				const FVector Delta = Next - Current;
+				const float Length = Delta.Size();
+				if (Length > KINDA_SMALL_NUMBER)
+				{
+					const float Taper = FMath::Lerp(Thickness, Thickness * 0.35f, Alpha);
+					BoltBuild.Cyl(
+						Current + Delta * 0.5f,
+						FRotationMatrix::MakeFromZ(Delta / Length).Rotator(),
+						FVector(Taper, Taper, Length * 1.06f), // overlapped a little so the joints do not show gaps
+						BoltMat,
+						/*bBlockingCollision*/ false);
+				}
+				Current = Next;
+			}
+			return Current;
+		};
+
+		const FVector Head(0.f, 0.f, 1500.f);
+		const FVector Tail = DrawRun(Head, 40.f, 11, 130.f, 9.f);
+		DrawRun(FVector(Tail.X, Tail.Y, 780.f), 260.f, 4, 180.f, 5.f);
+		DrawRun(FVector(Tail.X, Tail.Y, 1080.f), 620.f, 3, 150.f, 4.f);
+
+		Pivot->SetVisibility(false, /*bPropagateToChildren*/ true);
+		Bolts.Add(Pivot);
+		BoltMaterials.Add(BoltMat);
 	}
 }
 
@@ -215,7 +465,7 @@ void AStormWindowActor::BuildRain()
 	// Rain as instanced slivers rather than a particle system: Niagara systems are Content Browser
 	// assets and this project builds everything from code. A few hundred streaks in the window's
 	// cone of view is enough — the player only ever sees rain framed by the opening.
-	UMaterialInstanceDynamic* RainMat = Build.Material(RoomPalette::Rain, 0.1f, 0.f);
+	UMaterialInstanceDynamic* RainMat = Build.Flat(RoomPalette::Rain, 0.1f, 0.f);
 	RainInstances = Build.Instances(FRoomShapes::Cube(), RainMat);
 	if (!RainInstances)
 	{
@@ -232,7 +482,7 @@ void AStormWindowActor::BuildRain()
 		RainSpeeds.Add(Random.FRandRange(1300.f, 2000.f));
 
 		// Slanted along the wind and stretched into a streak — the shape a falling drop makes on screen.
-		const FTransform DropTransform(FRotator(0.f, 0.f, -18.f), Position, FVector(0.012f, 0.012f, Random.FRandRange(0.28f, 0.62f)));
+		const FTransform DropTransform(FRotator(0.f, 0.f, -18.f), Position, FVector(0.008f, 0.008f, Random.FRandRange(0.28f, 0.62f)));
 		RainInstances->AddInstance(DropTransform);
 	}
 }
@@ -252,7 +502,8 @@ void AStormWindowActor::TickCurtains(float DeltaTime)
 		// Cloth lags the gust and overshoots slightly. Sampling the same noise at a different rate
 		// gives that without a cloth sim.
 		const float Lag = FMath::PerlinNoise1D(ElapsedTime * 0.9f + i * 13.3f) * 0.5f + 0.5f;
-		const float Swing = FMath::Lerp(1.5f, 16.f, Gust) * FMath::Lerp(0.6f, 1.f, Lag);
+		// Degrees at the pole, so a little goes a long way down two metres of hanging cloth.
+		const float Swing = FMath::Lerp(0.8f, 5.5f, Gust) * FMath::Lerp(0.6f, 1.f, Lag);
 		const float Sway = FMath::Sin(ElapsedTime * 1.4f + i * 2.1f) * 2.5f;
 		Pivot->SetRelativeRotation(FRotator(0.f, Sway, Swing * (i == 0 ? 1.f : -1.f)));
 	}
@@ -306,7 +557,7 @@ void AStormWindowActor::TickRain(float DeltaTime)
 			Position.Z = Random.FRandRange(700.f, 900.f);
 		}
 
-		Transforms.Add(FTransform(FRotator(0.f, 0.f, Slant), Position, FVector(0.012f, 0.012f, 0.45f)));
+		Transforms.Add(FTransform(FRotator(0.f, 0.f, Slant), Position, FVector(0.008f, 0.008f, 0.45f)));
 	}
 
 	RainInstances->BatchUpdateInstancesTransforms(0, Transforms, /*bWorldSpace*/ false, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ true);
@@ -322,8 +573,29 @@ void AStormWindowActor::BeginStrike()
 	SubFlashTimer = Random.FRandRange(0.05f, 0.12f);
 
 	// Nudge the aim so consecutive strikes throw shadows in visibly different directions.
-	const FRotator Aim(Random.FRandRange(-42.f, -22.f), Random.FRandRange(150.f, 200.f), 0.f);
+	const FRotator Aim(Random.FRandRange(-20.f, -6.f), Random.FRandRange(108.f, 136.f), 0.f);
 	LightningLight->SetRelativeRotation(Aim);
+
+	// Show the strike, not just its effect. One of the prebuilt bolts is moved out beyond the
+	// treeline and switched on for the leading sub-flash — near enough to be framed by the
+	// window, far enough that it reads as weather rather than as an object in the garden.
+	if (Bolts.Num() > 0)
+	{
+		ActiveBolt = Random.RandRange(0, Bolts.Num() - 1);
+		for (int32 i = 0; i < Bolts.Num(); ++i)
+		{
+			if (Bolts[i])
+			{
+				Bolts[i]->SetVisibility(i == ActiveBolt, /*bPropagateToChildren*/ true);
+			}
+		}
+
+		if (USceneComponent* Bolt = Bolts[ActiveBolt])
+		{
+			Bolt->SetRelativeLocation(FVector(Random.FRandRange(1500.f, 2900.f), Random.FRandRange(-700.f, 700.f), 0.f));
+			Bolt->SetRelativeRotation(FRotator(0.f, Random.FRandRange(-25.f, 25.f), 0.f));
+		}
+	}
 
 	// PlayThunder() belongs here — deliberately unwired until a free-licensed thunder cue is
 	// sourced, matching the storm-audio decision already logged for this room.
@@ -369,8 +641,32 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 	const float Target = (SubFlashesRemaining > 0 && bSubFlashOn) ? 1.f : 0.f;
 	FlashAlpha = (Target > FlashAlpha) ? Target : FMath::FInterpTo(FlashAlpha, Target, DeltaTime, 14.f);
 
-	LightningLight->SetIntensity(FlashAlpha * StrikeIntensity);
+	// Never drops to zero: the floor value is the overcast sky the storm sits under, and it is what
+	// keeps the window a faint blue rectangle between strikes.
+	LightningLight->SetIntensity(StormAmbientLux + FlashAlpha * StrikeIntensity);
 	LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * 260.f);
+	// The window itself floods when the sky goes off: from inside a room, that — not the bolt — is
+	// what a strike actually looks like.
+	SkyPortal->SetIntensity(SkyPortalCandelas * (1.f + FlashAlpha * 9.f));
+
+	// The channel is only lit while it is actually discharging — it snaps off with the sub-flash
+	// rather than fading, which is what stops it looking like a hanging neon tube.
+	const bool bDischarging = SubFlashesRemaining > 0 && bSubFlashOn;
+	if (BoltMaterials.IsValidIndex(ActiveBolt) && BoltMaterials[ActiveBolt])
+	{
+		BoltMaterials[ActiveBolt]->SetScalarParameterValue(TEXT("Intensity"), bDischarging ? 14.f : 0.f);
+	}
+	if (!bDischarging && ActiveBolt != INDEX_NONE && Bolts.IsValidIndex(ActiveBolt) && Bolts[ActiveBolt])
+	{
+		Bolts[ActiveBolt]->SetVisibility(false, /*bPropagateToChildren*/ true);
+	}
+
+	// The whole sky lights up with the discharge, not just the channel — from inside the room that
+	// is most of what a distant strike looks like.
+	if (SkyMaterial)
+	{
+		SkyMaterial->SetScalarParameterValue(TEXT("Intensity"), SkyGlowFloor + FlashAlpha * 5.f);
+	}
 }
 
 void AStormWindowActor::Tick(float DeltaTime)

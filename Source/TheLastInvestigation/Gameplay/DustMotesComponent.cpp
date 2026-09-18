@@ -33,7 +33,7 @@ void UDustMotesComponent::BeginPlay()
 	// Kept dim and fully rough. A mote is a speck catching the edge of the lantern, not a light
 	// source: at high albedo the spheres blow out into visible glowing balls the moment the player
 	// walks past them.
-	UMaterialInstanceDynamic* MoteMat = Build.Material(FLinearColor(0.20f, 0.19f, 0.17f), 1.f);
+	UMaterialInstanceDynamic* MoteMat = Build.Flat(FLinearColor(0.20f, 0.19f, 0.17f), 1.f);
 	Motes = Build.Instances(FRoomShapes::Sphere(), MoteMat);
 	if (!Motes)
 	{

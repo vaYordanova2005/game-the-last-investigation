@@ -29,6 +29,17 @@ class AInvestigationRoomActor : public AActor
 public:
 	AInvestigationRoomActor();
 
+	/**
+	 * Where the detective comes round, relative to the room's origin, and which way he is facing.
+	 *
+	 * He does not wake in the middle of the floor: he wakes in the corner furthest from the door,
+	 * because that is the one place in the room from which the whole of it — wardrobe, bookcase,
+	 * window, locked door — is in a single frame. The game mode places the pawn here, and the
+	 * dressing keeps the spot clear of furniture and debris.
+	 */
+	static FVector GetWakeLocation() { return FVector(-210.f, -62.f, 100.f); }
+	static FRotator GetWakeRotation() { return FRotator(-7.f, 5.f, 0.f); }
+
 	virtual void BeginPlay() override;
 
 private:
@@ -53,7 +64,8 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMesh> CubeMesh;
 
-	// Roughly 8m x 6.5m with a 3.4m ceiling — a large, hollow old room rather than a cell.
+	// Roughly 8m x 6.5m with a 3m ceiling — a large, hollow old room rather than a cell, but low
+	// enough overhead that the ceiling is part of the picture rather than lost in the dark.
 	UPROPERTY(EditAnywhere, Category = "Room|Layout")
 	float RoomWidth = 800.f;
 
@@ -61,17 +73,25 @@ private:
 	float RoomDepth = 650.f;
 
 	UPROPERTY(EditAnywhere, Category = "Room|Layout")
-	float RoomHeight = 340.f;
+	float RoomHeight = 305.f;
 
 	UPROPERTY(EditAnywhere, Category = "Room|Layout")
 	float WallThickness = 20.f;
 
 	// Opening sizes, shared with the door, the storm and the dressing so nothing overlaps a gap.
-	static constexpr float DoorOpeningWidth = 110.f;
-	static constexpr float DoorOpeningHeight = 215.f;
-	static constexpr float WindowOpeningWidth = 260.f;
-	static constexpr float WindowSillHeight = 85.f;
-	static constexpr float WindowTopHeight = 250.f;
+	//
+	// The two openings are on adjacent walls and both have to be in frame at once: the detective
+	// wakes in the far corner looking at a window with a locked door to the right of it, and the
+	// whole room is laid out around that one view. The window is a tall domestic sash rather than
+	// the wide gap the greybox had — a narrow opening throws a sharper, more readable rectangle of
+	// storm light across the door wall, and leaves wall either side of it to decay.
+	static constexpr float DoorOpeningWidth = 106.f;
+	static constexpr float DoorOpeningHeight = 208.f;
+	/** How far along the door wall the opening sits, from the room's centre. */
+	static constexpr float DoorOpeningCenterX = 205.f;
+	static constexpr float WindowOpeningWidth = 196.f;
+	static constexpr float WindowSillHeight = 82.f;
+	static constexpr float WindowTopHeight = 262.f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ADoorActor> Door;

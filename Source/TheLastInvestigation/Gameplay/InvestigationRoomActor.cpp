@@ -52,15 +52,19 @@ AInvestigationRoomActor::AInvestigationRoomActor()
 	// rather than left at their daylight defaults and then dragged into range with a huge EV
 	// bias. Fast film, a slow shutter and a wide aperture — how you would actually photograph a
 	// room lit by one flame. EV100 works out around 3.6, which puts a lantern-lit wall a little
-	// under middle grey: dark, but readable.
+	// under middle grey: dark, but readable. Together with AStormWindowActor::StormAmbientLux these
+	// are the only two numbers that decide how dark the room is — turn those, not the materials.
 	PP.bOverride_CameraISO = true;
 	PP.CameraISO = 800.f;
 	PP.bOverride_CameraShutterSpeed = true;
 	PP.CameraShutterSpeed = 30.f; // 1/30s
 	PP.bOverride_DepthOfFieldFstop = true;
 	PP.DepthOfFieldFstop = 1.8f;
+	// The trim on top of the camera settings. The photographed surfaces sit around 0.2 albedo and
+	// the only light is a 200cd flame, so without a positive trim the frame is genuinely black —
+	// not atmospheric, black. This is the one dial to turn if the room reads too dark or too light.
 	PP.bOverride_AutoExposureBias = true;
-	PP.AutoExposureBias = 0.f; // trim knob — this is the dial to turn if the room reads too dark or too bright
+	PP.AutoExposureBias = 0.3f;
 
 	// Lumen, explicitly, so the room does not depend on a project-setting default. The single
 	// bounce off a lantern-lit floorboard is most of what keeps the darkness readable instead of
@@ -75,7 +79,7 @@ AInvestigationRoomActor::AInvestigationRoomActor()
 	// Colour grade: cold, desaturated shadows against the lantern's warm highlights. The split is
 	// the whole visual idea of the room, so it is graded in rather than left to the light colours.
 	PP.bOverride_ColorSaturation = true;
-	PP.ColorSaturation = FVector4(0.86f, 0.86f, 0.86f, 1.f);
+	PP.ColorSaturation = FVector4(0.78f, 0.78f, 0.78f, 1.f);
 	PP.bOverride_ColorContrast = true;
 	PP.ColorContrast = FVector4(1.12f, 1.12f, 1.14f, 1.f);
 	PP.bOverride_ColorGainShadows = true;
@@ -86,11 +90,13 @@ AInvestigationRoomActor::AInvestigationRoomActor()
 	PP.bOverride_BloomIntensity = true;
 	PP.BloomIntensity = 0.5f;
 	PP.bOverride_SceneFringeIntensity = true;
-	PP.SceneFringeIntensity = 1.4f; // a touch of lens dispersion; cinematic, not a headache
+	PP.SceneFringeIntensity = 0.7f; // a touch of lens dispersion; cinematic, not a headache
 	PP.bOverride_FilmGrainIntensity = true;
 	PP.FilmGrainIntensity = 0.35f;
 	PP.bOverride_VignetteIntensity = true;
-	PP.VignetteIntensity = 0.72f;
+	// Heavy enough to close the frame down, light enough that the locked door — which lives in the
+	// right-hand corner of the waking shot — is not swallowed by it.
+	PP.VignetteIntensity = 0.42f;
 	PP.bOverride_AmbientOcclusionIntensity = true;
 	PP.AmbientOcclusionIntensity = 0.65f;
 	PP.bOverride_AmbientOcclusionRadius = true;
@@ -128,8 +134,10 @@ void AInvestigationRoomActor::ApplySurfaceMaterial()
 	UMaterialInterface* BaseMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 	if (!BaseMaterial)
 	{
+		UE_LOG(LogTemp, Error, TEXT("Room01: BasicShapeMaterial failed to load — shell keeps the engine grid material"));
 		return;
 	}
+	UE_LOG(LogTemp, Log, TEXT("Room01: shell base material = %s, %d slabs"), *BaseMaterial->GetName(), Surfaces.Num());
 
 	UMaterialInstanceDynamic* Tint = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 	if (!Tint)
@@ -157,14 +165,18 @@ void AInvestigationRoomActor::BuildRoom()
 	AddSlab(TEXT("Floor"), FVector(0.f, 0.f, -5.f), FVector(RoomWidth, RoomDepth, 10.f));
 	AddSlab(TEXT("Ceiling"), FVector(0.f, 0.f, RoomHeight + 5.f), FVector(RoomWidth, RoomDepth, 10.f));
 
-	// North wall: door opening.
-	const float NorthSideWidth = WidthHalf - DoorOpeningWidth * 0.5f;
-	AddSlab(TEXT("NorthWallLeft"), FVector(-WidthHalf + NorthSideWidth * 0.5f, -DepthHalf, RoomHeight * 0.5f), FVector(NorthSideWidth, WallThickness, RoomHeight));
-	AddSlab(TEXT("NorthWallRight"), FVector(WidthHalf - NorthSideWidth * 0.5f, -DepthHalf, RoomHeight * 0.5f), FVector(NorthSideWidth, WallThickness, RoomHeight));
-	AddSlab(TEXT("NorthWallLintel"), FVector(0.f, -DepthHalf, (DoorOpeningHeight + RoomHeight) * 0.5f), FVector(DoorOpeningWidth, WallThickness, RoomHeight - DoorOpeningHeight));
+	// North wall: solid. It is the wall the detective wakes up against, so it is only ever seen
+	// out of the corner of the eye — the furniture stands along it precisely for that reason.
+	AddSlab(TEXT("NorthWall"), FVector(0.f, -DepthHalf, RoomHeight * 0.5f), FVector(RoomWidth, WallThickness, RoomHeight));
 
-	// South wall: solid.
-	AddSlab(TEXT("SouthWall"), FVector(0.f, DepthHalf, RoomHeight * 0.5f), FVector(RoomWidth, WallThickness, RoomHeight));
+	// South wall: the door opening, set towards the window end of the wall so that both openings
+	// sit in the same view — the door is the thing the player is trying to reach, and it should be
+	// visible, locked, from the moment they open their eyes.
+	const float SouthLeftWidth = WidthHalf + DoorOpeningCenterX - DoorOpeningWidth * 0.5f;
+	const float SouthRightWidth = WidthHalf - DoorOpeningCenterX - DoorOpeningWidth * 0.5f;
+	AddSlab(TEXT("SouthWallLeft"), FVector(-WidthHalf + SouthLeftWidth * 0.5f, DepthHalf, RoomHeight * 0.5f), FVector(SouthLeftWidth, WallThickness, RoomHeight));
+	AddSlab(TEXT("SouthWallRight"), FVector(WidthHalf - SouthRightWidth * 0.5f, DepthHalf, RoomHeight * 0.5f), FVector(SouthRightWidth, WallThickness, RoomHeight));
+	AddSlab(TEXT("SouthWallLintel"), FVector(DoorOpeningCenterX, DepthHalf, (DoorOpeningHeight + RoomHeight) * 0.5f), FVector(DoorOpeningWidth, WallThickness, RoomHeight - DoorOpeningHeight));
 
 	// West wall: solid.
 	AddSlab(TEXT("WestWall"), FVector(-WidthHalf, 0.f, RoomHeight * 0.5f), FVector(WallThickness, RoomDepth, RoomHeight));
@@ -187,14 +199,16 @@ void AInvestigationRoomActor::SpawnOccupants()
 	SpawnParams.Owner = this;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	// Hinge sits at the left edge of the doorway; door faces into the opening at spawn rotation.
-	const FVector DoorHingeLocation = GetActorLocation() + FVector(-DoorOpeningWidth * 0.5f, -DepthHalf, 0.f);
-	const FRotator DoorRotation(0.f, -90.f, 0.f);
+	// Hinge at the window end of the doorway, so the leaf runs away from the player's eye-line and
+	// the lock side is what they see. The door's own geometry is built out along its local +Y, and
+	// a 90 degree yaw maps that onto world -X, across the opening.
+	const FVector DoorHingeLocation = GetActorLocation() + FVector(DoorOpeningCenterX + DoorOpeningWidth * 0.5f, DepthHalf, 0.f);
+	const FRotator DoorRotation(0.f, 90.f, 0.f);
 	Door = GetWorld()->SpawnActor<ADoorActor>(ADoorActor::StaticClass(), DoorHingeLocation, DoorRotation, SpawnParams);
 
 	// The key is on the window sill — the one surface in the room the storm lights for free, so a
 	// player who walks to the window to look out finds it without ever being told to.
-	const FVector KeyLocation = GetActorLocation() + FVector(WidthHalf - 22.f, -60.f, WindowSillHeight + 8.f);
+	const FVector KeyLocation = GetActorLocation() + FVector(WidthHalf - 26.f, -48.f, WindowSillHeight + 7.f);
 	Key = GetWorld()->SpawnActor<AKeyPickupActor>(AKeyPickupActor::StaticClass(), KeyLocation, FRotator(0.f, 24.f, 0.f), SpawnParams);
 
 	// Storm and dressing are spawned deferred so Configure() lands before their BeginPlay builds
@@ -222,6 +236,8 @@ void AInvestigationRoomActor::SpawnOccupants()
 		DressingSetup.Height = RoomHeight;
 		DressingSetup.WallThickness = WallThickness;
 		DressingSetup.DoorOpeningWidth = DoorOpeningWidth;
+		DressingSetup.DoorOpeningCenterX = DoorOpeningCenterX;
+		DressingSetup.WakeSpot = FVector2D(GetWakeLocation());
 		DressingSetup.WindowOpeningWidth = WindowOpeningWidth;
 		DressingSetup.WindowSillHeight = WindowSillHeight;
 		DressingSetup.WindowTopHeight = WindowTopHeight;

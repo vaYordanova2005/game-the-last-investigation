@@ -16,6 +16,9 @@ public:
 	ARoomGameModeBase();
 
 	virtual void BeginPlay() override;
+
+	/** Honours -RoomShot=<seconds>: waits, screenshots, quits. Art iteration without the Editor. */
+	void ScheduleHeadlessScreenshot();
 	virtual void HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer) override;
 
 private:

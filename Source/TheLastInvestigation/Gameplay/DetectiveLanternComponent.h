@@ -34,10 +34,10 @@ private:
 	// surfaces: bright enough to read a wall a few metres off, far short of the blown-out white
 	// that four-figure values produce.
 	UPROPERTY(EditAnywhere, Category = "Lantern")
-	float BaseIntensity = 135.f;
+	float BaseIntensity = 260.f;
 
 	UPROPERTY(EditAnywhere, Category = "Lantern")
-	float FlickerAmplitude = 26.f;
+	float FlickerAmplitude = 40.f;
 
 	UPROPERTY(EditAnywhere, Category = "Lantern")
 	float FlickerSpeed = 9.f;

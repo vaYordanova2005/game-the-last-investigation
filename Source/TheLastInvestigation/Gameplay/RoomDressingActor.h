@@ -10,6 +10,7 @@ class UMaterialInstanceDynamic;
 class AClueActor;
 class AStormWindowActor;
 class UDustMotesComponent;
+class FRoomBuilder;
 
 /** The shell dimensions the dressing has to fit inside, handed over by the room that spawns it. */
 struct FRoomDressingSetup
@@ -19,25 +20,29 @@ struct FRoomDressingSetup
 	float Height = 340.f;
 	float WallThickness = 20.f;
 
-	float DoorOpeningWidth = 110.f;
-	float WindowOpeningWidth = 260.f;
-	float WindowSillHeight = 85.f;
-	float WindowTopHeight = 250.f;
+	float DoorOpeningWidth = 106.f;
+	/** Where along the door wall (+Y) the opening sits, measured from the room's centre. */
+	float DoorOpeningCenterX = 170.f;
+	float WindowOpeningWidth = 175.f;
+	float WindowSillHeight = 86.f;
+	float WindowTopHeight = 248.f;
+
+	/** Where the detective wakes up. Nothing is dropped on top of him, and nothing blocks his view. */
+	FVector2D WakeSpot = FVector2D(-300.f, -70.f);
 };
 
 /**
- * Everything inside the room that is not the shell: peeling wallpaper, rotten floorboards, the
- * water-stained ceiling, the furniture, the debris, and the traces left behind (footprints in the
- * dust, scratch marks, a stain that used to be blood).
+ * Everything inside the room that is not the shell: the surfaces (wallpaper over plaster, rotten
+ * boards, stained ceiling), the furniture, the debris, and the traces left behind.
  *
- * Split out from AInvestigationRoomActor because the two have different jobs and different
- * lifetimes — the shell is fixed geometry built in the constructor, while the dressing is
- * seeded, randomised layout built at BeginPlay. The seed is fixed, so the room is the same room
- * every time the player enters it.
+ * Furniture is imported CC0 meshes; the wear, the layout and the storytelling are built around
+ * them from primitives and painted marks. Split out from AInvestigationRoomActor because the two
+ * have different lifetimes — the shell is fixed geometry from the constructor, this is a seeded
+ * random layout built at BeginPlay. The seed is fixed, so it is the same room every time.
  *
  * The clue objects are AClueActors, not props: examining them is how the detective reads the
- * house. Nothing here is highlighted or marked — they are placed to be *found*, by sitting where
- * a searching lantern beam naturally sweeps.
+ * house. Nothing is highlighted — they are placed to be found, by sitting where a searching
+ * lantern beam naturally sweeps.
  */
 UCLASS()
 class ARoomDressingActor : public AActor
@@ -57,13 +62,17 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 private:
-	void CacheMaterials();
-	void BuildWalls();
-	void BuildFloor();
-	void BuildCeiling();
-	void BuildFurniture();
-	void BuildDebris();
-	void BuildTraces();
+	// One builder is threaded through the whole build pass: it caches material instances, and a
+	// fresh one per function would make hundreds of duplicates of the same few surfaces.
+	void CacheMaterials(FRoomBuilder& Build);
+	void BuildWalls(FRoomBuilder& Build);
+	void BuildFloor(FRoomBuilder& Build);
+	void BuildCeiling(FRoomBuilder& Build);
+	void BuildFurniture(FRoomBuilder& Build);
+	/** Standing water: the floor is wet where the roof and the broken pane let the storm in. */
+	void BuildPuddles(FRoomBuilder& Build);
+	void BuildDebris(FRoomBuilder& Build);
+	void BuildTraces(FRoomBuilder& Build);
 	void BuildClues();
 
 	/** Spawns a clue actor and returns it ready for its body to be built under GetRootScene(). */
@@ -91,25 +100,29 @@ private:
 	UPROPERTY(Transient)
 	TWeakObjectPtr<AStormWindowActor> Storm;
 
-	// Material variants, made once and shared by every part that uses them.
+	// Photographed surfaces, made once and shared by everything that uses them.
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPlaster;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWallpaper;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWallpaperFaded;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatCeilingStain;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatRottenWood;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatDarkWood;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatMold;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatRust;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatCeiling;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFloorboards;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFloorboardsWorn;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatRoughWood;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPlankWood;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatCloth;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatIron;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBrass;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatRust;
+
+	// Flat tints, for the handful of things with no photographed surface of their own.
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatMold;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPaper;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPhoto;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatGlass;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatCloth;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBlood;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatDust;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWeb;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatVoid;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWater;
 
 	FRoomDressingSetup Setup;
 	FRandomStream Random;
