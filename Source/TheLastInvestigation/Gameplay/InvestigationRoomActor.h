@@ -6,17 +6,20 @@
 
 class UStaticMeshComponent;
 class UStaticMesh;
-class UPointLightComponent;
 class UExponentialHeightFogComponent;
 class UPostProcessComponent;
 class ADoorActor;
 class AKeyPickupActor;
+class AStormWindowActor;
+class ARoomDressingActor;
 
 /**
- * Builds the opening room entirely from engine basic-shape meshes so it needs no hand-placed
- * level geometry: floor, ceiling, four walls (one with a door gap, one with a boarded window
- * gap), plus fog/post-process mood and a flickering lightning light outside the window.
- * Spawns the door and key actors itself so the level only needs this one actor placed.
+ * The room's shell and its mood: floor, ceiling, four walls (one broken for the door, one for the
+ * window), the volumetric fog, and the post process that fixes the exposure and the colour grade.
+ *
+ * Everything that makes the room *decayed* rather than merely enclosed lives in ARoomDressingActor,
+ * and everything beyond the glass lives in AStormWindowActor; this actor spawns both, along with
+ * the door and the key, so a level only ever needs this one actor in it.
  */
 UCLASS()
 class AInvestigationRoomActor : public AActor
@@ -27,12 +30,12 @@ public:
 	AInvestigationRoomActor();
 
 	virtual void BeginPlay() override;
-	virtual void Tick(float DeltaTime) override;
 
 private:
 	UStaticMeshComponent* AddSlab(const FString& Name, const FVector& Center, const FVector& Size);
 	void BuildRoom();
 	void ApplySurfaceMaterial();
+	void SpawnOccupants();
 
 	/** Every slab built by AddSlab, so they can all be retinted with one dynamic material. */
 	UPROPERTY(Transient)
@@ -46,9 +49,6 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Room")
 	TObjectPtr<UPostProcessComponent> PostProcess;
-
-	UPROPERTY(VisibleAnywhere, Category = "Room")
-	TObjectPtr<UPointLightComponent> LightningLight;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMesh> CubeMesh;
@@ -66,13 +66,22 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Room|Layout")
 	float WallThickness = 20.f;
 
+	// Opening sizes, shared with the door, the storm and the dressing so nothing overlaps a gap.
+	static constexpr float DoorOpeningWidth = 110.f;
+	static constexpr float DoorOpeningHeight = 215.f;
+	static constexpr float WindowOpeningWidth = 260.f;
+	static constexpr float WindowSillHeight = 85.f;
+	static constexpr float WindowTopHeight = 250.f;
+
 	UPROPERTY(Transient)
 	TObjectPtr<ADoorActor> Door;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AKeyPickupActor> Key;
 
-	// Lightning flash timing.
-	float TimeUntilNextFlash = 3.f;
-	float FlashTimeRemaining = 0.f;
+	UPROPERTY(Transient)
+	TObjectPtr<AStormWindowActor> Storm;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ARoomDressingActor> Dressing;
 };

@@ -37,9 +37,11 @@ ADetectiveCharacter::ADetectiveCharacter()
 	// Candelas are a real photometric unit — UE's own point-light default is 8. Values in the
 	// thousands (the legacy "unitless" scale) blow every surface to pure white.
 	LanternLight->SetIntensityUnits(ELightUnits::Candelas);
-	LanternLight->SetLightColor(FLinearColor(1.f, 0.78f, 0.42f)); // warm gold — the lantern's colour cue
-	LanternLight->SetAttenuationRadius(900.f);
-	LanternLight->SetSourceRadius(4.f);
+	LanternLight->SetLightColor(FLinearColor(1.f, 0.72f, 0.34f)); // warm gold — the lantern's colour cue, and the cold storm's opposite
+	// Deliberately short: the lantern is a flame, not a torch. It should reach a few metres of
+	// floor and no further, so the far corners of the room stay unlit and have to be walked into.
+	LanternLight->SetAttenuationRadius(520.f);
+	LanternLight->SetSourceRadius(6.f);
 	LanternLight->SetCastShadows(true);
 	LanternLight->SetMobility(EComponentMobility::Movable);
 

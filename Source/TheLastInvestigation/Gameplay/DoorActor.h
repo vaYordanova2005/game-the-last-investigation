@@ -17,6 +17,7 @@ class ADoorActor : public AActor, public IInteractableInterface
 public:
 	ADoorActor();
 
+	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 	virtual void Interact(AActor* Interactor) override;
 	virtual FText GetInteractPrompt() const override;
@@ -25,6 +26,9 @@ public:
 	bool bIsLocked = true;
 
 private:
+	/** Planks, hinges and lock, built at BeginPlay from primitives and attached to the swinging leaf. */
+	void BuildDoorDetail();
+
 	UPROPERTY(VisibleAnywhere, Category = "Door")
 	TObjectPtr<USceneComponent> HingeRoot;
 

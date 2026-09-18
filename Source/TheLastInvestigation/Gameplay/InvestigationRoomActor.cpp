@@ -1,17 +1,19 @@
 #include "InvestigationRoomActor.h"
 #include "DoorActor.h"
 #include "KeyPickupActor.h"
+#include "StormWindowActor.h"
+#include "RoomDressingActor.h"
 #include "Components/StaticMeshComponent.h"
-#include "Components/PointLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/PostProcessComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Engine/Scene.h"
 #include "Engine/World.h"
 
 AInvestigationRoomActor::AInvestigationRoomActor()
 {
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false; // the storm owns the lightning now; nothing here animates
 
 	RoomRoot = CreateDefaultSubobject<USceneComponent>(TEXT("RoomRoot"));
 	SetRootComponent(RoomRoot);
@@ -21,27 +23,66 @@ AInvestigationRoomActor::AInvestigationRoomActor()
 
 	FogComponent = CreateDefaultSubobject<UExponentialHeightFogComponent>(TEXT("FogComponent"));
 	FogComponent->SetupAttachment(RoomRoot);
-	FogComponent->FogDensity = 0.04f;
-	FogComponent->FogHeightFalloff = 0.2f;
-	FogComponent->FogInscatteringLuminance = FLinearColor(0.02f, 0.03f, 0.025f);
+	FogComponent->FogDensity = 0.055f;
+	FogComponent->FogHeightFalloff = 0.15f;
+	FogComponent->FogInscatteringLuminance = FLinearColor(0.012f, 0.016f, 0.022f); // cold, unlit air
 	FogComponent->SetRelativeLocation(FVector(0.f, 0.f, -5.f));
+
+	// Volumetric fog is what turns the lantern into a visible cone of light and lets each
+	// lightning flash come through the window as a shaft rather than a flat wash on the wall.
+	FogComponent->bEnableVolumetricFog = true;
+	FogComponent->VolumetricFogScatteringDistribution = 0.35f; // mildly forward-scattering, like dusty air
+	FogComponent->VolumetricFogAlbedo = FColor(180, 176, 168);
+	FogComponent->VolumetricFogExtinctionScale = 2.2f;
+	FogComponent->VolumetricFogDistance = 3500.f;
 
 	PostProcess = CreateDefaultSubobject<UPostProcessComponent>(TEXT("PostProcess"));
 	PostProcess->SetupAttachment(RoomRoot);
 	PostProcess->bUnbound = true;
-	PostProcess->Settings.bOverride_VignetteIntensity = true;
-	PostProcess->Settings.VignetteIntensity = 0.65f;
-	PostProcess->Settings.bOverride_FilmGrainIntensity = true;
-	PostProcess->Settings.FilmGrainIntensity = 0.3f;
 
-	LightningLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("LightningLight"));
-	LightningLight->SetupAttachment(RoomRoot);
-	LightningLight->SetIntensityUnits(ELightUnits::Candelas);
-	LightningLight->SetIntensity(0.f);
-	LightningLight->SetLightColor(FLinearColor(0.75f, 0.8f, 1.f)); // cold blue-white flash
-	LightningLight->SetAttenuationRadius(1600.f);
-	LightningLight->SetMobility(EComponentMobility::Movable);
-	LightningLight->SetCastShadows(false);
+	FPostProcessSettings& PP = PostProcess->Settings;
+
+	// Manual exposure. Auto-exposure is actively hostile to this scene: it would brighten the dark
+	// corners back up the moment the player looked into one, which is precisely the tension the
+	// brief is built on, and it would then blow out the whole frame on every lightning flash.
+	PP.bOverride_AutoExposureMethod = true;
+	PP.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+	PP.bOverride_AutoExposureBias = true;
+	PP.AutoExposureBias = 10.5f;
+
+	// Lumen, explicitly, so the room does not depend on a project-setting default. The single
+	// bounce off a lantern-lit floorboard is most of what keeps the darkness readable instead of
+	// pure black.
+	PP.bOverride_DynamicGlobalIlluminationMethod = true;
+	PP.DynamicGlobalIlluminationMethod = EDynamicGlobalIlluminationMethod::Lumen;
+	PP.bOverride_ReflectionMethod = true;
+	PP.ReflectionMethod = EReflectionMethod::Lumen;
+	PP.bOverride_LumenFinalGatherQuality = true;
+	PP.LumenFinalGatherQuality = 2.f;
+
+	// Colour grade: cold, desaturated shadows against the lantern's warm highlights. The split is
+	// the whole visual idea of the room, so it is graded in rather than left to the light colours.
+	PP.bOverride_ColorSaturation = true;
+	PP.ColorSaturation = FVector4(0.86f, 0.86f, 0.86f, 1.f);
+	PP.bOverride_ColorContrast = true;
+	PP.ColorContrast = FVector4(1.12f, 1.12f, 1.14f, 1.f);
+	PP.bOverride_ColorGainShadows = true;
+	PP.ColorGainShadows = FVector4(0.82f, 0.92f, 1.15f, 1.f); // shadows drift blue
+	PP.bOverride_ColorGainHighlights = true;
+	PP.ColorGainHighlights = FVector4(1.08f, 1.f, 0.9f, 1.f);  // highlights drift to lantern-warm
+
+	PP.bOverride_BloomIntensity = true;
+	PP.BloomIntensity = 0.5f;
+	PP.bOverride_SceneFringeIntensity = true;
+	PP.SceneFringeIntensity = 1.4f; // a touch of lens dispersion; cinematic, not a headache
+	PP.bOverride_FilmGrainIntensity = true;
+	PP.FilmGrainIntensity = 0.35f;
+	PP.bOverride_VignetteIntensity = true;
+	PP.VignetteIntensity = 0.72f;
+	PP.bOverride_AmbientOcclusionIntensity = true;
+	PP.AmbientOcclusionIntensity = 0.65f;
+	PP.bOverride_AmbientOcclusionRadius = true;
+	PP.AmbientOcclusionRadius = 90.f;
 
 	BuildRoom();
 }
@@ -64,7 +105,8 @@ void AInvestigationRoomActor::ApplySurfaceMaterial()
 {
 	// BasicShapeMaterial ships near-white, which reads as a blown-out void under any lighting.
 	// It exposes a "Color" parameter, so a dynamic instance can tint every surface to a dusty
-	// grey-brown in code — no Material Editor graph needed.
+	// grey-brown in code — no Material Editor graph needed. The dressing then covers most of
+	// these faces with plaster, wallpaper and floorboards; this is what shows through the gaps.
 	if (!CubeMesh || Surfaces.Num() == 0)
 	{
 		return;
@@ -82,8 +124,8 @@ void AInvestigationRoomActor::ApplySurfaceMaterial()
 		return;
 	}
 
-	Tint->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.125f, 0.112f, 0.095f));
-	Tint->SetScalarParameterValue(TEXT("Roughness"), 0.95f);
+	Tint->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.085f, 0.077f, 0.066f));
+	Tint->SetScalarParameterValue(TEXT("Roughness"), 0.97f);
 
 	for (UStaticMeshComponent* Slab : Surfaces)
 	{
@@ -103,8 +145,6 @@ void AInvestigationRoomActor::BuildRoom()
 	AddSlab(TEXT("Ceiling"), FVector(0.f, 0.f, RoomHeight + 5.f), FVector(RoomWidth, RoomDepth, 10.f));
 
 	// North wall: door opening.
-	const float DoorOpeningWidth = 110.f;
-	const float DoorOpeningHeight = 210.f;
 	const float NorthSideWidth = WidthHalf - DoorOpeningWidth * 0.5f;
 	AddSlab(TEXT("NorthWallLeft"), FVector(-WidthHalf + NorthSideWidth * 0.5f, -DepthHalf, RoomHeight * 0.5f), FVector(NorthSideWidth, WallThickness, RoomHeight));
 	AddSlab(TEXT("NorthWallRight"), FVector(WidthHalf - NorthSideWidth * 0.5f, -DepthHalf, RoomHeight * 0.5f), FVector(NorthSideWidth, WallThickness, RoomHeight));
@@ -116,25 +156,66 @@ void AInvestigationRoomActor::BuildRoom()
 	// West wall: solid.
 	AddSlab(TEXT("WestWall"), FVector(-WidthHalf, 0.f, RoomHeight * 0.5f), FVector(WallThickness, RoomDepth, RoomHeight));
 
-	// East wall: boarded window opening.
-	const float WindowWidth = 160.f;
-	const float WindowSillHeight = 90.f;
-	const float WindowTopHeight = 200.f;
-	const float EastEndDepth = DepthHalf - WindowWidth * 0.5f;
+	// East wall: one large window. Left open rather than boarded — the storm is the room's second
+	// light source and its only view, so the player has to be able to see straight out into it.
+	const float EastEndDepth = DepthHalf - WindowOpeningWidth * 0.5f;
 	AddSlab(TEXT("EastWallFront"), FVector(WidthHalf, -DepthHalf + EastEndDepth * 0.5f, RoomHeight * 0.5f), FVector(WallThickness, EastEndDepth, RoomHeight));
 	AddSlab(TEXT("EastWallBack"), FVector(WidthHalf, DepthHalf - EastEndDepth * 0.5f, RoomHeight * 0.5f), FVector(WallThickness, EastEndDepth, RoomHeight));
-	AddSlab(TEXT("EastWallBelowSill"), FVector(WidthHalf, 0.f, WindowSillHeight * 0.5f), FVector(WallThickness, WindowWidth, WindowSillHeight));
-	AddSlab(TEXT("EastWallAboveWindow"), FVector(WidthHalf, 0.f, (WindowTopHeight + RoomHeight) * 0.5f), FVector(WallThickness, WindowWidth, RoomHeight - WindowTopHeight));
+	AddSlab(TEXT("EastWallBelowSill"), FVector(WidthHalf, 0.f, WindowSillHeight * 0.5f), FVector(WallThickness, WindowOpeningWidth, WindowSillHeight));
+	AddSlab(TEXT("EastWallAboveWindow"), FVector(WidthHalf, 0.f, (WindowTopHeight + RoomHeight) * 0.5f), FVector(WallThickness, WindowOpeningWidth, RoomHeight - WindowTopHeight));
+}
 
-	// Boarded-up planks across the window gap, with vertical gaps for lightning to shine through.
-	const float BoardZs[3] = { WindowSillHeight + 14.f, (WindowSillHeight + WindowTopHeight) * 0.5f, WindowTopHeight - 14.f };
-	for (int32 i = 0; i < 3; ++i)
+void AInvestigationRoomActor::SpawnOccupants()
+{
+	const float WidthHalf = RoomWidth * 0.5f;
+	const float DepthHalf = RoomDepth * 0.5f;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	// Hinge sits at the left edge of the doorway; door faces into the opening at spawn rotation.
+	const FVector DoorHingeLocation = GetActorLocation() + FVector(-DoorOpeningWidth * 0.5f, -DepthHalf, 0.f);
+	const FRotator DoorRotation(0.f, -90.f, 0.f);
+	Door = GetWorld()->SpawnActor<ADoorActor>(ADoorActor::StaticClass(), DoorHingeLocation, DoorRotation, SpawnParams);
+
+	// The key is on the window sill — the one surface in the room the storm lights for free, so a
+	// player who walks to the window to look out finds it without ever being told to.
+	const FVector KeyLocation = GetActorLocation() + FVector(WidthHalf - 22.f, -60.f, WindowSillHeight + 8.f);
+	Key = GetWorld()->SpawnActor<AKeyPickupActor>(AKeyPickupActor::StaticClass(), KeyLocation, FRotator(0.f, 24.f, 0.f), SpawnParams);
+
+	// Storm and dressing are spawned deferred so Configure() lands before their BeginPlay builds
+	// anything — both size their geometry from the shell they are given.
+	const FTransform StormTransform(FRotator::ZeroRotator, GetActorLocation() + FVector(WidthHalf, 0.f, 0.f));
+	Storm = GetWorld()->SpawnActorDeferred<AStormWindowActor>(AStormWindowActor::StaticClass(), StormTransform, this);
+	if (Storm)
 	{
-		AddSlab(FString::Printf(TEXT("WindowBoard_%d"), i), FVector(WidthHalf + WallThickness * 0.5f + 3.f, 0.f, BoardZs[i]), FVector(4.f, WindowWidth + 12.f, 16.f));
+		FStormWindowSetup StormSetup;
+		StormSetup.OpeningWidth = WindowOpeningWidth;
+		StormSetup.SillHeight = WindowSillHeight;
+		StormSetup.TopHeight = WindowTopHeight;
+		StormSetup.WallThickness = WallThickness;
+		Storm->Configure(StormSetup);
+		Storm->FinishSpawning(StormTransform);
 	}
 
-	// The flash light sits just outside the window gap.
-	LightningLight->SetRelativeLocation(FVector(WidthHalf + 150.f, 0.f, (WindowSillHeight + WindowTopHeight) * 0.5f));
+	const FTransform DressingTransform(FRotator::ZeroRotator, GetActorLocation());
+	Dressing = GetWorld()->SpawnActorDeferred<ARoomDressingActor>(ARoomDressingActor::StaticClass(), DressingTransform, this);
+	if (Dressing)
+	{
+		FRoomDressingSetup DressingSetup;
+		DressingSetup.Width = RoomWidth;
+		DressingSetup.Depth = RoomDepth;
+		DressingSetup.Height = RoomHeight;
+		DressingSetup.WallThickness = WallThickness;
+		DressingSetup.DoorOpeningWidth = DoorOpeningWidth;
+		DressingSetup.WindowOpeningWidth = WindowOpeningWidth;
+		DressingSetup.WindowSillHeight = WindowSillHeight;
+		DressingSetup.WindowTopHeight = WindowTopHeight;
+		Dressing->Configure(DressingSetup);
+		Dressing->SetStorm(Storm);
+		Dressing->FinishSpawning(DressingTransform);
+	}
 }
 
 void AInvestigationRoomActor::BeginPlay()
@@ -142,47 +223,5 @@ void AInvestigationRoomActor::BeginPlay()
 	Super::BeginPlay();
 
 	ApplySurfaceMaterial();
-
-	const float WidthHalf = RoomWidth * 0.5f;
-	const float DepthHalf = RoomDepth * 0.5f;
-	const float DoorOpeningWidth = 110.f;
-	const float WindowSillHeight = 90.f;
-
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.Owner = this;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	// Hinge sits at the left edge of the doorway; door faces into the opening at spawn rotation.
-	// The leaf's swing direction is a cosmetic detail — flip ADoorActor's open-yaw sign if it
-	// visually swings into the wall instead of into the room once you can see it in-editor.
-	const FVector DoorHingeLocation = GetActorLocation() + FVector(-DoorOpeningWidth * 0.5f, -DepthHalf, 0.f);
-	const FRotator DoorRotation(0.f, -90.f, 0.f);
-	Door = GetWorld()->SpawnActor<ADoorActor>(ADoorActor::StaticClass(), DoorHingeLocation, DoorRotation, SpawnParams);
-
-	const FVector KeyLocation = GetActorLocation() + FVector(WidthHalf - 15.f, -40.f, WindowSillHeight + 4.f);
-	Key = GetWorld()->SpawnActor<AKeyPickupActor>(AKeyPickupActor::StaticClass(), KeyLocation, FRotator::ZeroRotator, SpawnParams);
-}
-
-void AInvestigationRoomActor::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-
-	if (FlashTimeRemaining > 0.f)
-	{
-		FlashTimeRemaining -= DeltaTime;
-		if (FlashTimeRemaining <= 0.f)
-		{
-			LightningLight->SetIntensity(0.f);
-			TimeUntilNextFlash = FMath::FRandRange(4.f, 12.f);
-		}
-		return;
-	}
-
-	TimeUntilNextFlash -= DeltaTime;
-	if (TimeUntilNextFlash <= 0.f)
-	{
-		LightningLight->SetIntensity(FMath::FRandRange(2200.f, 3600.f));
-		FlashTimeRemaining = FMath::FRandRange(0.08f, 0.15f);
-		// PlayStormThunder() would fire here once thunder audio is sourced (freesound.org, with permission).
-	}
+	SpawnOccupants();
 }
