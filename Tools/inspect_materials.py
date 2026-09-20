@@ -11,7 +11,7 @@ def report(text):
     lines.append(text)
 
 
-for name in ["MI_clay_plaster", "MI_decrepit_wallpaper", "MI_old_wooden_floor_02"]:
+for name in ["MI_cracked_concrete_wall", "MI_decrepit_wallpaper", "MI_old_wooden_floor_02"]:
     path = "/Game/Materials/" + name
     mi = unreal.EditorAssetLibrary.load_asset(path)
     if not mi:

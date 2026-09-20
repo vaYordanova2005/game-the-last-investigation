@@ -52,6 +52,14 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> Surfaces;
 
+	/**
+	 * The floor slab, kept apart from the rest because it is the one piece of the shell the player
+	 * ever actually sees: the boards laid on top of it have gaps between them and gaps where a
+	 * board is missing, and what shows in those gaps is this.
+	 */
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> FloorSlab;
+
 	UPROPERTY(VisibleAnywhere, Category = "Room")
 	TObjectPtr<USceneComponent> RoomRoot;
 

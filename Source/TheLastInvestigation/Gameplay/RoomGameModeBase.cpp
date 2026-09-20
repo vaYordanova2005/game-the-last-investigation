@@ -58,11 +58,42 @@ void ARoomGameModeBase::ScheduleHeadlessScreenshot()
 		// for the whole delay, so without this the shot is of whatever the desk mouse last did.
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
+			// -RoomShotX/-RoomShotY/-RoomShotZ stand the camera somewhere else in the room, one
+			// axis each because a single comma-separated vector argument has to survive the shell,
+			// FParse and FVector::InitFromString, and quietly falling back to the waking pose when
+			// one of those does not like it looks exactly like a camera that did not move.
+			//
+			// The waking pose is the right place to judge the composition from and the wrong place
+			// to judge anything the detective has to walk up to: the door is four metres away in
+			// that frame and sixty pixels wide, which is no use for deciding whether it reads as
+			// rotten.
+			FVector Spot = AInvestigationRoomActor::GetWakeLocation();
+			FParse::Value(FCommandLine::Get(), TEXT("-RoomShotX="), Spot.X);
+			FParse::Value(FCommandLine::Get(), TEXT("-RoomShotY="), Spot.Y);
+			FParse::Value(FCommandLine::Get(), TEXT("-RoomShotZ="), Spot.Z);
+			UE_LOG(LogTemp, Log, TEXT("Room01: shot camera at %s"), *Spot.ToString());
+
 			if (APawn* Pawn = PC->GetPawn())
 			{
-				Pawn->SetActorLocationAndRotation(AInvestigationRoomActor::GetWakeLocation(), FRotator::ZeroRotator);
+				Pawn->SetActorLocationAndRotation(Spot, FRotator::ZeroRotator);
 			}
-			PC->SetControlRotation(AInvestigationRoomActor::GetWakeRotation());
+
+			// -RoomShotYaw=<degrees> turns the camera off the waking pose, for looking at one wall
+			// rather than at the composition.
+			FRotator Pose = AInvestigationRoomActor::GetWakeRotation();
+			float YawOffset = 0.f;
+			if (FParse::Value(FCommandLine::Get(), TEXT("-RoomShotYaw="), YawOffset))
+			{
+				Pose.Yaw += YawOffset;
+			}
+			// And up, for the ceiling: the waking pose looks seven degrees down, so nothing above
+			// eye level can be checked at all without this.
+			float PitchOffset = 0.f;
+			if (FParse::Value(FCommandLine::Get(), TEXT("-RoomShotPitch="), PitchOffset))
+			{
+				Pose.Pitch += PitchOffset;
+			}
+			PC->SetControlRotation(Pose);
 		}
 
 		// FScreenshotRequest, not GEngine->Exec("HighResShot"): that console command is handled by

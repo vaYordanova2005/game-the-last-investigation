@@ -155,6 +155,31 @@ void AInvestigationRoomActor::ApplySurfaceMaterial()
 			Slab->SetMaterial(0, Tint);
 		}
 	}
+
+	// The floor slab is not part of the shell as far as the eye is concerned.
+	//
+	// Everywhere else this material is hidden — the walls are behind the plaster panels, the
+	// ceiling is behind the ceiling boards — so its value only has to be plausible for the reveals
+	// of the two openings. The floor is different: the boards are laid over it with a centimetre
+	// and a half between each one, five per cent of them are missing outright, and every one of
+	// those gaps is a window onto this slab. At the shell value that read as a pale, flat, utterly
+	// untextured plank lying among the real ones, brighter than the boards in every channel and
+	// thirty times brighter in blue — the grey boards on the floor were this, seen through the
+	// gaps, not the boards themselves.
+	//
+	// What the gaps show now is a second course of real boards, laid by ARoomDressingActor (see
+	// the subfloor in BuildFloor), so this slab should never be on screen at all. It stays dark
+	// anyway, because the one thing it must not do again is be paler than the floor above it.
+	if (FloorSlab)
+	{
+		UMaterialInstanceDynamic* Underfloor = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+		if (Underfloor)
+		{
+			Underfloor->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.012f, 0.008f, 0.005f));
+			Underfloor->SetScalarParameterValue(TEXT("Roughness"), 1.f);
+			FloorSlab->SetMaterial(0, Underfloor);
+		}
+	}
 }
 
 void AInvestigationRoomActor::BuildRoom()
@@ -162,7 +187,7 @@ void AInvestigationRoomActor::BuildRoom()
 	const float WidthHalf = RoomWidth * 0.5f;
 	const float DepthHalf = RoomDepth * 0.5f;
 
-	AddSlab(TEXT("Floor"), FVector(0.f, 0.f, -5.f), FVector(RoomWidth, RoomDepth, 10.f));
+	FloorSlab = AddSlab(TEXT("Floor"), FVector(0.f, 0.f, -5.f), FVector(RoomWidth, RoomDepth, 10.f));
 	AddSlab(TEXT("Ceiling"), FVector(0.f, 0.f, RoomHeight + 5.f), FVector(RoomWidth, RoomDepth, 10.f));
 
 	// North wall: solid. It is the wall the detective wakes up against, so it is only ever seen
@@ -202,7 +227,13 @@ void AInvestigationRoomActor::SpawnOccupants()
 	// Hinge at the window end of the doorway, so the leaf runs away from the player's eye-line and
 	// the lock side is what they see. The door's own geometry is built out along its local +Y, and
 	// a 90 degree yaw maps that onto world -X, across the opening.
-	const FVector DoorHingeLocation = GetActorLocation() + FVector(DoorOpeningCenterX + DoorOpeningWidth * 0.5f, DepthHalf, 0.f);
+	//
+	// Hung at the room side of the opening, not at the far face of it. The wall is twenty
+	// centimetres thick, and a leaf at the far face sits at the back of a twenty-centimetre shadow
+	// box: the lantern lights the reveal and the door behind it stays dark, which is most of why a
+	// shut door read as an open doorway. Flush with the inner face, it takes the same light the
+	// wall beside it takes.
+	const FVector DoorHingeLocation = GetActorLocation() + FVector(DoorOpeningCenterX + DoorOpeningWidth * 0.5f, DepthHalf - WallThickness + 2.6f, 0.f);
 	const FRotator DoorRotation(0.f, 90.f, 0.f);
 	Door = GetWorld()->SpawnActor<ADoorActor>(ADoorActor::StaticClass(), DoorHingeLocation, DoorRotation, SpawnParams);
 

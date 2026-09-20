@@ -16,6 +16,8 @@ script is how a fresh clone gets the source art back.
 import argparse
 import json
 import os
+import struct
+import zlib
 import sys
 import time
 import urllib.request
@@ -34,7 +36,13 @@ MODEL_DIR = os.path.join(ROOT, "Art", "Source", "Models")
 TEXTURES = {
     "old_wooden_floor_02": "floorboards",
     "decrepit_wallpaper": "wallpaper over the plaster",
-    "clay_plaster": "bare plaster where the paper has torn away",
+    # The wall itself. clay_plaster was here and was a mistake: it is a smooth, evenly troweled
+    # modern finish, and photographed flat it is very nearly a single brown colour. On a wall it
+    # read as no texture at all, which is precisely what it is. These three are damaged surfaces —
+    # the damage is in the photograph rather than painted on top of it in geometry.
+    "cracked_concrete_wall": "the plaster itself: flaked, cracked, filthy",
+    "damaged_plaster": "brick and render behind the plaster, where it has come away",
+    "plastered_stone_wall": "damp: the dark bloom that spreads from corners and the ceiling line",
     "ceiling_interior": "ceiling",
     "weathered_brown_planks": "door, beams, rough carpentry",
     "raw_plank_wall": "skirting and loose boards",
@@ -150,6 +158,43 @@ def fetch_models(list_only):
                 print("    + {}".format(relative_path))
 
 
+def write_neutral_arm():
+    """An 8x8 flat AO/Roughness/Metallic map, written rather than downloaded.
+
+    Poly Haven ships models with roughness and metallic as separate greyscales and no packed ARM,
+    so a prop slot almost never has one — and a sampler with nothing in it does not render as
+    nothing, it renders with the master material's default, which is one of our wall sets. Every
+    prop in the room was taking its roughness and its ambient occlusion from a photograph of
+    cracked concrete. This is what they get instead: white AO, mid roughness, no metal.
+
+    Art/Source is gitignored, so it has to be produced here alongside the downloads rather than
+    committed, or a fresh clone silently goes back to wearing the wall.
+    """
+    path = os.path.join(TEXTURE_DIR, "neutral_arm.png")
+    if os.path.isfile(path):
+        return
+
+    # A minimal PNG: one IHDR, one IDAT, one IEND. Not worth a dependency for 64 pixels.
+    size = 8
+    pixel = b"\xff\x8c\x00"  # R = AO 1.0, G = roughness 0.55, B = metallic 0
+    raw = b"".join(b"\x00" + pixel * size for _ in range(size))  # filter byte 0 per scanline
+
+    def chunk(kind, payload):
+        return (struct.pack(">I", len(payload)) + kind + payload
+                + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF))
+
+    png = (b"\x89PNG\r\n\x1a\n"
+           + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(raw, 9))
+           + chunk(b"IEND", b""))
+
+    if not os.path.isdir(TEXTURE_DIR):
+        os.makedirs(TEXTURE_DIR)
+    with open(path, "wb") as handle:
+        handle.write(png)
+    print("  + neutral_arm.png")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--list", action="store_true", help="show the manifest without downloading")
@@ -157,6 +202,8 @@ def main():
 
     fetch_textures(args.list)
     fetch_models(args.list)
+    if not args.list:
+        write_neutral_arm()
 
     if not args.list:
         print("Done. Import with Tools/build_art.py via the pythonscript commandlet.")

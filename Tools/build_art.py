@@ -15,6 +15,9 @@ What it produces:
     /Game/Materials/M_RoomSurface   one parameterised master material
     /Game/Materials/M_RoomGlass     translucent window glass
     /Game/Materials/M_RoomEmissive  unlit glow, for the lightning
+    /Game/Materials/M_RoomDecal     projected grime, damp and stains — ragged-edged, not rectangles
+    /Game/Materials/M_RoomCrack     projected fissures, drawn from noise rather than from a texture
+    /Game/Materials/M_RoomWeb       cobweb: a net of filaments, also drawn from noise
     /Game/Materials/MI_<set>        an instance per texture set (floor, wallpaper, plaster, ...)
     /Game/Textures/T_*              the imported maps
     /Game/Meshes/<Model>            the imported props, with their materials already assigned
@@ -34,6 +37,9 @@ MASTER_PATH = MATERIAL_PACKAGE + "/M_RoomSurface"
 MASKED_PATH = MATERIAL_PACKAGE + "/M_RoomSurfaceMasked"
 GLASS_PATH = MATERIAL_PACKAGE + "/M_RoomGlass"
 EMISSIVE_PATH = MATERIAL_PACKAGE + "/M_RoomEmissive"
+DECAL_PATH = MATERIAL_PACKAGE + "/M_RoomDecal"
+CRACK_PATH = MATERIAL_PACKAGE + "/M_RoomCrack"
+WEB_PATH = MATERIAL_PACKAGE + "/M_RoomWeb"
 
 ASSET_TOOLS = unreal.AssetToolsHelpers.get_asset_tools()
 MAT_LIB = unreal.MaterialEditingLibrary
@@ -60,7 +66,9 @@ MAP_KINDS = {
 TILING = {
     "old_wooden_floor_02": 2.0,
     "decrepit_wallpaper": 2.0,
-    "clay_plaster": 2.0,
+    "cracked_concrete_wall": 2.0,
+    "damaged_plaster": 2.0,
+    "plastered_stone_wall": 2.0,
     "ceiling_interior": 2.0,
     "weathered_brown_planks": 2.0,
     "raw_plank_wall": 2.0,
@@ -149,9 +157,31 @@ def build_master_material(name=None, masked=False, defaults=None):
 
     tex_coord = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionTextureCoordinate, -1100, 150)
 
-    uv = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -900, 80)
-    MAT_LIB.connect_material_expressions(tex_coord, "", uv, "A")
-    MAT_LIB.connect_material_expressions(tiling_rg, "", uv, "B")
+    scaled_uv = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -900, 80)
+    MAT_LIB.connect_material_expressions(tex_coord, "", scaled_uv, "A")
+    MAT_LIB.connect_material_expressions(tiling_rg, "", scaled_uv, "B")
+
+    # Where in the photograph this particular piece of geometry is cut from.
+    #
+    # Without it the room is built out of identical crops: every basic-shape face maps 0..1, so a
+    # fifty-centimetre strip of a hundred-and-sixty-centimetre wallpaper samples the same quarter
+    # of the same photo as every other strip. Correct texel density, and yet the wall comes out as
+    # rows of identical flat rectangles — which is exactly how it looked. C++ hands each part one
+    # of a handful of offsets, picked from where the part sits in the room.
+    uv_offset = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -1100, 300)
+    uv_offset.set_editor_property("parameter_name", "UVOffset")
+    uv_offset.set_editor_property("default_value", unreal.LinearColor(0.0, 0.0, 0.0, 1.0))
+
+    offset_rg = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionComponentMask, -950, 300)
+    offset_rg.set_editor_property("r", True)
+    offset_rg.set_editor_property("g", True)
+    offset_rg.set_editor_property("b", False)
+    offset_rg.set_editor_property("a", False)
+    MAT_LIB.connect_material_expressions(uv_offset, "", offset_rg, "")
+
+    uv = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionAdd, -800, 160)
+    MAT_LIB.connect_material_expressions(scaled_uv, "", uv, "A")
+    MAT_LIB.connect_material_expressions(offset_rg, "", uv, "B")
 
     def sampler(name, x, y, sampler_type, default_asset):
         node = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
@@ -332,6 +362,369 @@ def build_emissive_master():
     return material
 
 
+
+def make_decal_domain(material):
+    """
+    Deferred-decal domain, set defensively.
+
+    A decal material that silently stays in the Surface domain is worse than no decal at all: it
+    becomes an unlit quad hanging in front of the wall. So the domain is looked up by name and its
+    absence is reported rather than swallowed.
+
+    Nothing sets DecalBlendMode. It was the way to say what a decal writes into the G-buffer, and
+    as of 5.8 it is deprecated and refuses to be set at all — a decal now uses the ordinary
+    material blend mode like any other material, and Translucent on a decal means colour, normal
+    and roughness blended over what is behind it, which is exactly what a stain does.
+    """
+    domain = getattr(unreal.MaterialDomain, "MD_DEFERRED_DECAL", None)
+    if domain is None:
+        unreal.log_error("No deferred-decal material domain in this engine build")
+        return False
+
+    material.set_editor_property("material_domain", domain)
+    return True
+
+
+def build_patch_alpha(material, x, y, noise_scale=0.05, noise_amount=0.9, contrast=2.6):
+    """
+    The shape of a stain: a soft round patch with its edge chewed away by noise.
+
+    This is the whole answer to the room's rectangle problem. Damage was being drawn as slabs of
+    flat colour laid on the wall, and no amount of choosing a better colour fixes a rectangle —
+    the eye reads the straight edge, not the tone. A decal whose alpha is a radial falloff
+    perturbed by world-space noise has no straight edge anywhere on it, and because the noise is
+    sampled in world space two overlapping stains tear along the same grain instead of crossing.
+
+    Returns the node carrying the 0..1 coverage, before the Opacity parameter scales it.
+    """
+    uv = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionTextureCoordinate, x, y)
+
+    centre = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionConstant2Vector, x, y + 130)
+    centre.set_editor_property("r", 0.5)
+    centre.set_editor_property("g", 0.5)
+
+    distance = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionDistance, x + 200, y + 40)
+    MAT_LIB.connect_material_expressions(uv, "", distance, "A")
+    MAT_LIB.connect_material_expressions(centre, "", distance, "B")
+
+    # 2.0 puts the zero point of the falloff on the edge midpoints of the decal box, so a stain
+    # fills the size it was asked for rather than a circle inscribed in it.
+    spread = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, x + 380, y + 40)
+    MAT_LIB.connect_material_expressions(distance, "", spread, "A")
+    spread.set_editor_property("const_b", 2.0)
+
+    falloff = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionOneMinus, x + 540, y + 40)
+    MAT_LIB.connect_material_expressions(spread, "", falloff, "")
+
+    # Centred on zero, so it pushes the edge of the patch out as often as it eats into it.
+    noise = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionNoise, x, y + 280)
+    noise.set_editor_property("scale", noise_scale)
+    noise.set_editor_property("levels", 4)
+    noise.set_editor_property("output_min", -0.5)
+    noise.set_editor_property("output_max", 0.5)
+
+    noise_amount_param = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionScalarParameter, x, y + 430)
+    noise_amount_param.set_editor_property("parameter_name", "EdgeNoise")
+    noise_amount_param.set_editor_property("default_value", noise_amount)
+
+    ragged = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, x + 280, y + 320)
+    MAT_LIB.connect_material_expressions(noise, "", ragged, "A")
+    MAT_LIB.connect_material_expressions(noise_amount_param, "", ragged, "B")
+
+    perturbed = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionAdd, x + 700, y + 160)
+    MAT_LIB.connect_material_expressions(falloff, "", perturbed, "A")
+    MAT_LIB.connect_material_expressions(ragged, "", perturbed, "B")
+
+    # Contrast turns the gentle gradient into something with a discernible, if torn, boundary —
+    # damp has an edge, it just is not a straight one.
+    sharpened = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, x + 860, y + 160)
+    MAT_LIB.connect_material_expressions(perturbed, "", sharpened, "A")
+    sharpened.set_editor_property("const_b", contrast)
+
+    coverage = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionClamp, x + 1000, y + 160)
+    MAT_LIB.connect_material_expressions(sharpened, "", coverage, "")
+    coverage.set_editor_property("min_default", 0.0)
+    coverage.set_editor_property("max_default", 1.0)
+    return coverage
+
+
+def build_decal_master(defaults=None):
+    """
+    Grime, damp and blown plaster, projected onto whatever is behind them.
+
+        BaseColor = Texture(BaseColorMap) * Tint
+        Roughness = ARM.G * RoughnessScale
+        Normal    = Texture(NormalMap)
+        Opacity   = raggedPatch * Opacity
+
+    A decal rather than a slab of geometry for three reasons: it takes the shape of what it lands
+    on instead of hovering a millimetre off it, it cannot z-fight with the wall, and its alpha can
+    be any shape at all — which is what lets the damage stop being rectangular.
+    """
+    defaults = defaults or {}
+    if ASSET_LIB.does_asset_exist(DECAL_PATH):
+        ASSET_LIB.delete_asset(DECAL_PATH)
+
+    material = ASSET_TOOLS.create_asset("M_RoomDecal", MATERIAL_PACKAGE, unreal.Material, unreal.MaterialFactoryNew())
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    make_decal_domain(material)
+
+    tiling = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -1500, -400)
+    tiling.set_editor_property("parameter_name", "TilingXY")
+    tiling.set_editor_property("default_value", unreal.LinearColor(1.0, 1.0, 0.0, 1.0))
+
+    tiling_rg = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionComponentMask, -1330, -400)
+    tiling_rg.set_editor_property("r", True)
+    tiling_rg.set_editor_property("g", True)
+    MAT_LIB.connect_material_expressions(tiling, "", tiling_rg, "")
+
+    tex_coord = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionTextureCoordinate, -1500, -260)
+
+    scaled_uv = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -1150, -330)
+    MAT_LIB.connect_material_expressions(tex_coord, "", scaled_uv, "A")
+    MAT_LIB.connect_material_expressions(tiling_rg, "", scaled_uv, "B")
+
+    uv_offset = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -1500, -120)
+    uv_offset.set_editor_property("parameter_name", "UVOffset")
+    uv_offset.set_editor_property("default_value", unreal.LinearColor(0.0, 0.0, 0.0, 1.0))
+
+    offset_rg = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionComponentMask, -1330, -120)
+    offset_rg.set_editor_property("r", True)
+    offset_rg.set_editor_property("g", True)
+    MAT_LIB.connect_material_expressions(uv_offset, "", offset_rg, "")
+
+    uv = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionAdd, -1000, -260)
+    MAT_LIB.connect_material_expressions(scaled_uv, "", uv, "A")
+    MAT_LIB.connect_material_expressions(offset_rg, "", uv, "B")
+
+    def sampler(name, x, y, sampler_type, default_asset):
+        node = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
+        node.set_editor_property("parameter_name", name)
+        if default_asset:
+            node.set_editor_property("texture", default_asset)
+        else:
+            unreal.log_error("M_RoomDecal: sampler {} has no default texture; it will not compile".format(name))
+        node.set_editor_property("sampler_type", sampler_type)
+        MAT_LIB.connect_material_expressions(uv, "", node, "UVs")
+        return node
+
+    base_color_map = sampler("BaseColorMap", -800, -700, unreal.MaterialSamplerType.SAMPLERTYPE_COLOR, defaults.get("basecolor"))
+    normal_map = sampler("NormalMap", -800, -400, unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL, defaults.get("normal"))
+    arm_map = sampler("ARMMap", -800, -100, unreal.MaterialSamplerType.SAMPLERTYPE_MASKS, defaults.get("arm"))
+
+    tint = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -800, -900)
+    tint.set_editor_property("parameter_name", "Tint")
+    tint.set_editor_property("default_value", unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
+
+    tinted = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -400, -800)
+    MAT_LIB.connect_material_expressions(base_color_map, "RGB", tinted, "A")
+    MAT_LIB.connect_material_expressions(tint, "", tinted, "B")
+
+    rough_scale = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -800, 100)
+    rough_scale.set_editor_property("parameter_name", "RoughnessScale")
+    rough_scale.set_editor_property("default_value", 1.0)
+
+    rough = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -400, 0)
+    MAT_LIB.connect_material_expressions(arm_map, "G", rough, "A")
+    MAT_LIB.connect_material_expressions(rough_scale, "", rough, "B")
+
+    coverage = build_patch_alpha(material, -1500, 300)
+
+    opacity_param = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -600, 700)
+    opacity_param.set_editor_property("parameter_name", "Opacity")
+    opacity_param.set_editor_property("default_value", 0.85)
+
+    opacity = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -300, 500)
+    MAT_LIB.connect_material_expressions(coverage, "", opacity, "A")
+    MAT_LIB.connect_material_expressions(opacity_param, "", opacity, "B")
+
+    MAT_LIB.connect_material_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    MAT_LIB.connect_material_property(normal_map, "", unreal.MaterialProperty.MP_NORMAL)
+    MAT_LIB.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    MAT_LIB.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+
+    MAT_LIB.recompile_material(material)
+    ASSET_LIB.save_loaded_asset(material)
+    unreal.log("Built " + DECAL_PATH)
+    return material
+
+
+def build_crack_master():
+    """
+    Fissures in the plaster, drawn rather than photographed.
+
+        Opacity   = thin(noise) * raggedPatch * Opacity
+        BaseColor = Tint — near black, because a crack is an absence of surface
+
+    A crack is a line, and there is no CC0 texture of *just* lines on transparency to hand. What
+    there is, in every noise field, is the contour where it crosses its own midpoint: take the
+    distance from that midpoint and keep only what lies very close to it, and the result is a
+    branching, snaking filament of exactly the kind plaster splits along. Sharpness is how narrow
+    the filament is, which is to say how fine the crack is.
+    """
+    if ASSET_LIB.does_asset_exist(CRACK_PATH):
+        ASSET_LIB.delete_asset(CRACK_PATH)
+
+    material = ASSET_TOOLS.create_asset("M_RoomCrack", MATERIAL_PACKAGE, unreal.Material, unreal.MaterialFactoryNew())
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    make_decal_domain(material)
+
+    tint = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -700, -300)
+    tint.set_editor_property("parameter_name", "Tint")
+    tint.set_editor_property("default_value", unreal.LinearColor(0.012, 0.011, 0.010, 1.0))
+
+    rough = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -700, -150)
+    rough.set_editor_property("parameter_name", "RoughnessScale")
+    rough.set_editor_property("default_value", 1.0)
+
+    # World-space, so a crack runs across a corner unbroken instead of restarting on each wall.
+    noise = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionNoise, -1500, 100)
+    noise.set_editor_property("scale", 0.035)
+    noise.set_editor_property("levels", 3)
+    noise.set_editor_property("output_min", -0.5)
+    noise.set_editor_property("output_max", 0.5)
+
+    distance_from_contour = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionAbs, -1250, 100)
+    MAT_LIB.connect_material_expressions(noise, "", distance_from_contour, "")
+
+    sharpness = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1500, 260)
+    sharpness.set_editor_property("parameter_name", "Sharpness")
+    sharpness.set_editor_property("default_value", 26.0)
+
+    widened = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -1050, 140)
+    MAT_LIB.connect_material_expressions(distance_from_contour, "", widened, "A")
+    MAT_LIB.connect_material_expressions(sharpness, "", widened, "B")
+
+    filament = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionOneMinus, -880, 140)
+    MAT_LIB.connect_material_expressions(widened, "", filament, "")
+
+    filament_clamped = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionClamp, -720, 140)
+    MAT_LIB.connect_material_expressions(filament, "", filament_clamped, "")
+    filament_clamped.set_editor_property("min_default", 0.0)
+    filament_clamped.set_editor_property("max_default", 1.0)
+
+    # The same ragged patch as the stains, used here to say where the crack network exists at all:
+    # a wall covered evenly in cracks reads as crazed pottery, not as a wall that has moved.
+    coverage = build_patch_alpha(material, -1500, 500, noise_scale=0.02, noise_amount=0.55, contrast=2.2)
+
+    local = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -400, 400)
+    MAT_LIB.connect_material_expressions(filament_clamped, "", local, "A")
+    MAT_LIB.connect_material_expressions(coverage, "", local, "B")
+
+    opacity_param = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -400, 620)
+    opacity_param.set_editor_property("parameter_name", "Opacity")
+    opacity_param.set_editor_property("default_value", 1.0)
+
+    opacity = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -200, 480)
+    MAT_LIB.connect_material_expressions(local, "", opacity, "A")
+    MAT_LIB.connect_material_expressions(opacity_param, "", opacity, "B")
+
+    MAT_LIB.connect_material_property(tint, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    MAT_LIB.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    MAT_LIB.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+
+    MAT_LIB.recompile_material(material)
+    ASSET_LIB.save_loaded_asset(material)
+    unreal.log("Built " + CRACK_PATH)
+    return material
+
+
+
+
+def build_web_master():
+    """
+    Cobweb: strands, not a sheet.
+
+        Opacity   = thin(noise) * raggedPatch * Opacity
+        BaseColor = Tint
+
+    Webs were flat opaque slabs of pale grey slung across the top corners, and at the size a web
+    has to be to span a corner that is a sheet of card hanging off the ceiling — by some margin
+    the worst thing in the room. The alpha uses the same noise-contour trick the cracks do, run at
+    a much finer scale: what is left is a net of filaments with holes between them, which is what
+    a web is. Translucent and lit, so the lantern catches the strands facing it and the rest of the
+    net stays where it belongs, which is almost invisible until you are close.
+    """
+    if ASSET_LIB.does_asset_exist(WEB_PATH):
+        ASSET_LIB.delete_asset(WEB_PATH)
+
+    material = ASSET_TOOLS.create_asset("M_RoomWeb", MATERIAL_PACKAGE, unreal.Material, unreal.MaterialFactoryNew())
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    material.set_editor_property("two_sided", True)
+    for mode_name in ("TLM_SURFACE_PER_PIXEL_LIGHTING", "TLM_SURFACE"):
+        mode = getattr(unreal.TranslucencyLightingMode, mode_name, None)
+        if mode is not None:
+            material.set_editor_property("translucency_lighting_mode", mode)
+            break
+
+    tint = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -700, -300)
+    tint.set_editor_property("parameter_name", "Tint")
+    tint.set_editor_property("default_value", unreal.LinearColor(0.30, 0.29, 0.27, 1.0))
+
+    rough = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -700, -150)
+    rough.set_editor_property("parameter_name", "RoughnessScale")
+    rough.set_editor_property("default_value", 0.85)
+
+    noise = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionNoise, -1500, 100)
+    noise.set_editor_property("scale", 0.45)
+    noise.set_editor_property("levels", 2)
+    noise.set_editor_property("output_min", -0.5)
+    noise.set_editor_property("output_max", 0.5)
+    # Turbulence off, and this is the whole reason the webs were sheets rather than strands.
+    #
+    # The trick below takes the contour of the field — the set of points where it crosses zero —
+    # and that is a thin curve only if the field is *signed*. A Noise node defaults to turbulence,
+    # which folds the field at zero before remapping it, so it never crosses zero: what Abs() then
+    # measures is distance from the middle of the range, and the middle of a folded field is a
+    # broad region, not a line. Every web in the room came out as an opaque pale patch of exactly
+    # that shape, slung across a ceiling corner a metre wide.
+    noise.set_editor_property("turbulence", False)
+
+    contour = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionAbs, -1250, 100)
+    MAT_LIB.connect_material_expressions(noise, "", contour, "")
+
+    sharpness = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1500, 260)
+    sharpness.set_editor_property("parameter_name", "Sharpness")
+    sharpness.set_editor_property("default_value", 11.0)
+
+    widened = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -1050, 140)
+    MAT_LIB.connect_material_expressions(contour, "", widened, "A")
+    MAT_LIB.connect_material_expressions(sharpness, "", widened, "B")
+
+    strands = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionOneMinus, -880, 140)
+    MAT_LIB.connect_material_expressions(widened, "", strands, "")
+
+    strands_clamped = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionClamp, -720, 140)
+    MAT_LIB.connect_material_expressions(strands, "", strands_clamped, "")
+    strands_clamped.set_editor_property("min_default", 0.0)
+    strands_clamped.set_editor_property("max_default", 1.0)
+
+    # A web is anchored at its corners and thin in the middle; the patch falloff is what gives it
+    # an outline other than the square of the geometry it is drawn on.
+    coverage = build_patch_alpha(material, -1500, 500, noise_scale=0.08, noise_amount=0.7, contrast=2.0)
+
+    netted = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -400, 400)
+    MAT_LIB.connect_material_expressions(strands_clamped, "", netted, "A")
+    MAT_LIB.connect_material_expressions(coverage, "", netted, "B")
+
+    opacity_param = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -400, 620)
+    opacity_param.set_editor_property("parameter_name", "Opacity")
+    opacity_param.set_editor_property("default_value", 0.55)
+
+    opacity = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -200, 480)
+    MAT_LIB.connect_material_expressions(netted, "", opacity, "A")
+    MAT_LIB.connect_material_expressions(opacity_param, "", opacity, "B")
+
+    MAT_LIB.connect_material_property(tint, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    MAT_LIB.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    MAT_LIB.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+
+    MAT_LIB.recompile_material(material)
+    ASSET_LIB.save_loaded_asset(material)
+    unreal.log("Built " + WEB_PATH)
+    return material
+
+
 def make_instance(name, master, maps, tiling=1.0, masked_master=None):
     """One MaterialInstanceConstant wired to a set of maps. Re-created each run so the script is idempotent."""
     path = "{}/{}".format(MATERIAL_PACKAGE, name)
@@ -389,7 +782,7 @@ def pick_master_defaults(sets):
     plaster, which is the most neutral surface in the room, and falls back to whatever is there.
     """
     defaults = {}
-    preferred = ["clay_plaster", "decrepit_wallpaper", "old_wooden_floor_02"]
+    preferred = ["cracked_concrete_wall", "decrepit_wallpaper", "old_wooden_floor_02"]
     order = [name for name in preferred if name in sets] + sorted(sets.keys())
 
     for slot in ("basecolor", "normal", "arm"):
@@ -450,6 +843,28 @@ def import_mesh(fbx_path, asset_name):
 MASKED_MASTER = None
 
 
+NEUTRAL_ARM = None
+
+
+def neutral_arm():
+    """A flat AO/Roughness/Metallic map: white AO, mid roughness, no metal.
+
+    Poly Haven ships models with roughness and metallic as separate maps and no packed ARM, so a
+    prop slot almost never has one — and an unset ARM sampler falls through to the master's
+    default, which is one of the wall sets. Every prop in the room was therefore taking its
+    roughness and its ambient occlusion from a photograph of cracked concrete: shiny where the
+    concrete was smooth, and shaded dark along every crack in a wall it has nothing to do with.
+
+    Neutral is not as good as the prop's own maps, which would need the three greyscales packed
+    into one texture. It is a great deal better than another surface's.
+    """
+    global NEUTRAL_ARM
+    if NEUTRAL_ARM is None:
+        path = os.path.join(TEXTURE_SOURCE, "neutral_arm.png")
+        NEUTRAL_ARM = import_texture(path, "T_neutral_arm", "arm") if os.path.isfile(path) else None
+    return NEUTRAL_ARM
+
+
 def build_models(master):
     """Imports each prop and wires its own textures onto instances of the master material."""
     if not os.path.isdir(MODEL_SOURCE):
@@ -474,7 +889,16 @@ def build_models(master):
         texture_folder = os.path.join(folder, "textures")
         if os.path.isdir(texture_folder):
             for file_name in sorted(os.listdir(texture_folder)):
-                if not file_name.lower().endswith((".jpg", ".png")):
+                # .exr belongs here, and leaving it out is why every prop in the room was wearing
+                # the wall's bumps. The texture library ships jpg; the model downloads ship their
+                # *colour* as jpg and everything else — normal, roughness, metallic — as exr. This
+                # filter took the colour and dropped the rest, so each prop instance left its
+                # NormalMap and ARMMap samplers unset and fell through to the master's defaults,
+                # which are deliberately our own wall maps so the master compiles. The clock's
+                # clean white dial was being rendered with cracked concrete for a normal map and
+                # cracked concrete for its roughness and ambient occlusion, which is exactly what
+                # it looked like: a disc of mottled stone with numbers somewhere underneath.
+                if not file_name.lower().endswith((".jpg", ".png", ".exr", ".tga", ".tif", ".tiff")):
                     continue
 
                 stem = os.path.splitext(file_name)[0]
@@ -521,6 +945,12 @@ def build_models(master):
                 unreal.log_warning("{} slot '{}' has no textures".format(model_id, slot_name))
                 continue
 
+            if not maps.get("arm"):
+                fallback = neutral_arm()
+                if fallback:
+                    maps = dict(maps)
+                    maps["arm"] = fallback
+
             instance = make_instance("MI_{}_{}".format(model_id, slot_name or index), master, maps, 1.0, MASKED_MASTER)
             mesh.set_material(index, instance)
 
@@ -528,8 +958,54 @@ def build_models(master):
         unreal.log("Mesh {} ({} slots, {} texture groups)".format(model_id, len(slot_names), len(by_slot)))
 
 
+def stage_requested():
+    """-ArtStage=<name> on the command line, or None for the whole pipeline.
+
+    The standalone masters — glass, emissive, crack, web — do not depend on the texture import or
+    on each other, and re-running everything to correct one of them re-imports every texture and
+    rewrites every material instance in the project. That is a hundred touched .uasset files to
+    fix one node.
+    """
+    line = unreal.SystemLibrary.get_command_line()
+    for token in line.split():
+        if token.lower().startswith("-artstage="):
+            return token.split("=", 1)[1].strip('"').lower()
+    return None
+
+
+def rebuild_models():
+    """The props, against the master that is already in the project."""
+    global MASKED_MASTER
+    master = ASSET_LIB.load_asset(MASTER_PATH)
+    if not master:
+        unreal.log_error("No " + MASTER_PATH + " — run the whole pipeline first")
+        return
+    MASKED_MASTER = ASSET_LIB.load_asset(MASKED_PATH)
+    build_models(master)
+
+
+STANDALONE_STAGES = {
+    "glass": build_glass_master,
+    "emissive": build_emissive_master,
+    "crack": build_crack_master,
+    "web": build_web_master,
+    "models": rebuild_models,
+}
+
+
 def run():
     global MASKED_MASTER
+
+    stage = stage_requested()
+    if stage in STANDALONE_STAGES:
+        unreal.log("=== Room art pipeline: {} only ===".format(stage))
+        STANDALONE_STAGES[stage]()
+        unreal.log("=== Done ===")
+        return
+    if stage:
+        unreal.log_error("Unknown -ArtStage={} (known: {})".format(stage, ", ".join(sorted(STANDALONE_STAGES))))
+        return
+
     unreal.log("=== Room art pipeline ===")
 
     # Textures first: the masters cannot be built until there is a correctly typed texture to put
@@ -541,6 +1017,9 @@ def run():
     MASKED_MASTER = build_master_material("M_RoomSurfaceMasked", masked=True, defaults=defaults)
     build_glass_master()
     build_emissive_master()
+    build_decal_master(defaults=defaults)
+    build_crack_master()
+    build_web_master()
 
     build_surface_instances(master, sets)
     build_models(master)

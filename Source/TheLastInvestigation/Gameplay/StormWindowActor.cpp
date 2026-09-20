@@ -119,8 +119,12 @@ void AStormWindowActor::BuildWindow()
 	}
 	UMaterialInstanceDynamic* ShardMat = Build.Glass(FLinearColor(0.20f, 0.24f, 0.28f), 0.34f, 0.04f);
 	UMaterialInstanceDynamic* CrackMat = Build.Flat(FLinearColor(0.010f, 0.012f, 0.014f), 0.35f);
-	UMaterialInstanceDynamic* ClothMat = Build.Surface(RoomSurfaces::Linen, FLinearColor(0.34f, 0.34f, 0.32f));
-	UMaterialInstanceDynamic* IronMat = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(0.45f, 0.45f, 0.48f));
+	// Both of these were near-neutral tints on photographs that are not neutral — rough_linen is a
+	// blue linen and green_metal_rust is a sheet of green paint — and a tint multiplies rather than
+	// neutralises, so the curtains hung blue and the bars read green. See ARoomDressingActor's
+	// material block for the measurements these come from.
+	UMaterialInstanceDynamic* ClothMat = Build.Surface(RoomSurfaces::Linen, FLinearColor(0.125f, 0.069f, 0.032f));
+	UMaterialInstanceDynamic* IronMat = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(0.635f, 0.336f, 0.527f));
 
 	const float Height = Setup.TopHeight - Setup.SillHeight;
 	const float CenterZ = (Setup.SillHeight + Setup.TopHeight) * 0.5f;

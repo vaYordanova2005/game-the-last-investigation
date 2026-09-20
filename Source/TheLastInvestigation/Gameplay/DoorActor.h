@@ -32,6 +32,15 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Door")
 	TObjectPtr<USceneComponent> HingeRoot;
 
+	/**
+	 * What actually swings. HingeRoot is the actor's root, so its *relative* rotation is the
+	 * actor's rotation in the world — the ninety degrees that turn the door into the doorway —
+	 * and driving that to a target of zero does not close the door, it rotates the whole door out
+	 * of the wall. Swing starts at zero and is the only thing Tick is allowed to touch.
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "Door")
+	TObjectPtr<USceneComponent> Swing;
+
 	UPROPERTY(VisibleAnywhere, Category = "Door")
 	TObjectPtr<UStaticMeshComponent> DoorLeaf;
 

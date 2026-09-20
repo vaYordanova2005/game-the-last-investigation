@@ -3,6 +3,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/DecalComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -18,7 +19,20 @@ namespace RoomSurfaces
 	// read at life size in a room modelled in centimetres.
 	const FRoomSurface Floorboards{ TEXT("old_wooden_floor_02"), 190.f };
 	const FRoomSurface Wallpaper{ TEXT("decrepit_wallpaper"), 160.f };
-	const FRoomSurface Plaster{ TEXT("clay_plaster"), 210.f };
+	// clay_plaster was here and was the reason the walls looked untextured: it is a smooth modern
+	// finish, and flat it is very nearly a single brown colour. These three carry their damage in
+	// the photograph, which is the only place damage survives being seen up close.
+	//
+	// The three of them tile at roughly a metre, not at the two metres the library was shot at.
+	// Two metres is the honest figure and it looks wrong: the wall the player stands in front of
+	// reads beautifully, and the far wall — the same material, four metres wide, so two repeats
+	// across the whole of it — goes smooth and empty, because its finest detail is a metre across
+	// and a metre across at three metres away is nothing. Tiling twice as fine makes the far wall
+	// carry the same crazing as the near one, at the cost of a repeat the eye has to be looking
+	// for to find, in a room where the damage on top of the plaster never repeats at all.
+	const FRoomSurface Plaster{ TEXT("cracked_concrete_wall"), 104.f };
+	const FRoomSurface Substrate{ TEXT("damaged_plaster"), 130.f };
+	const FRoomSurface Damp{ TEXT("plastered_stone_wall"), 118.f };
 	const FRoomSurface Ceiling{ TEXT("ceiling_interior"), 200.f };
 	const FRoomSurface RoughWood{ TEXT("weathered_brown_planks"), 150.f };
 	const FRoomSurface PlankWall{ TEXT("raw_plank_wall"), 150.f };
@@ -44,12 +58,16 @@ namespace RoomPalette
 {
 	// Final display-space values, kept dark: nothing in a house that has been shut for decades is
 	// bright, and a lantern lighting a high-albedo surface reads as daylight.
-	const FLinearColor Mold(0.046f, 0.062f, 0.044f);
-	const FLinearColor Paper(0.180f, 0.166f, 0.140f);
-	const FLinearColor Photo(0.235f, 0.218f, 0.196f);
+	// Paper used to be here and is not a flat tint any more: it is carried on the linen
+	// photograph, which means its colour is a tint on a photograph and belongs with the other
+	// surface tints in ARoomDressingActor.
+	// A photographic print that has been face down on a wet floor since the sixties. The old value
+	// was near-neutral and half again brighter than the plaster, so the one photograph in the room
+	// — a clue, a thing the detective is supposed to pick out of the debris — lay on the boards as
+	// a pale grey card. Prints do not go grey as they rot, they go brown.
+	const FLinearColor Photo(0.118f, 0.086f, 0.062f);
 	const FLinearColor GlassShard(0.130f, 0.150f, 0.158f);
 	const FLinearColor DriedBlood(0.062f, 0.026f, 0.020f);
-	const FLinearColor DustFilm(0.105f, 0.100f, 0.092f);
 	const FLinearColor Web(0.320f, 0.310f, 0.290f);
 	const FLinearColor Water(0.055f, 0.070f, 0.080f);
 	const FLinearColor Void(0.004f, 0.004f, 0.004f);
@@ -282,7 +300,7 @@ UMaterialInstanceDynamic* FRoomBuilder::Surface(const FRoomSurface& Set, const F
 	return Instance;
 }
 
-UMaterialInterface* FRoomBuilder::ResolveTiling(UMaterialInterface* Mat, const FVector& SizeUU)
+UMaterialInterface* FRoomBuilder::ResolveTiling(UMaterialInterface* Mat, const FVector& SizeUU, const FVector& Location)
 {
 	const FSurfaceOrigin* Origin = SurfaceOrigins.Find(Mat);
 	if (!Origin || !Origin->Asset)
@@ -296,10 +314,45 @@ UMaterialInterface* FRoomBuilder::ResolveTiling(UMaterialInterface* Mat, const F
 
 	// Rounded so parts of near-identical size share one instance. Without this the floor alone
 	// would create sixty material instances, one per board.
-	const float TilingU = FMath::Max(FMath::RoundToFloat(SizeU / Origin->TexelSizeCm * 4.f) / 4.f, 0.05f);
-	const float TilingV = FMath::Max(FMath::RoundToFloat(SizeV / Origin->TexelSizeCm * 4.f) / 4.f, 0.05f);
+	float TilingU = FMath::Max(FMath::RoundToFloat(SizeU / Origin->TexelSizeCm * 4.f) / 4.f, 0.05f);
+	float TilingV = FMath::Max(FMath::RoundToFloat(SizeV / Origin->TexelSizeCm * 4.f) / 4.f, 0.05f);
 
-	const FString Key = FString::Printf(TEXT("%p|%.2f|%.2f"), Mat, TilingU, TilingV);
+	// Below one repeat, the part is scaled up until it gets one.
+	//
+	// Life-size texel density is the honest figure and for anything hand-sized it produces a flat
+	// colour: a ten-centimetre chunk of plaster off a texture shot at a metre samples a tenth of
+	// the photograph, and a tenth of a photograph of a wall is one smooth patch with no feature in
+	// it larger than a freckle. That is the whole reason the rubble on the floor and the pieces at
+	// the foot of the walls read as untextured rectangles — they were never untextured, they were
+	// each wearing one plain crop of a surface that is only interesting at wall scale.
+	//
+	// Giving a small part a whole repeat makes its grain finer than life. At this size that is the
+	// right trade every time: nobody can tell that the crazing on a piece of debris is at half
+	// scale, and everybody can tell that it has none.
+	const float Largest = FMath::Max(TilingU, TilingV);
+	if (Largest < 1.f)
+	{
+		// Both axes by the same factor, so a long thin part stays long and thin.
+		const float Boost = 1.f / Largest;
+		TilingU *= Boost;
+		TilingV *= Boost;
+	}
+
+	// Which crop of the photograph this part gets. Every basic-shape face maps 0..1, so without an
+	// offset a part smaller than one repeat of the texture samples the same corner of it as every
+	// other part that size — the reason a wall of torn wallpaper came out as rows of identical
+	// flat rectangles. Sixteen crops is enough to break the repetition and few enough to keep the
+	// material instance count bounded; the part's own position picks one, so the room is stable
+	// between runs and a part never changes crop when something near it moves.
+	const int32 CropCount = 4;
+	const int32 CropSeed = GetTypeHash(FIntVector(
+		FMath::FloorToInt(Location.X / 17.f),
+		FMath::FloorToInt(Location.Y / 17.f),
+		FMath::FloorToInt(Location.Z / 17.f)));
+	const float OffsetU = (CropSeed % CropCount) / static_cast<float>(CropCount);
+	const float OffsetV = ((CropSeed / CropCount) % CropCount) / static_cast<float>(CropCount);
+
+	const FString Key = FString::Printf(TEXT("%p|%.2f|%.2f|%.2f|%.2f"), Mat, TilingU, TilingV, OffsetU, OffsetV);
 	if (UMaterialInstanceDynamic** Found = TilingCache.Find(Key))
 	{
 		return *Found;
@@ -317,9 +370,190 @@ UMaterialInterface* FRoomBuilder::ResolveTiling(UMaterialInterface* Mat, const F
 	Tiled->SetVectorParameterValue(TEXT("Tint"), Origin->Tint);
 	Tiled->SetScalarParameterValue(TEXT("RoughnessScale"), Origin->RoughnessScale);
 	Tiled->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(TilingU, TilingV, 0.f, 1.f));
+	Tiled->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(OffsetU, OffsetV, 0.f, 1.f));
 	SurfaceOrigins.Add(Tiled, *Origin);
 	TilingCache.Add(Key, Tiled);
 	return Tiled;
+}
+
+UMaterialInstanceDynamic* FRoomBuilder::Cobweb(const FLinearColor& Tint, float Opacity, float Sharpness)
+{
+	if (!Owner)
+	{
+		return nullptr;
+	}
+
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_RoomWeb.M_RoomWeb"));
+	if (!Base)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("M_RoomWeb not found — run Tools/build_art.py"));
+		return Flat(Tint * 0.3f, 1.f);
+	}
+
+	const FString Key = FString::Printf(TEXT("web|%s|%.2f|%.2f"), *Tint.ToString(), Opacity, Sharpness);
+	if (UMaterialInstanceDynamic** Found = DecalCache.Find(Key))
+	{
+		return *Found;
+	}
+
+	UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(Base, Owner);
+	if (Instance)
+	{
+		Instance->SetVectorParameterValue(TEXT("Tint"), Tint);
+		Instance->SetScalarParameterValue(TEXT("Opacity"), Opacity);
+		Instance->SetScalarParameterValue(TEXT("Sharpness"), Sharpness);
+		DecalCache.Add(Key, Instance);
+	}
+	return Instance;
+}
+
+UDecalComponent* FRoomBuilder::AddDecal(UMaterialInterface* Mat, const FVector& Location, const FRotator& Rotation, const FVector2D& SizeUU)
+{
+	if (!Owner || !ParentComponent || !Mat)
+	{
+		return nullptr;
+	}
+
+	UDecalComponent* Component = NewObject<UDecalComponent>(Owner, MakeUniqueObjectName(Owner, UDecalComponent::StaticClass(), TEXT("Stain")));
+	Component->SetDecalMaterial(Mat);
+	Component->SetMobility(EComponentMobility::Movable);
+	Component->AttachToComponent(ParentComponent, FAttachmentTransformRules::KeepRelativeTransform);
+	Component->SetRelativeLocationAndRotation(Location, Rotation);
+
+	// DecalSize is a half-extent box: X is how far the projection reaches along the aim direction,
+	// Y and Z are the patch on the surface. The reach is deliberately short — a couple of
+	// centimetres past the wall — so a stain on the wall does not also appear on the back of the
+	// wardrobe standing in front of it.
+	Component->DecalSize = FVector(9.f, SizeUU.X * 0.5f, SizeUU.Y * 0.5f);
+
+	// The engine hides small decals at distance to save fill rate. Half this room's damage is
+	// small and the room is only four metres across, so the saving is nothing and the cost is
+	// stains that pop into existence as the player walks towards the wall.
+	Component->SetFadeScreenSize(0.f);
+
+	Component->RegisterComponent();
+	Owner->AddInstanceComponent(Component);
+	return Component;
+}
+
+UDecalComponent* FRoomBuilder::Stain(const FRoomSurface& Set, const FVector& Location, const FRotator& Rotation,
+	const FVector2D& SizeUU, const FLinearColor& Tint, float Opacity, float EdgeNoise, float RoughnessScale)
+{
+	if (!Owner || !Set.Set)
+	{
+		return nullptr;
+	}
+
+	UMaterialInterface* Master = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_RoomDecal.M_RoomDecal"));
+	UMaterialInterface* Source = LoadObject<UMaterialInterface>(nullptr, *FString::Printf(TEXT("/Game/Materials/MI_%s.MI_%s"), Set.Set, Set.Set));
+	if (!Master || !Source)
+	{
+		// No decal master means the art pipeline has not been run here. Better a wall with no
+		// damage on it than a wall with a magenta rectangle on it.
+		UE_LOG(LogTemp, Warning, TEXT("M_RoomDecal or MI_%s not found — run Tools/build_art.py"), Set.Set);
+		return nullptr;
+	}
+
+	// The same texel-density and crop reasoning as ResolveTiling: a stain is a window onto the
+	// photograph, and without this every stain in the room would be a window onto the same corner
+	// of it at the same magnification.
+	const float TexelSize = FMath::Max(Set.TexelSizeCm, 1.f);
+	float TilingU = FMath::Max(FMath::RoundToFloat(SizeUU.X / TexelSize * 4.f) / 4.f, 0.05f);
+	float TilingV = FMath::Max(FMath::RoundToFloat(SizeUU.Y / TexelSize * 4.f) / 4.f, 0.05f);
+
+	// And the same floor under it as ResolveTiling puts under a part: a hand-sized stain at life
+	// size is one smooth crop of the photograph, which projects onto the wall as a soft blob of
+	// tint with nothing in it. It is the torn edge and the grain that make it damage.
+	const float Largest = FMath::Max(TilingU, TilingV);
+	if (Largest < 1.f)
+	{
+		const float Boost = 1.f / Largest;
+		TilingU *= Boost;
+		TilingV *= Boost;
+	}
+
+	const int32 CropCount = 4;
+	const int32 CropSeed = GetTypeHash(FIntVector(
+		FMath::FloorToInt(Location.X / 13.f),
+		FMath::FloorToInt(Location.Y / 13.f),
+		FMath::FloorToInt(Location.Z / 13.f)));
+	const float OffsetU = (CropSeed % CropCount) / static_cast<float>(CropCount);
+	const float OffsetV = ((CropSeed / CropCount) % CropCount) / static_cast<float>(CropCount);
+
+	const FString Key = FString::Printf(TEXT("%s|%s|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f"),
+		Set.Set, *Tint.ToString(), Opacity, EdgeNoise, RoughnessScale, TilingU, TilingV, OffsetU, OffsetV);
+
+	UMaterialInstanceDynamic* Instance = nullptr;
+	if (UMaterialInstanceDynamic** Found = DecalCache.Find(Key))
+	{
+		Instance = *Found;
+	}
+	else
+	{
+		Instance = UMaterialInstanceDynamic::Create(Master, Owner);
+		if (!Instance)
+		{
+			return nullptr;
+		}
+
+		// The maps come off the surface instance the room already uses, so a damp patch is the
+		// same photographed wall as the wall it sits on, only darker and torn to shape.
+		static const TCHAR* TextureParameters[] = { TEXT("BaseColorMap"), TEXT("NormalMap"), TEXT("ARMMap") };
+		for (const TCHAR* ParameterName : TextureParameters)
+		{
+			UTexture* Texture = nullptr;
+			if (Source->GetTextureParameterValue(FMaterialParameterInfo(ParameterName), Texture) && Texture)
+			{
+				Instance->SetTextureParameterValue(ParameterName, Texture);
+			}
+		}
+
+		Instance->SetVectorParameterValue(TEXT("Tint"), Tint);
+		Instance->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(TilingU, TilingV, 0.f, 1.f));
+		Instance->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(OffsetU, OffsetV, 0.f, 1.f));
+		Instance->SetScalarParameterValue(TEXT("Opacity"), Opacity);
+		Instance->SetScalarParameterValue(TEXT("EdgeNoise"), EdgeNoise);
+		Instance->SetScalarParameterValue(TEXT("RoughnessScale"), RoughnessScale);
+		DecalCache.Add(Key, Instance);
+	}
+
+	return AddDecal(Instance, Location, Rotation, SizeUU);
+}
+
+UDecalComponent* FRoomBuilder::Crack(const FVector& Location, const FRotator& Rotation, const FVector2D& SizeUU,
+	float Opacity, float Sharpness)
+{
+	if (!Owner)
+	{
+		return nullptr;
+	}
+
+	UMaterialInterface* Master = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_RoomCrack.M_RoomCrack"));
+	if (!Master)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("M_RoomCrack not found — run Tools/build_art.py"));
+		return nullptr;
+	}
+
+	const FString Key = FString::Printf(TEXT("crack|%.2f|%.2f"), Opacity, Sharpness);
+	UMaterialInstanceDynamic* Instance = nullptr;
+	if (UMaterialInstanceDynamic** Found = DecalCache.Find(Key))
+	{
+		Instance = *Found;
+	}
+	else
+	{
+		Instance = UMaterialInstanceDynamic::Create(Master, Owner);
+		if (!Instance)
+		{
+			return nullptr;
+		}
+		Instance->SetScalarParameterValue(TEXT("Opacity"), Opacity);
+		Instance->SetScalarParameterValue(TEXT("Sharpness"), Sharpness);
+		DecalCache.Add(Key, Instance);
+	}
+
+	return AddDecal(Instance, Location, Rotation, SizeUU);
 }
 
 UStaticMeshComponent* FRoomBuilder::Add(UStaticMesh* Mesh, const FVector& Location, const FRotator& Rotation, const FVector& SizeUU, UMaterialInterface* Mat, bool bBlockingCollision)
@@ -348,7 +582,7 @@ UStaticMeshComponent* FRoomBuilder::Add(UStaticMesh* Mesh, const FVector& Locati
 
 	if (Mat)
 	{
-		Component->SetMaterial(0, ResolveTiling(Mat, SizeUU));
+		Component->SetMaterial(0, ResolveTiling(Mat, SizeUU, Location));
 	}
 
 	Component->RegisterComponent();
@@ -393,6 +627,30 @@ UStaticMeshComponent* FRoomBuilder::Prop(const TCHAR* Name, const FVector& Locat
 
 	Component->RegisterComponent();
 	Owner->AddInstanceComponent(Component);
+	return Component;
+}
+
+UStaticMeshComponent* FRoomBuilder::PropSeated(const TCHAR* Name, const FVector& Seat, const FRotator& Rotation, float DesiredHeightCm, bool bBlockingCollision)
+{
+	UStaticMeshComponent* Component = Prop(Name, Seat, Rotation, DesiredHeightCm, bBlockingCollision);
+	if (!Component || !Component->GetStaticMesh())
+	{
+		return Component;
+	}
+
+	// Where the prop's box actually ended up, relative to the point it was asked to stand on. The
+	// box is transformed rather than measured axis by axis, so this stays correct for a prop that
+	// has been rolled onto its side — which is the case that was worst.
+	const FBox Local = Component->GetStaticMesh()->GetBoundingBox();
+	const FTransform Placement(Rotation, FVector::ZeroVector, Component->GetRelativeScale3D());
+	const FBox Placed = Local.TransformBy(Placement);
+
+	const FVector Correction(
+		(Placed.Min.X + Placed.Max.X) * 0.5f,
+		(Placed.Min.Y + Placed.Max.Y) * 0.5f,
+		Placed.Min.Z);
+
+	Component->SetRelativeLocation(Seat - Correction);
 	return Component;
 }
 

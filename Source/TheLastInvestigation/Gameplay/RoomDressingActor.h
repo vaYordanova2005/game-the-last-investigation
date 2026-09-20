@@ -71,6 +71,12 @@ private:
 	void BuildFurniture(FRoomBuilder& Build);
 	/** Standing water: the floor is wet where the roof and the broken pane let the storm in. */
 	void BuildPuddles(FRoomBuilder& Build);
+	/**
+	 * What is in the bookcase, built in the bookcase's own space: it stands at an angle and leans,
+	 * and placing books against that in room coordinates is what had them hanging out of the side
+	 * of the carcass and through the floor.
+	 */
+	void BuildBookcaseContents(const FVector& Spot, const FRotator& Facing, float HeightCm);
 	void BuildDebris(FRoomBuilder& Build);
 	void BuildTraces(FRoomBuilder& Build);
 	void BuildClues();
@@ -102,10 +108,10 @@ private:
 
 	// Photographed surfaces, made once and shared by everything that uses them.
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPlaster;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWallpaper;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWallpaperFaded;
-	/** The damp-blackened plaster that shows through wherever the paper has come away. */
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPlasterDark;
+	/** Brick and coarse render: what is behind the plaster, wherever the plaster has gone. */
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatSubstrate;
+	/** The plaster once it is off the wall and on the boards — dirtier and warmer than the wall. */
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatRubble;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatCeiling;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFloorboards;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFloorboardsWorn;
@@ -115,13 +121,15 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatIron;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatRust;
 
-	// Flat tints, for the handful of things with no photographed surface of their own.
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatMold;
+	/** Paper — sheets, letters, what is left on the table — carried on the linen photograph. */
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPaper;
+	/** The same paper where the damp has reached it: bleached of its colour and gone dark. */
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPaperDamp;
+
+	// Flat tints, for the handful of things with no photographed surface of their own.
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPhoto;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatGlass;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBlood;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatDust;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWeb;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatVoid;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWater;

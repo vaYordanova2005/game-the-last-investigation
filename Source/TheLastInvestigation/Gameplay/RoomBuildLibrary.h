@@ -9,6 +9,7 @@ class UStaticMeshComponent;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
+class UDecalComponent;
 
 /**
  * The surface sets built by Tools/build_art.py from CC0 Poly Haven textures. Each name matches a
@@ -26,7 +27,12 @@ namespace RoomSurfaces
 {
 	extern const FRoomSurface Floorboards;
 	extern const FRoomSurface Wallpaper;
+	/** The wall itself: plaster that has flaked, cracked and been rained through for decades. */
 	extern const FRoomSurface Plaster;
+	/** What is behind the plaster — brick and coarse render — seen wherever it has come off. */
+	extern const FRoomSurface Substrate;
+	/** Damp: the dark bloom that spreads from the corners and down from the ceiling line. */
+	extern const FRoomSurface Damp;
 	extern const FRoomSurface Ceiling;
 	extern const FRoomSurface RoughWood;   // door, beams, carpentry
 	extern const FRoomSurface PlankWall;   // skirting, loose boards, furniture
@@ -55,12 +61,9 @@ namespace RoomProps
  */
 namespace RoomPalette
 {
-	extern const FLinearColor Mold;
-	extern const FLinearColor Paper;
 	extern const FLinearColor Photo;
 	extern const FLinearColor GlassShard;
 	extern const FLinearColor DriedBlood;
-	extern const FLinearColor DustFilm;
 	extern const FLinearColor Web;
 	extern const FLinearColor Water;
 	extern const FLinearColor Void;
@@ -124,6 +127,41 @@ public:
 	/** Unlit glow, for things that are light rather than lit: the lightning bolt outside the window. */
 	UMaterialInstanceDynamic* Emissive(const FLinearColor& Tint, float Intensity = 1.f) const;
 
+	/**
+	 * A patch of damage projected onto whatever is behind it — damp, soot, blown plaster, the
+	 * shadow a picture left on a wall.
+	 *
+	 * Damage used to be drawn as thin slabs of flat colour laid against the wall, and it read as
+	 * exactly that: rectangles. Choosing a better colour cannot fix a rectangle, because what the
+	 * eye picks up is the straight edge. A decal's alpha can be any shape, and M_RoomDecal's is a
+	 * radial falloff torn apart by world-space noise, so a stain has no straight edge anywhere on
+	 * it and no two of them are the same shape.
+	 *
+	 * SizeUU is the patch's extent on the surface; the decal is aimed along its own +X, so the
+	 * rotation is the direction it is projected *in*, not the direction it faces.
+	 *
+	 * RoughnessScale multiplies the photograph's own roughness, the same as it does on a surface:
+	 * at 1 the patch is as matt as the wall it is on, and low enough it is standing water.
+	 */
+	UDecalComponent* Stain(const FRoomSurface& Set, const FVector& Location, const FRotator& Rotation,
+		const FVector2D& SizeUU, const FLinearColor& Tint, float Opacity = 0.85f, float EdgeNoise = 0.9f,
+		float RoughnessScale = 1.f);
+
+	/**
+	 * A network of fissures, projected the same way. There is no texture behind this one — the
+	 * crack is drawn from the contour of a noise field (see M_RoomCrack) — so it never repeats and
+	 * never tiles. Sharpness is how fine the split is: high is a hairline, low is a gap.
+	 */
+	UDecalComponent* Crack(const FVector& Location, const FRotator& Rotation, const FVector2D& SizeUU,
+		float Opacity = 1.f, float Sharpness = 26.f);
+
+	/**
+	 * Cobweb: a net of filaments drawn the same way the cracks are, on a translucent sheet rather
+	 * than projected. A web spanning a ceiling corner is nearly a metre across, and an opaque slab
+	 * that size is a sheet of card hanging in the room — which is exactly how it looked.
+	 */
+	UMaterialInstanceDynamic* Cobweb(const FLinearColor& Tint, float Opacity = 0.55f, float Sharpness = 11.f);
+
 	UStaticMeshComponent* Add(UStaticMesh* Mesh, const FVector& Location, const FRotator& Rotation, const FVector& SizeUU, UMaterialInterface* Mat, bool bBlockingCollision = true);
 
 	/**
@@ -133,6 +171,21 @@ public:
 	 * chair asked to be 95cm tall is 95cm tall.
 	 */
 	UStaticMeshComponent* Prop(const TCHAR* Name, const FVector& Location, const FRotator& Rotation, float DesiredHeightCm = 0.f, bool bBlockingCollision = true);
+
+	/**
+	 * Places an imported prop by its own bounding box rather than by its pivot: Seat is where the
+	 * middle of the prop's footprint goes, and the bottom of the prop rests on Seat.Z.
+	 *
+	 * Prop() puts the mesh's origin at the location it is given, which is only the same thing as
+	 * putting the *prop* there if whoever exported it left the origin in the middle of the floor
+	 * of the model. Several of these assets did not. book_encyclopedia_set_01 has its origin at
+	 * one end of the row — the books run from the origin fifty-five centimetres off to one side —
+	 * so a row asked to stand in the middle of a shelf stood with the shelf at one end of it and
+	 * the rest of it out in the air, and a row asked to lie on the floor rotated about that same
+	 * far corner and went through the boards. Numbers tuned by eye cannot fix that, because the
+	 * offset is a different direction for every rotation.
+	 */
+	UStaticMeshComponent* PropSeated(const TCHAR* Name, const FVector& Seat, const FRotator& Rotation, float DesiredHeightCm = 0.f, bool bBlockingCollision = true);
 
 	UStaticMeshComponent* Box(const FVector& Location, const FRotator& Rotation, const FVector& SizeUU, UMaterialInterface* Mat, bool bBlockingCollision = true);
 	UStaticMeshComponent* Cyl(const FVector& Location, const FRotator& Rotation, const FVector& SizeUU, UMaterialInterface* Mat, bool bBlockingCollision = true);
@@ -149,8 +202,12 @@ public:
 	USceneComponent* Parent() const { return ParentComponent; }
 
 private:
-	/** Returns the variant of Mat tiled for a part of this size, creating and caching it if needed. */
-	UMaterialInterface* ResolveTiling(UMaterialInterface* Mat, const FVector& SizeUU);
+	/**
+	 * Returns the variant of Mat tiled for a part of this size and cut from a particular corner of
+	 * the photograph, creating and caching it if needed. The location decides the crop, so two
+	 * neighbouring strips of wallpaper are never the same piece of wallpaper.
+	 */
+	UMaterialInterface* ResolveTiling(UMaterialInterface* Mat, const FVector& SizeUU, const FVector& Location);
 
 	/**
 	 * What a handed-out surface instance was made from. Kept because a dynamic instance cannot be
@@ -169,8 +226,12 @@ private:
 	AActor* Owner = nullptr;
 	USceneComponent* ParentComponent = nullptr;
 
+	/** Shared by Stain() and Crack(): the decal component itself, aimed and sized. */
+	UDecalComponent* AddDecal(UMaterialInterface* Mat, const FVector& Location, const FRotator& Rotation, const FVector2D& SizeUU);
+
 	/** Base instance per surface set + tint, and the per-size variants derived from them. */
 	TMap<FString, UMaterialInstanceDynamic*> SurfaceCache;
 	TMap<FString, UMaterialInstanceDynamic*> TilingCache;
+	TMap<FString, UMaterialInstanceDynamic*> DecalCache;
 	TMap<UMaterialInterface*, FSurfaceOrigin> SurfaceOrigins;
 };
