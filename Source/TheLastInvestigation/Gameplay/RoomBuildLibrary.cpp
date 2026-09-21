@@ -37,6 +37,7 @@ namespace RoomSurfaces
 	const FRoomSurface RoughWood{ TEXT("weathered_brown_planks"), 150.f };
 	const FRoomSurface PlankWall{ TEXT("raw_plank_wall"), 150.f };
 	const FRoomSurface Linen{ TEXT("rough_linen"), 90.f };
+	const FRoomSurface Drapery{ TEXT("rough_linen"), 34.f };
 	const FRoomSurface RustedIron{ TEXT("green_metal_rust"), 110.f };
 }
 

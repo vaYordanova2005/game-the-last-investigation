@@ -37,7 +37,16 @@ namespace RoomSurfaces
 	extern const FRoomSurface RoughWood;   // door, beams, carpentry
 	/** Pale vertical planking. Nothing in Room01 is built from it now — see the skirting note. */
 	extern const FRoomSurface PlankWall;
-	extern const FRoomSurface Linen;       // curtains, cloth
+	extern const FRoomSurface Linen;       // paper, book cloth, anything hand-sized
+	/**
+	 * The same photograph as Linen, tiled nearly three times finer, for the curtains.
+	 *
+	 * Texel density is solved for the object, and a drape is two metres of one material: at the
+	 * honest figure a curtain samples two repeats of the weave over its whole height, which is to
+	 * say the threads are a centimetre apart at life size and invisible across a room in the dark.
+	 * Cloth is the one surface whose *grain* is the thing being looked at.
+	 */
+	extern const FRoomSurface Drapery;
 	extern const FRoomSurface RustedIron;  // lock, hinges, tools
 }
 

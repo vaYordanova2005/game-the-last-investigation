@@ -7,10 +7,234 @@
 #include "Components/PointLightComponent.h"
 #include "Components/RectLightComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "ProceduralMeshComponent.h"
 
 namespace
 {
 	const FLinearColor LightningColor(0.72f, 0.82f, 1.f); // cold blue-white
+
+	/**
+	 * One hanging drape, as a generated surface.
+	 *
+	 * The sheet is a graph x = f(y, z) in the pivot's space: y runs across the curtain towards the
+	 * middle of the window (SignedWidth carries which way that is for this side), z runs down from
+	 * the pole, and x is depth, with -x towards the room. Two sine waves of different period give
+	 * the folds; their phase drifts with height, because a fold in real cloth does not fall in a
+	 * straight line; and their amplitude opens towards the hem, because the top is gathered on the
+	 * rings and the bottom is not.
+	 *
+	 * Where the cloth has gone is decided per column by Keep(), and quads with any corner outside
+	 * it are never emitted. That is the whole reason for generating a mesh rather than stacking
+	 * slabs: the hem becomes a contour that can wander, double back and thin to a thread, which is
+	 * what rotted cloth does and what no arrangement of rectangles can be made to do.
+	 */
+	UProceduralMeshComponent* BuildDrapeMesh(AActor* Owner, USceneComponent* Pivot, UMaterialInterface* Cloth,
+		float SignedWidth, float Length, int32 Seed)
+	{
+		if (!Owner || !Pivot)
+		{
+			return nullptr;
+		}
+
+		// A centimetre-ish step in both directions. The first pass was 57 by 81, which puts two and
+		// a half centimetres between rows, and every torn edge in the drape came out as a visible
+		// staircase: the whole point of generating the mesh is the outline, so the outline is the
+		// thing that has to be finer than the eye.
+		constexpr int32 Cols = 73;
+		constexpr int32 Rows = 121;
+		const float TexCm = 34.f;     // RoomSurfaces::Drapery's repeat, since the UVs are ours
+		const float Thickness = 0.5f;
+
+		FRandomStream Weave(Seed);
+
+		// Where the hem has gone: three deep bites plus a fine fray. Bites rather than noise alone
+		// because damage has to be in one place and absent from another — an evenly wandering edge
+		// all the way along reads as a decorative deckle, not as rot.
+		struct FBite { float Where; float Width; float Depth; };
+		FBite Bites[3];
+		for (FBite& Bite : Bites)
+		{
+			Bite.Where = Weave.FRandRange(0.1f, 0.94f);
+			Bite.Width = Weave.FRandRange(0.06f, 0.16f);
+			Bite.Depth = Weave.FRandRange(0.2f, 0.6f);
+		}
+
+		// And two holes eaten out of the middle of it, with edges torn by the same noise.
+		struct FHole { float U; float T; float RU; float RT; };
+		FHole Holes[2];
+		for (FHole& Hole : Holes)
+		{
+			Hole.U = Weave.FRandRange(0.18f, 0.86f);
+			Hole.T = Weave.FRandRange(0.26f, 0.66f);
+			Hole.RU = Weave.FRandRange(0.05f, 0.12f);
+			Hole.RT = Weave.FRandRange(0.035f, 0.085f);
+		}
+
+		const float Phase = Weave.FRandRange(0.f, 2.f * PI);
+		const float Drift = Weave.FRandRange(0.f, 2.f * PI);
+		const float Grain = Seed * 0.37f;
+
+		auto Keep = [&](float U) -> float
+		{
+			float Left = 0.99f - 0.05f * FMath::Abs(FMath::PerlinNoise1D(U * 6.1f + Grain));
+			for (const FBite& Bite : Bites)
+			{
+				const float D = (U - Bite.Where) / Bite.Width;
+				Left -= Bite.Depth * FMath::Exp(-D * D);
+			}
+			Left -= 0.035f * FMath::Abs(FMath::PerlinNoise1D(U * 29.f + Grain * 3.1f));
+			return FMath::Clamp(Left, 0.05f, 1.f);
+		};
+
+		auto Solid = [&](float U, float T) -> bool
+		{
+			if (T > Keep(U))
+			{
+				return false;
+			}
+			for (const FHole& Hole : Holes)
+			{
+				const float DU = (U - Hole.U) / Hole.RU;
+				const float DT = (T - Hole.T) / Hole.RT;
+				const float Edge = 1.f + 0.5f * FMath::PerlinNoise2D(FVector2D(U * 11.f + Grain, T * 11.f));
+				if (DU * DU + DT * DT < Edge * Edge)
+				{
+					return false;
+				}
+			}
+			return true;
+		};
+
+		auto Surface = [&](float U, float T) -> FVector
+		{
+			const float Across = U * FMath::Abs(SignedWidth);
+			const float Open = 0.62f + 0.38f * T;                      // gathered at the pole, loose at the hem
+			const float Wander = 4.2f * FMath::Sin(T * 2.7f + Drift);  // the fold lines are not plumb
+			// Amplitude against period is the whole look of the cloth, and it is easy to get very
+			// wrong: the first pass ran six and a half centimetres of swing over a thirteen
+			// centimetre period, which is a slope of seventy degrees — corrugated iron, not a
+			// drape. Lit by a window it came out as alternating blown-white and black stripes.
+			// Two and a bit over seventeen is about forty degrees, which is cloth.
+			float Depth = 2.3f * Open * FMath::Sin((Across + Wander) * (2.f * PI / 17.f) + Phase);
+			Depth += 1.1f * Open * FMath::Sin((Across - Wander * 0.6f) * (2.f * PI / 41.f) + Phase * 0.7f);
+			// And a little noise on top, because a fold that repeats exactly is a corrugation.
+			Depth += 0.9f * Open * FMath::PerlinNoise2D(FVector2D(Across * 0.085f + Grain, T * 2.3f));
+			Depth -= 2.4f * T;                                         // the hem hangs away from the wall
+			return FVector(Depth, U * SignedWidth, -T * Length);
+		};
+
+		const int32 Grid = Cols * Rows;
+		TArray<FVector> Verts;
+		TArray<FVector> Normals;
+		TArray<FVector2D> UVs;
+		TArray<FProcMeshTangent> Tangents;
+		TArray<int32> Tris;
+		Verts.SetNum(Grid * 2);
+		Normals.Init(FVector::ZeroVector, Grid * 2);
+		UVs.SetNum(Grid * 2);
+		Tangents.SetNum(Grid * 2);
+
+		for (int32 Col = 0; Col < Cols; ++Col)
+		{
+			for (int32 Row = 0; Row < Rows; ++Row)
+			{
+				const float U = Col / static_cast<float>(Cols - 1);
+				const float T = Row / static_cast<float>(Rows - 1);
+				const FVector Point = Surface(U, T);
+				const int32 Index = Col * Rows + Row;
+				Verts[Index] = Point;
+				Verts[Index + Grid] = Point + FVector(Thickness, 0.f, 0.f);
+				// Our own UVs, in repeats, so the instance keeps TilingXY at one and the weave
+				// runs continuously over the folds instead of per-part like a box does.
+				const FVector2D UV(FMath::Abs(Point.Y) / TexCm, (T * Length) / TexCm);
+				UVs[Index] = UV;
+				UVs[Index + Grid] = UV;
+			}
+		}
+
+		// Every triangle is emitted both ways round, and the shading normal is chosen explicitly
+		// rather than inherited from the winding.
+		//
+		// This is not belt and braces, it is the bug. Winding decides which side of a triangle the
+		// rasteriser keeps, the normal array decides which way the surface is lit, and getting the
+		// first of them backwards on a single-sided material means the face the player is looking
+		// at is culled and what they see is the sheet behind it — lit, correctly, for a surface
+		// facing the window. That is exactly what the drape looked like: bands of blown white
+		// where a fold happened to point at the sky and bands of black where it did not, on cloth
+		// standing a metre from a lantern. Emitting both windings makes culling a non-question;
+		// forcing the normal makes lighting a non-question; and the pair of them costs two extra
+		// triangles per quad on an object there are two of in the game.
+		auto Face = [&](int32 A, int32 B, int32 C, bool bFacingRoom)
+		{
+			Tris.Add(A);
+			Tris.Add(B);
+			Tris.Add(C);
+			Tris.Add(A);
+			Tris.Add(C);
+			Tris.Add(B);
+
+			FVector N = FVector::CrossProduct(Verts[B] - Verts[A], Verts[C] - Verts[A]);
+			if ((N.X < 0.f) != bFacingRoom)
+			{
+				N = -N; // -X is into the room, which is the side the front sheet has to be lit on
+			}
+			Normals[A] += N;
+			Normals[B] += N;
+			Normals[C] += N;
+		};
+
+		for (int32 Col = 0; Col + 1 < Cols; ++Col)
+		{
+			for (int32 Row = 0; Row + 1 < Rows; ++Row)
+			{
+				const float U0 = Col / static_cast<float>(Cols - 1);
+				const float U1 = (Col + 1) / static_cast<float>(Cols - 1);
+				const float T0 = Row / static_cast<float>(Rows - 1);
+				const float T1 = (Row + 1) / static_cast<float>(Rows - 1);
+				if (!Solid(U0, T0) || !Solid(U1, T0) || !Solid(U0, T1) || !Solid(U1, T1))
+				{
+					continue;
+				}
+
+				const int32 A = Col * Rows + Row;
+				const int32 B = (Col + 1) * Rows + Row;
+				const int32 C = (Col + 1) * Rows + Row + 1;
+				const int32 D = Col * Rows + Row + 1;
+
+				Face(A, B, C, /*bFacingRoom*/ true);
+				Face(A, C, D, /*bFacingRoom*/ true);
+				Face(A + Grid, B + Grid, C + Grid, /*bFacingRoom*/ false);
+				Face(A + Grid, C + Grid, D + Grid, /*bFacingRoom*/ false);
+			}
+		}
+
+		for (int32 Col = 0; Col < Cols; ++Col)
+		{
+			for (int32 Row = 0; Row < Rows; ++Row)
+			{
+				const int32 Index = Col * Rows + Row;
+				const int32 Before = FMath::Max(Col - 1, 0) * Rows + Row;
+				const int32 After = FMath::Min(Col + 1, Cols - 1) * Rows + Row;
+				const FVector Along = (Verts[After] - Verts[Before]).GetSafeNormal();
+				Tangents[Index] = FProcMeshTangent(Along, false);
+				Tangents[Index + Grid] = FProcMeshTangent(Along, false);
+
+				Normals[Index] = Normals[Index].GetSafeNormal();
+				Normals[Index + Grid] = Normals[Index + Grid].GetSafeNormal();
+			}
+		}
+
+		UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(Owner, MakeUniqueObjectName(Owner, UProceduralMeshComponent::StaticClass(), TEXT("Drape")));
+		Mesh->SetMobility(EComponentMobility::Movable);
+		Mesh->AttachToComponent(Pivot, FAttachmentTransformRules::KeepRelativeTransform);
+		Mesh->bUseAsyncCooking = false;
+		Mesh->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, UVs, TArray<FLinearColor>(), Tangents, /*bCreateCollision*/ false);
+		Mesh->SetMaterial(0, Cloth);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Mesh->RegisterComponent();
+		Owner->AddInstanceComponent(Mesh);
+		return Mesh;
+	}
 }
 
 AStormWindowActor::AStormWindowActor()
@@ -123,7 +347,22 @@ void AStormWindowActor::BuildWindow()
 	// blue linen and green_metal_rust is a sheet of green paint — and a tint multiplies rather than
 	// neutralises, so the curtains hung blue and the bars read green. See ARoomDressingActor's
 	// material block for the measurements these come from.
-	UMaterialInstanceDynamic* ClothMat = Build.Surface(RoomSurfaces::Linen, FLinearColor(0.125f, 0.069f, 0.032f));
+	//
+	// Grey, and worked backwards from the photograph rather than picked. rough_linen sits at
+	// linear (0.283, 0.407, 0.612), so a tint of (0.268, 0.184, 0.118) lands the cloth on
+	// (0.076, 0.075, 0.072) — a grey that stays grey, and a shade under the plaster, because a
+	// curtain is the dirtiest soft thing in a room like this. The old value was a third of that
+	// and brown, so what hung at the window was two near-black slabs with no light on them to
+	// show any weave at all.
+	UMaterialInstanceDynamic* ClothMat = Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.268f, 0.184f, 0.118f), 1.18f);
+	if (ClothMat)
+	{
+		// The drape generates its own UVs, already in repeats, so this instance must not scale
+		// them a second time. Only the generated mesh uses it directly — the hanging threads go
+		// through Add(), which derives its own tiled instance per part and leaves this one alone.
+		ClothMat->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(1.f, 1.f, 0.f, 1.f));
+		ClothMat->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(0.f, 0.f, 0.f, 1.f));
+	}
 	UMaterialInstanceDynamic* IronMat = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(0.635f, 0.336f, 0.527f));
 
 	const float Height = Setup.TopHeight - Setup.SillHeight;
@@ -274,9 +513,26 @@ void AStormWindowActor::BuildWindow()
 		Build.Box(FVector(PoleX + 8.f, SideSign * (HalfWidth + 38.f), PoleZ), FRotator::ZeroRotator, FVector(18.f, 4.f, 4.f), IronMat, /*bBlockingCollision*/ false);
 	}
 
-	// The curtains: heavy full drapes hung in folds, not the token strips the greybox had. They
-	// cover the outer quarter of the glass on each side, which is what frames the window — and
-	// half the storm light that reaches the room has to come past them.
+	// The curtains, and they are the one thing in this room that cannot be made out of boxes.
+	//
+	// Every version before this was a rank of slabs: five, then nine, with alternating depths to
+	// fake the light and shade of hanging folds and a ragged run of lengths to fake a rotted hem.
+	// It is a good trick for a thing seen once across a dark room and it does not survive being
+	// looked at, because every silhouette in it is still a straight line and every surface in it
+	// is still flat. Cloth has neither. A drape is a *curved* surface — the fold is a continuous
+	// wave that wanders as it falls and opens towards the hem — and where it has rotted through,
+	// the edge is a torn contour, not a cut.
+	//
+	// So it is a generated mesh: a grid across the width and down the length, displaced in depth
+	// by two sine waves of different period, with a per-column survival fraction that decides
+	// where the hem has gone and two holes eaten out of the middle. Quads whose corners are not
+	// all still cloth are simply never emitted, which is what makes the tear an outline rather
+	// than a shape somebody drew. At fifty-seven by eighty-one the grid steps are about a
+	// centimetre, so nothing in the torn edge reads as a stair.
+	//
+	// Both faces are generated, half a centimetre apart. M_RoomSurface is single-sided — it is
+	// built for walls, which have nothing behind them — and half of what the player sees of these
+	// is the back of the drape against the window.
 	for (int32 Side = 0; Side < 2; ++Side)
 	{
 		const float SideSign = Side == 0 ? -1.f : 1.f;
@@ -292,35 +548,38 @@ void AStormWindowActor::BuildWindow()
 		FRoomBuilder CurtainBuild(this, Pivot);
 
 		// One drape is longer than the other; nothing in this house is a matched pair any more.
+		// The width runs towards the middle of the window, which is local -SideSign.
 		const float DrapeLength = (Height + 30.f) * (Side == 0 ? 1.f : 0.88f);
-		const int32 FoldCount = 5;
-		for (int32 Fold = 0; Fold < FoldCount; ++Fold)
-		{
-			const float Inward = -SideSign * Fold * 7.f;
-			// The alternating depth is the whole trick: a flat sheet reads as cardboard, and this
-			// gives cloth the vertical banding of light and shadow that hanging folds actually have.
-			const float Depth = (Fold % 2 == 0) ? 7.5f : 3.f;
-			const float Bulge = (Fold % 2 == 0) ? -3.f : 1.5f;
-			const float Length = DrapeLength * Random.FRandRange(0.94f, 1.f);
+		BuildDrapeMesh(this, Pivot, ClothMat, -SideSign * 64.f, DrapeLength, Side == 0 ? 1104 : 1955);
 
+		// A few threads still hanging where the hem tore away. These are boxes and have every
+		// right to be: a thread is a straight thin thing, which is the one shape a box is honest
+		// about.
+		for (int32 i = 0; i < 5; ++i)
+		{
+			const float Hang = Random.FRandRange(7.f, 30.f);
 			CurtainBuild.Box(
-				FVector(Bulge, Inward, -Length * 0.5f),
-				FRotator(0.f, 0.f, Random.FRandRange(-2.5f, 2.5f)),
-				FVector(Depth, 14.f, Length), // wider than the spacing, so the folds overlap into one sheet
+				FVector(Random.FRandRange(-5.f, 2.f), -SideSign * Random.FRandRange(4.f, 58.f), -DrapeLength * Random.FRandRange(0.42f, 0.9f) - Hang * 0.5f),
+				FRotator(0.f, 0.f, Random.FRandRange(-11.f, 11.f)),
+				FVector(Random.FRandRange(0.6f, 1.8f), Random.FRandRange(0.8f, 2.4f), Hang),
 				ClothMat,
 				/*bBlockingCollision*/ false);
 		}
 
-		// The hem, torn ragged where it has been dragging on the boards.
-		for (int32 i = 0; i < 4; ++i)
+		// Damp, in the cloth rather than on it. Aimed along +X, which is into the front faces of
+		// the folds, and the projection only reaches nine centimetres — far short of the glass.
+		// On the pivot, so the stains swing with the curtain they are in.
+		for (int32 Bloom = 0; Bloom < 3; ++Bloom)
 		{
-			const float Inward = -SideSign * Random.FRandRange(0.f, 58.f);
-			CurtainBuild.Box(
-				FVector(Random.FRandRange(-2.f, 4.f), Inward, -DrapeLength - Random.FRandRange(4.f, 14.f)),
-				FRotator(0.f, 0.f, Random.FRandRange(-8.f, 8.f)),
-				FVector(4.f, Random.FRandRange(7.f, 14.f), Random.FRandRange(10.f, 26.f)),
-				ClothMat,
-				/*bBlockingCollision*/ false);
+			CurtainBuild.Stain(
+				RoomSurfaces::Damp,
+				FVector(-11.f, -SideSign * Random.FRandRange(2.f, 52.f), -Random.FRandRange(20.f, DrapeLength * 0.8f)),
+				FRotator(0.f, 0.f, Random.FRandRange(0.f, 360.f)),
+				FVector2D(Random.FRandRange(34.f, 76.f), Random.FRandRange(30.f, 64.f)),
+				FLinearColor(0.130f, 0.098f, 0.070f),
+				Random.FRandRange(0.35f, 0.6f),
+				1.f,
+				1.2f);
 		}
 
 		Curtains.Add(Pivot);
