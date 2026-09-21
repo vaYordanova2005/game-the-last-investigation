@@ -57,6 +57,7 @@ namespace RoomProps
 	const TCHAR* Bed = TEXT("GothicBed_01");
 	const TCHAR* Armchair = TEXT("ArmChair_01");
 	const TCHAR* Nightstand = TEXT("ClassicNightstand_01");
+	const TCHAR* Press = TEXT("GothicCabinet_01");
 }
 
 namespace RoomPalette

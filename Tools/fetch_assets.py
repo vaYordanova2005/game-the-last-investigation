@@ -72,6 +72,7 @@ MODELS = {
     "GothicBed_01": "the four-poster in the corner",
     "ArmChair_01": "the armchair beside it",
     "ClassicNightstand_01": "the nightstand",
+    "GothicCabinet_01": "the press in the corner past the head of the bed",
 }
 
 

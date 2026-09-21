@@ -68,6 +68,8 @@ namespace RoomProps
 	extern const TCHAR* Bed;
 	extern const TCHAR* Armchair;
 	extern const TCHAR* Nightstand;
+	/** A press: the tall cupboard in the corner past the head of the bed. */
+	extern const TCHAR* Press;
 }
 
 /**

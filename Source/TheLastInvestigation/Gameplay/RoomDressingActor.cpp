@@ -926,9 +926,29 @@ void ARoomDressingActor::BuildFurniture(FRoomBuilder& Build)
 			Random.FRand() < 0.7f ? Cast<UMaterialInterface>(MatPaperDamp) : Cast<UMaterialInterface>(MatPaper));
 	}
 
-	// A crate shoved into the far corner behind him, out of the opening shot: it is there for the
-	// walk back, not for the wake-up.
-	Build.Prop(RoomProps::Crate, FVector(-WidthHalf + 62.f, DepthHalf - 74.f, 0.f), FRotator(0.f, 34.f, 0.f), 46.f);
+	// A crate in the corner past the table, where the window wall meets the door wall. It was in
+	// the far corner on the other side of the room, which is where the armchair stands now — and
+	// this corner is the one the player walks into on the way from the window to the door, so it
+	// is a thing to step round rather than a thing seen across the floor.
+	//
+	// East of the hinge, which is the half of that corner the door leaf never sweeps through.
+	//
+	// Square to the wall and touching it, and the touching is measured rather than guessed:
+	// PropSeated puts the middle of the footprint where it is asked for, so how far the crate then
+	// has to move to reach the plaster is half of its own box *after* the turn — a different
+	// number for every yaw, and the reason a hand-tuned offset stops being right the moment
+	// anything is rotated.
+	const FRotator CrateFacing(0.f, 112.f, 0.f);
+	if (UStaticMeshComponent* Crate = Build.PropSeated(RoomProps::Crate, FVector(WidthHalf, DepthHalf - 52.f, 0.f), CrateFacing, 46.f))
+	{
+		if (UStaticMesh* Mesh = Crate->GetStaticMesh())
+		{
+			const FBox Placed = Mesh->GetBoundingBox().TransformBy(FTransform(CrateFacing, FVector::ZeroVector, Crate->GetRelativeScale3D()));
+			const FVector Spot = Crate->GetRelativeLocation();
+			const float EastFace = Setup.Width * 0.5f - Setup.WallThickness * 0.5f;
+			Crate->SetRelativeLocation(FVector(EastFace - Placed.Max.X - 1.f, Spot.Y, Spot.Z));
+		}
+	}
 }
 
 void ARoomDressingActor::BedFootprint(FVector2D& OutCentre, FVector2D& OutHalfExtent) const
@@ -948,10 +968,12 @@ void ARoomDressingActor::BedFootprint(FVector2D& OutCentre, FVector2D& OutHalfEx
 
 	const float WestFace = -Setup.Width * 0.5f + Setup.WallThickness * 0.5f;
 
-	// Standing clear on three sides rather than jammed into the corner, which is how the reference
-	// is composed and how a four-poster is actually arranged: it is a piece of furniture you walk
-	// round, with the wall only behind the head of it.
-	OutCentre = FVector2D(WestFace + 3.f + OutHalfExtent.X, -150.f);
+	// Centred on its wall, and standing clear on three sides rather than pushed up a corner. That
+	// is how the reference is composed and how a four-poster is actually arranged: it is a piece
+	// of furniture you walk round, with the wall only behind the head of it. Centred also means
+	// the block of frames over the headboard is centred, and a wall of pictures hung off to one
+	// side reads as a mistake rather than as an arrangement.
+	OutCentre = FVector2D(WestFace + 11.f + OutHalfExtent.X, 0.f);
 }
 
 void ARoomDressingActor::BuildBedroom(FRoomBuilder& Build)
@@ -981,7 +1003,29 @@ void ARoomDressingActor::BuildBedroom(FRoomBuilder& Build)
 	// A degree and a half off square. Nobody moved this bed in fifty years, but nobody lined it up
 	// with the wall in the first place either.
 	const FRotator BedFacing(0.f, -88.4f, 0.f);
-	Build.PropSeated(RoomProps::Bed, FVector(BedCentre.X, BedCentre.Y, 0.f), BedFacing, BedHeight);
+	if (UStaticMeshComponent* Frame = Build.PropSeated(RoomProps::Bed, FVector(BedCentre.X, BedCentre.Y, 0.f), BedFacing, BedHeight))
+	{
+		// The headboard was going into the plaster behind it. Both were mid-brown at roughly the
+		// same value, and the carving that is the whole reason for using this mesh — the crest,
+		// the turned posts, the tracery — is a silhouette before it is anything else, so it needs
+		// something behind it that it is not the same colour as.
+		//
+		// Darker, not lighter: the wall is the pale thing in that corner and the bed is furniture
+		// in a house where nothing has been oiled since the war. Against pale plaster a darker bed
+		// separates; a lighter one competes with it. It is also stood a little further off the
+		// wall now, so there is a line of its own shadow behind the headboard.
+		for (int32 Slot = 0; Slot < Frame->GetNumMaterials(); ++Slot)
+		{
+			if (UMaterialInterface* Source = Frame->GetMaterial(Slot))
+			{
+				if (UMaterialInstanceDynamic* Aged = UMaterialInstanceDynamic::Create(Source, this))
+				{
+					Aged->SetVectorParameterValue(TEXT("Tint"), FLinearColor(0.52f, 0.39f, 0.30f));
+					Frame->SetMaterial(Slot, Aged);
+				}
+			}
+		}
+	}
 
 	// Everything that lies on the bed is placed in the bed's own frame: Across runs from one side
 	// to the other and Along runs from the head to the foot. Numbers guessed in room coordinates
@@ -995,10 +1039,35 @@ void ARoomDressingActor::BuildBedroom(FRoomBuilder& Build)
 	const float HalfLength = 123.7f;   // head to foot, after scaling
 	const float MattressZ = 54.f;      // the mattress top at 44 authored units, scaled
 
-	// The armchair, to the left of the bed and turned back towards it, the way the reference has
-	// it: a chair somebody sat in to look at something is a different object from a chair pushed
-	// against a wall.
-	Build.PropSeated(RoomProps::Armchair, FVector(WestFace + 66.f, BedCentre.Y + BedHalf.Y + 62.f, 0.f), FRotator(0.f, 14.f, 0.f), 0.f);
+	// The armchair, in the corner off the foot of the bed on its left, turned back across the
+	// room. It stood out in the open floor beside the bed before, which is where a chair ends up
+	// when somebody is moving it, not where one lives: a chair in a bedroom is in the corner, and
+	// this one is angled so that whoever sat in it was looking down the room at the window.
+	const float SouthFace = Setup.Depth * 0.5f - Setup.WallThickness * 0.5f;
+	// Forty-five degrees across the corner with its back into it, which is the angle a chair in a
+	// corner is always at: square to the room it has a wall behind one shoulder, and across the
+	// corner it has the whole room in front of it.
+	//
+	// ArmChair_01 measures 85 by 77, and the 77 is not symmetric — its box runs from -41.7 to
+	// +34.8 in Y, and the long end is the backrest and the curve behind it. So the chair faces its
+	// local **+Y**, not its local +X, and the yaw that points that out of the south-west corner is
+	// minus a hundred and thirty-five. At minus forty-five it sat with its back to the open room.
+	Build.PropSeated(RoomProps::Armchair, FVector(WestFace + 68.f, SouthFace - 76.f, 0.f), FRotator(0.f, -135.f, 0.f), 0.f);
+
+	// The press, filling the corner past the head of the bed. That corner was the one piece of
+	// this room with nothing in it and nothing to say, and an empty corner in a room that is
+	// otherwise furnished does not read as space, it reads as a room that has not been finished.
+	//
+	// GothicCabinet_01 is 172 by 112 by 236 as authored and goes in at 208 tall, which is nearly
+	// the ceiling: the bed is the biggest thing in the room and this is the second, and between
+	// them they close that end of it off.
+	//
+	// Back to the west wall and facing the window, alongside the head of the bed. Which axis that
+	// is comes off the box rather than off a guess: 172 by 112 means the 172 is the width and the
+	// 112 is the depth, so the doors are on its local **Y**, and a yaw of minus ninety turns them
+	// east. The bed faces the window for the same reason — the window is the only thing in this
+	// room worth facing.
+	Build.PropSeated(RoomProps::Press, FVector(WestFace + 52.f, -225.f, 0.f), FRotator(0.f, -88.f, 0.f), 208.f);
 
 	// The nightstand at the head of the bed, on the other side of it.
 	const FVector NightstandSeat(WestFace + 46.f, BedCentre.Y - BedHalf.Y - 32.f, 0.f);
@@ -1306,9 +1375,17 @@ void ARoomDressingActor::BuildClues()
 	const float WidthHalf = Setup.Width * 0.5f - Setup.WallThickness;
 	const float DepthHalf = Setup.Depth * 0.5f - Setup.WallThickness;
 
-	// The overturned chair, lying on its side in open floor: it went over backwards and nobody
-	// ever picked it up.
-	if (AClueActor* Chair = SpawnClue(FVector(-30.f, 120.f, 0.f), FRotator(0.f, 34.f, 0.f), TEXT("Examine the chair"),
+	// The overturned chair, lying on its side: it went over backwards and nobody ever picked it up.
+	//
+	// Moved under the hook — near it rather than under it. A chair lying directly beneath a hook
+	// in the ceiling of a house where a man hanged himself is not a detail, it is the answer, and
+	// the room is not supposed to give that up in the first five minutes. A metre off to the side
+	// is the distance at which the player can notice the two things are in the same part of the
+	// room without being told what to do with it.
+	//
+	// The far side of the collapse, too: the hook is directly over the hole, and there is no floor
+	// under it to stand a chair on.
+	if (AClueActor* Chair = SpawnClue(FVector(178.f, 6.f, 0.f), FRotator(0.f, 34.f, 0.f), TEXT("Examine the chair"),
 		TEXT("A kitchen chair, on its side. The dust has settled evenly over it — it went over a very long time ago.")))
 	{
 		FRoomBuilder ChairBuild(Chair, Chair->GetRootScene());
