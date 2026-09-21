@@ -793,10 +793,65 @@ void ARoomDressingActor::BuildCeiling(FRoomBuilder& Build)
 	// bare plaster with nothing holding it and nothing above it — and lit from below it threw a
 	// bent shadow beside itself, so it read as two pieces of rubbish up there rather than one
 	// fitting. On the underside of the timber it reads as a fitting.
+	// And it was two straight cylinders — a stub down and a second stub leaning off it at
+	// seventy-five degrees. That is not a hook, it is two sticks meeting at a corner. What makes a
+	// hook a hook is the *curve*: one rod, bent through most of a circle and drawn to a point, and
+	// a curve has to be built as a curve. Fifteen short segments round an arc with a ball at every
+	// joint, so the rod reads as continuous rather than as a chain of pipes, tapering from the
+	// shank to the tip because a smith draws the end out thin before bending it.
+	//
+	// The arc is swept in the room's YZ plane, which is the plane the detective is looking across
+	// as he wakes: a hook whose opening faces the eye is a hook, and the same hook turned ninety
+	// degrees is a vertical line.
 	const float HookBeamX = -WidthHalf + (WidthHalf * 2.f) * 2.5f / 4.f;
 	const FVector HookAnchor(HookBeamX, 60.f, CeilingZ - 18.f);
-	Build.Cyl(HookAnchor + FVector(0.f, 0.f, -8.f), FRotator::ZeroRotator, FVector(2.4f, 2.4f, 16.f), MatIron, /*bBlockingCollision*/ false);
-	Build.Cyl(HookAnchor + FVector(0.f, 5.f, -18.f), FRotator(0.f, 0.f, 75.f), FVector(2.2f, 2.2f, 14.f), MatIron, /*bBlockingCollision*/ false);
+
+	// The screw end, up into the timber. Four thin collars are the thread: it is the detail that
+	// says the hook was turned into the beam rather than glued onto it, and the only part of the
+	// fitting that is lit from directly underneath.
+	const float ShankLength = 8.5f;
+	Build.Cyl(HookAnchor + FVector(0.f, 0.f, -ShankLength * 0.5f), FRotator::ZeroRotator, FVector(2.2f, 2.2f, ShankLength), MatIron, /*bBlockingCollision*/ false);
+	for (int32 Thread = 0; Thread < 4; ++Thread)
+	{
+		Build.Cyl(HookAnchor + FVector(0.f, 0.f, -1.6f - Thread * 1.5f), FRotator(0.f, 0.f, 4.f),
+			FVector(3.1f, 3.1f, 0.55f), MatIron, /*bBlockingCollision*/ false);
+	}
+
+	// The bend. The centre sits one radius to the side of the shank, so the rod leaves the shank
+	// pointing straight down and turns from there — put the centre directly below it instead and
+	// the hook starts horizontal, which is a corner, which is what was wrong with the old one.
+	const float HookRadius = 5.4f;
+	const FVector BendCentre = HookAnchor + FVector(0.f, HookRadius, -ShankLength);
+	const int32 BendSegments = 15;
+	const float BendSweep = 214.f;
+
+	FVector Previous = HookAnchor + FVector(0.f, 0.f, -ShankLength);
+	FVector Heading = FVector(0.f, 0.f, -1.f);
+	float Thickness = 2.2f;
+	for (int32 Step = 1; Step <= BendSegments; ++Step)
+	{
+		const float Along = Step / static_cast<float>(BendSegments);
+		const float Sweep = FMath::DegreesToRadians(BendSweep * Along);
+		const FVector Point = BendCentre + FVector(0.f, -FMath::Cos(Sweep), -FMath::Sin(Sweep)) * HookRadius;
+
+		Heading = Point - Previous;
+		Thickness = FMath::Lerp(2.2f, 1.f, Along);
+
+		Build.Cyl(Previous + Heading * 0.5f, FRotationMatrix::MakeFromZ(Heading).Rotator(),
+			FVector(Thickness, Thickness, Heading.Size() + 0.5f), MatIron, /*bBlockingCollision*/ false);
+		Build.Sph(Point, Thickness, MatIron);
+
+		Previous = Point;
+	}
+
+	// Drawn to a point, which is the last thing that separates a hook from a bent bar.
+	Build.Add(FRoomShapes::Cone(), Previous + Heading.GetSafeNormal() * 1.6f,
+		FRotationMatrix::MakeFromZ(Heading).Rotator(), FVector(Thickness, Thickness, 3.4f), MatIron, /*bBlockingCollision*/ false);
+
+	// Fifty years of iron in wet timber leaves a mark on the timber. Aimed straight up at the
+	// beam's underside, the same way the leak stains are aimed at the ceiling.
+	Build.Stain(RoomSurfaces::Damp, HookAnchor + FVector(0.f, 0.f, -1.f), FRotator(90.f, 0.f, 24.f),
+		FVector2D(15.f, 13.f), FLinearColor(0.150f, 0.064f, 0.030f), 0.7f, 1.f);
 
 	// Water dripping from the worst of the stains into a puddle that never dries.
 	DropOrigin = FVector(StainCenters[0].X, StainCenters[0].Y, CeilingZ - 6.f);
