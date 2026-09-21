@@ -35,7 +35,8 @@ namespace RoomSurfaces
 	extern const FRoomSurface Damp;
 	extern const FRoomSurface Ceiling;
 	extern const FRoomSurface RoughWood;   // door, beams, carpentry
-	extern const FRoomSurface PlankWall;   // skirting, loose boards, furniture
+	/** Pale vertical planking. Nothing in Room01 is built from it now — see the skirting note. */
+	extern const FRoomSurface PlankWall;
 	extern const FRoomSurface Linen;       // curtains, cloth
 	extern const FRoomSurface RustedIron;  // lock, hinges, tools
 }

@@ -74,14 +74,6 @@ void ARoomDressingActor::CacheMaterials(FRoomBuilder& Build)
 	// the ceiling of a room whose whole point is that nothing in it is newer than the house. Half
 	// that puts them just under the wall, which is where old dry timber belongs.
 	MatRoughWood = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.402f, 0.409f, 0.391f));
-	// The skirting, and it was the brightest thing in the room by a distance.
-	//
-	// raw_plank_wall is much the palest photograph in the set — sRGB 165/129/86 flat, which is
-	// nearly four times the plaster in linear red — and it was being tinted as though it were a
-	// dark one. What that produced is a continuous band of glowing pale timber running round the
-	// bottom of every wall at 0.27 albedo, against a wall at 0.08 and a floor at 0.06: a bright
-	// line where the room should be darkest, which is exactly where the eye reads a seam.
-	MatPlankWood = Build.Surface(RoomSurfaces::PlankWall, FLinearColor(0.150f, 0.175f, 0.225f));
 	// Linen and iron are the two photographs in the set that are not the colour they look like on
 	// a library thumbnail, and both had been tinted as though they were. A near-neutral tint does
 	// not neutralise anything — it multiplies — so whatever the photograph already leans towards,
@@ -470,11 +462,23 @@ void ARoomDressingActor::BuildWalls(FRoomBuilder& Build)
 				0.f, 1.1f);
 		}
 
-		// Skirting board, half rotted off the wall. Cut around the doorway: skirting does not run
-		// across a threshold.
-		WallFill(Side, 0.f, 9.f, WallLength - Setup.WallThickness * 2.f, 18.f, MatPlankWood);
+		// No skirting board, and that is the second time this one has been the brightest thing in
+		// the room. Darkening it was not enough and could not have been.
+		//
+		// raw_plank_wall is much the palest photograph in the set — sRGB 165/129/86 flat, nearly
+		// four times the plaster in linear red — and it is a photograph of *vertical planks*. A
+		// board eighteen centimetres tall and six metres long asks the tiler for four repeats
+		// along its length and a twentieth of one across its height, so the photograph arrives
+		// stretched twenty times vertically: the seams between the planks become full-height black
+		// lines and the faces between them become bright slats. What ran round the foot of every
+		// wall was a white picket fence, and no tint fixes that, because the shape is coming out
+		// of the normal map, not the colour.
+		//
+		// A house this far gone has no skirting anyway — it is the first timber to go, because it
+		// is the piece that sits in the water. The plaster now runs down to the boards, which is
+		// what is behind a skirting once the skirting has rotted off.
 
-		// A mouse hole at the base — chewed through where the skirting has gone soft.
+		// A mouse hole at the base, chewed through where the plaster has gone soft.
 		const float HoleU = Random.FRandRange(-HalfLength * 0.8f, HalfLength * 0.8f);
 		if (!SpotBlocked(Side, HoleU, 6.f, 12.f, 12.f))
 		{
@@ -783,7 +787,14 @@ void ARoomDressingActor::BuildCeiling(FRoomBuilder& Build)
 	Build.Sph(BulbAnchor + FVector(0.f, 0.f, -CordLength - 18.f), 20.f, Build.Flat(FLinearColor(0.030f, 0.032f, 0.035f), 0.62f));
 
 	// The lantern hook — iron screwed into a beam, worn where something hung from it for years.
-	const FVector HookAnchor(180.f, 60.f, CeilingZ - 18.f);
+	//
+	// Into a beam, which it was not. The beams run along Y at four fixed X positions and this sat
+	// between two of them, so what was actually on the ceiling was a bent piece of iron stuck to
+	// bare plaster with nothing holding it and nothing above it — and lit from below it threw a
+	// bent shadow beside itself, so it read as two pieces of rubbish up there rather than one
+	// fitting. On the underside of the timber it reads as a fitting.
+	const float HookBeamX = -WidthHalf + (WidthHalf * 2.f) * 2.5f / 4.f;
+	const FVector HookAnchor(HookBeamX, 60.f, CeilingZ - 18.f);
 	Build.Cyl(HookAnchor + FVector(0.f, 0.f, -8.f), FRotator::ZeroRotator, FVector(2.4f, 2.4f, 16.f), MatIron, /*bBlockingCollision*/ false);
 	Build.Cyl(HookAnchor + FVector(0.f, 5.f, -18.f), FRotator(0.f, 0.f, 75.f), FVector(2.2f, 2.2f, 14.f), MatIron, /*bBlockingCollision*/ false);
 
@@ -912,24 +923,17 @@ void ARoomDressingActor::BuildBookcaseContents(const FVector& Spot, const FRotat
 	// The shelf under that is empty. It is the one the carcass lost, and an empty shelf is what
 	// makes the full ones read as having been emptied rather than as decoration.
 
-	// The bottom shelf: a row that has come off its feet and is lying on its side, pushed back
-	// far enough that it does not hang out over the front edge.
-	Shelf.PropSeated(RoomProps::ShelfBooks, FVector(-16.f * S, -4.f * S, ShelfZ[0]),
-		FRotator(0.f, -9.f, 90.f), 21.f, /*bBlockingCollision*/ false);
-
-	// And one row on the floor, out in front of the carcass and clear of it.
+	// The bottom shelf and the floor in front of it are empty, and that is deliberate.
 	//
-	// Clear of it is the point: at forty-six centimetres this was half inside the side panel, and
-	// a row of books growing out of the side of a bookcase is worse than no books at all. The
-	// carcass is fifty-eight deep, so its front face is twenty-nine out, and this sits beyond that
-	// with its own length turned across the room rather than driven back into the shelf.
+	// Both had a row of books on their side. book_encyclopedia_set_01 is one rigid bar of twenty
+	// matched volumes, and a rigid bar of twenty matched volumes lying down does not read as books
+	// that fell — it reads as a chain of identical blocks laid end to end by somebody, which is
+	// the opposite of what it is there to say. Tipped onto its side it also turns its fifty-five
+	// centimetres broadside, so it ran out across the boards and back through the carcass.
 	//
-	// Not the decorative set: that asset is a *catalogue* — ninety different books laid out side by
-	// side in a single mesh, the way a library ships them for picking — so placing it as one prop
-	// emptied a bookshop onto the floor beside the shelf. The encyclopedia set is one row of books,
-	// which is the thing that actually falls off a shelf.
-	Shelf.PropSeated(RoomProps::ShelfBooks, FVector(-40.f * S, 62.f * S, 6.f),
-		FRotator(0.f, 62.f, 90.f), 20.f, /*bBlockingCollision*/ false);
+	// Books that have fallen off a shelf want individual books, which this asset cannot give: it
+	// is a row or it is nothing. Nothing is better. The floor under the bookcase is bare, and the
+	// only things standing along that stretch of skirting are the bottles.
 }
 
 void ARoomDressingActor::BuildDebris(FRoomBuilder& Build)
@@ -1127,70 +1131,288 @@ void ARoomDressingActor::BuildClues()
 
 	// The clock, still on the wall, stopped. The time it stopped at means nothing yet.
 	//
-	// It was hung four centimetres *inside* the wall and turned to face the other way. The mesh is
-	// a disc in its own XZ plane whose dial sits at local Y = 0 with the case behind it at +Y, so
-	// the dial looks along -Y — and the clue was yawed 180, which pointed that at the brickwork.
-	// What the room got was the back of a clock, half sunk into the plaster, with the rim of the
-	// dial showing past the wall as a pale crescent.
+	// Built out of primitives rather than placed, and the reason is that the problem was never
+	// colour. wall_clock is a clock somebody could buy this afternoon: a flat drum, a bezel flush
+	// with its own face, a printed dial. Tinting that only produces a dark modern clock, and a
+	// dark modern clock in a room where nothing is newer than the house is worse than a bright
+	// one, because it is trying to hide. What reads as old is the silhouette — a turned wooden
+	// drum, a brass bezel standing proud of a dial sunk behind it, roman numerals, and a glazed
+	// trunk underneath with the pendulum dead still inside it. The mesh has none of those and
+	// every one of them is a box or a cylinder. (The asset is still in the manifest; nothing in
+	// the room places it any more.)
 	//
-	// At DepthHalf - 5 the dial stands five centimetres proud of the inner face and the case sits
-	// just clear of it, which is how a clock hangs.
-	if (AClueActor* Clock = SpawnClue(FVector(-40.f, DepthHalf - 5.f, 215.f), FRotator::ZeroRotator, TEXT("Examine the clock"),
-		TEXT("A wall clock, stopped. The glass is starred where something struck it. Not a power cut, then — somebody stopped it, and there is no knowing what hour that was.")))
+	// The local frame, which everything below depends on: the dial looks along -Y, into the room,
+	// and Y = 0 is the face of the plaster, so every part is built out from the wall at negative
+	// Y. Pitch is rotation about Y, which is the axis the clock faces along, so pitch is the only
+	// rotation that moves anything *on* the dial.
+	//
+	// The detective is on the low-Y side of this wall looking towards +Y, and for somebody facing
+	// +Y the right hand points at **-X**. The old note here said the opposite and nothing ever
+	// caught it, because a ring of twelve identical tick marks is its own mirror image: the clock
+	// has been running backwards the whole time and only the numerals could show it. Twelve
+	// arrived as IIX and four minutes past eleven was being read off as fifty-six minutes past
+	// one. So an angle clockwise from twelve is (-sin, 0, cos) and a part turned to it is pitched
+	// by the angle itself, not by its negative.
+	//
+	// Which is also why the whole clue is pitched rather than rolled: a roll tips the top of the
+	// case away from the wall, and what a clock hung on one nail for fifty winters actually does
+	// is sit crooked against it.
+	if (AClueActor* Clock = SpawnClue(FVector(-40.f, DepthHalf + Setup.WallThickness * 0.5f, 215.f), FRotator(-3.f, 0.f, 0.f), TEXT("Examine the clock"),
+		TEXT("Walnut gone black with the damp, and a brass bezel nobody has polished in fifty years. The pendulum hangs dead still behind its glass. It stopped at four minutes past eleven — and a clock this size runs eight days on a winding, so somebody was here to wind it, right up until they were not.")))
 	{
 		FRoomBuilder ClockBuild(Clock, Clock->GetRootScene());
 
-		// Hands and marks, drawn rather than taken from the asset.
+		// Its own stream, so that tuning the clock does not reshuffle every clue built after it.
+		FRandomStream ClockRandom(1104);
+
+		// Walnut that has been in a wet room for decades: darker and browner than the beams, which
+		// are bare softwood. The bezel and the bob are the one warm metal in the room — the tint
+		// has to drag green_metal_rust's paint all the way to gold, the same correction the iron
+		// and the rust already carry, only aimed somewhere else. Low roughness on it deliberately:
+		// a bezel that catches the lantern as the detective turns is most of what says brass.
+		UMaterialInstanceDynamic* CaseWood = ClockBuild.Surface(RoomSurfaces::RoughWood, FLinearColor(0.208f, 0.132f, 0.086f));
+		UMaterialInstanceDynamic* Brass = ClockBuild.Surface(RoomSurfaces::RustedIron, FLinearColor(0.980f, 0.492f, 0.222f), 0.78f);
+		UMaterialInstanceDynamic* HandMat = ClockBuild.Flat(FLinearColor(0.012f, 0.011f, 0.010f), 0.5f);
+
+		// The dial: an enamelled plate that has yellowed. Flat, and that is not the mistake it
+		// usually is. The rule everywhere else in this room is that a flat colour reads as a
+		// rectangle of paint and a photograph reads as a surface — but that rule is about damage,
+		// and a dial is the one thing in this house that genuinely is a smooth painted disc. It
+		// was on the linen photograph first, and linen tiled onto a thirty-four-centimetre circle
+		// is a panel of vertical stripes: the clock arrived with a dial made of floorboards. What
+		// gives it variation is the foxing further down, which is the honest place for it.
 		//
-		// wall_clock's atlas has a proper dial on it — numerals, minute ticks, a maker's name — and
-		// none of it survives the trip onto the mesh: what the face actually samples is the middle
-		// of the dial, magnified, so the clock arrives as a blank white plate with the maker's logo
-		// blown up across it. Chasing that through the model's UVs is not worth it for one prop,
-		// and a clock that has stopped is a thing the room needs to be able to *say*: the hands are
-		// the whole point of it, and the hands are two boxes.
-		//
-		// The face looks along -Y with the case behind it, and +X is the viewer's right, so an
-		// angle measured clockwise from twelve points along (sin, 0, cos) and the bar that draws it
-		// is pitched by the negative of that angle.
-		UMaterialInstanceDynamic* HandMat = ClockBuild.Flat(FLinearColor(0.012f, 0.011f, 0.010f), 0.55f);
-		auto Hand = [&](float Degrees, float Length, float Width, float Stand)
+		// Held down to about what the plaster reflects, and no more. The first value was three
+		// times that, on the argument that a dial is the one thing the detective has to be able to
+		// read from across the floor — and it came out a disc of pure white, the brightest object
+		// in a room whose entire point is that the only honest light in it is a flame. Contrast is
+		// what makes numerals readable, not brightness, and near-black on old ivory is contrast
+		// enough at a tenth of the exposure.
+		UMaterialInstanceDynamic* DialMat = ClockBuild.Flat(FLinearColor(0.175f, 0.158f, 0.126f), 0.74f);
+
+		// Depths, out from the plaster. The case hangs a little off the wall on its board, the
+		// drum carries the movement, and the bezel stands two centimetres in front of the dial —
+		// that inset is the difference between a cased clock and a plate screwed to a wall.
+		const float BoardY = -1.6f;
+		// The drum stops short of the dial on purpose. Both were built to end at the same depth,
+		// which put the front cap of the case and the face of the dial on exactly the same plane:
+		// the depth buffer cannot choose between two coincident surfaces, so the wood came through
+		// the enamel in bands and the clock read as a dial made of floorboards. Half a centimetre
+		// of daylight between them is the whole fix, and the bezel covers the step.
+		const float DrumY = -8.5f;
+		const float DialFaceY = -14.4f;
+		const float MarkY = DialFaceY - 0.2f;
+		const float BezelY = -15.5f;
+		const float CrystalY = -16.2f;
+
+		const float DialRadius = 17.2f;
+
+		// A point on the dial, and the two directions that go with it: Out is twelve o'clock at
+		// that angle, Side is the way the angle increases. A box pitched by -Angle has its own X
+		// along Side and its own Z along Out, which is what makes numerals and marks possible at
+		// all without writing a rotation for each one.
+		// Out is twelve o clock carried round to this angle; Side is the way the angle increases,
+		// which is the reading direction for a numeral standing at it.
+		auto Radial = [](float Angle) { return FVector(-FMath::Sin(FMath::DegreesToRadians(Angle)), 0.f, FMath::Cos(FMath::DegreesToRadians(Angle))); };
+		auto Lateral = [](float Angle) { return FVector(-FMath::Cos(FMath::DegreesToRadians(Angle)), 0.f, -FMath::Sin(FMath::DegreesToRadians(Angle))); };
+
+		// --- The case ------------------------------------------------------------------------
+
+		// The board it hangs on, then the drum. The board is narrower than the drum, so the case
+		// reads as standing off the wall rather than as a disc glued to it.
+		ClockBuild.Cyl(FVector(0.f, BoardY, 0.f), FRotator(0.f, 0.f, 90.f), FVector(30.f, 30.f, 3.2f), CaseWood);
+		ClockBuild.Cyl(FVector(0.f, DrumY, 0.f), FRotator(0.f, 0.f, 90.f), FVector(39.f, 39.f, 10.6f), CaseWood);
+
+		// The bezel, as a ring of forty segments. A cylinder cannot be a ring — it is solid, and a
+		// solid disc in front of the dial is the flush modern bezel all over again, which is what
+		// the asset already had. Forty facets on a forty-centimetre circle is a three-centimetre
+		// chord; the polygon is there if you go looking for it and the depth is not.
+		for (int32 Segment = 0; Segment < 40; ++Segment)
 		{
-			const float Radians = FMath::DegreesToRadians(Degrees);
-			const FVector Direction(FMath::Sin(Radians), 0.f, FMath::Cos(Radians));
-			ClockBuild.Box(Direction * (Length * 0.5f) - FVector(0.f, Stand, 0.f),
-				FRotator(-Degrees, 0.f, 0.f), FVector(Width, 0.5f, Length), HandMat,
-				/*bBlockingCollision*/ false);
+			const float Angle = Segment * 9.f;
+			ClockBuild.Box(Radial(Angle) * 18.3f + FVector(0.f, BezelY, 0.f), FRotator(Angle, 0.f, 0.f),
+				FVector(3.05f, 2.2f, 3.2f), Brass, /*bBlockingCollision*/ false);
+		}
+
+		// --- The dial ------------------------------------------------------------------------
+
+		ClockBuild.Cyl(FVector(0.f, DialFaceY + 0.6f, 0.f), FRotator(0.f, 0.f, 90.f),
+			FVector(DialRadius * 2.f, DialRadius * 2.f, 1.2f), DialMat, /*bBlockingCollision*/ false);
+
+		// The chapter ring: one continuous engraved circle, drawn as sixty-four overlapping
+		// segments. Not a minute track of sixty separate ticks — at three millimetres apiece those
+		// are isolated slivers thinner than a pixel from the far side of the room, and a ring of
+		// crawling dots is worse than no ring. A closed line has no slivers in it.
+		for (int32 Segment = 0; Segment < 64; ++Segment)
+		{
+			const float Angle = Segment * (360.f / 64.f);
+			ClockBuild.Box(Radial(Angle) * 15.6f + FVector(0.f, MarkY, 0.f), FRotator(Angle, 0.f, 0.f),
+				FVector(1.65f, 0.34f, 0.55f), HandMat, /*bBlockingCollision*/ false);
+		}
+
+		// Roman numerals, which is the single thing on a dial that cannot be mistaken for modern.
+		//
+		// Each is drawn as strokes in the numeral's own frame — up is outward, across is the way
+		// the hour increases — so the whole ring reads the right way round without a hand-written
+		// transform per hour. I is one bar; V is two bars meeting at the foot; X is two crossed.
+		// Four is IIII and not IV: that is what clockmakers actually painted, for the balance of
+		// it against the VIII opposite, and it is free.
+		const float NumeralHeight = 4.0f;
+		auto Numeral = [&](float Angle, const TCHAR* Glyphs)
+		{
+			const FVector Out = Radial(Angle);
+			const FVector Side = Lateral(Angle);
+			const float Lean = 15.f;
+			const float LeanSpread = FMath::Sin(FMath::DegreesToRadians(Lean)) * NumeralHeight * 0.5f;
+
+			auto Advance = [](TCHAR Glyph) { return Glyph == TEXT('I') ? 1.30f : 2.70f; };
+
+			float Width = 0.f;
+			for (const TCHAR* Scan = Glyphs; *Scan; ++Scan)
+			{
+				Width += Advance(*Scan);
+			}
+
+			float Cursor = -Width * 0.5f;
+			for (const TCHAR* Scan = Glyphs; *Scan; ++Scan)
+			{
+				const float Step = Advance(*Scan);
+				const float Middle = Cursor + Step * 0.5f;
+				Cursor += Step;
+
+				// Painted marks that have been damp for decades do not stay square to anything.
+				const float Skew = ClockRandom.FRandRange(-1.8f, 1.8f);
+				const float Height = NumeralHeight * ClockRandom.FRandRange(0.94f, 1.f);
+
+				auto Stroke = [&](float Tilt, float Offset)
+				{
+					ClockBuild.Box(
+						Side * (Middle + Offset) + Out * 12.3f + FVector(0.f, MarkY, 0.f),
+						FRotator(Angle + Skew + Tilt, 0.f, 0.f),
+						FVector(0.62f, 0.34f, Height),
+						HandMat, /*bBlockingCollision*/ false);
+				};
+
+				if (*Scan == TEXT('I'))
+				{
+					Stroke(0.f, 0.f);
+				}
+				else if (*Scan == TEXT('V'))
+				{
+					Stroke(Lean, LeanSpread);
+					Stroke(-Lean, -LeanSpread);
+				}
+				else
+				{
+					Stroke(17.f, 0.f);
+					Stroke(-17.f, 0.f);
+				}
+			}
+		};
+
+		static const TCHAR* Hours[12] = {
+			TEXT("XII"), TEXT("I"), TEXT("II"), TEXT("III"), TEXT("IIII"), TEXT("V"),
+			TEXT("VI"), TEXT("VII"), TEXT("VIII"), TEXT("IX"), TEXT("X"), TEXT("XI") };
+		for (int32 Hour = 0; Hour < 12; ++Hour)
+		{
+			Numeral(Hour * 30.f, Hours[Hour]);
+		}
+
+		// Two winding holes, because this is a clock that had to be wound — one train for the
+		// going, one for the strike. They are the detail that makes the dial a mechanism's face
+		// rather than a printed circle, and they are two discs.
+		for (int32 Hole = 0; Hole < 2; ++Hole)
+		{
+			const float Angle = Hole == 0 ? 118.f : 242.f;
+			ClockBuild.Cyl(Radial(Angle) * 7.4f + FVector(0.f, DialFaceY + 0.1f, 0.f), FRotator(0.f, 0.f, 90.f),
+				FVector(2.2f, 2.2f, 0.8f), HandMat, /*bBlockingCollision*/ false);
+		}
+
+		// Foxing: the brown bloom an enamelled dial grows in a house with water in the walls. A
+		// stain rather than a painted disc — the whole point of the decal is that it has no edge.
+		ClockBuild.Stain(RoomSurfaces::Damp, FVector(-6.f, DialFaceY - 4.5f, -7.5f), FRotator(0.f, 90.f, 0.f),
+			FVector2D(12.f, 10.f), FLinearColor(0.300f, 0.196f, 0.120f), 0.20f, 1.f);
+
+		// --- The hands ----------------------------------------------------------------------
+
+		// Spade hands with a counterpoised tail: shaft, a diamond two thirds of the way out, and a
+		// weight behind the centre. Two plain bars is a wristwatch; the diamond and the tail are
+		// what a clock of this age has, and they are three boxes each.
+		auto Hand = [&](float Degrees, float Reach, float Tail, float Thickness, float Y)
+		{
+			const FVector Out = Radial(Degrees);
+			ClockBuild.Box(Out * ((Reach - Tail) * 0.5f) + FVector(0.f, Y, 0.f), FRotator(Degrees, 0.f, 0.f),
+				FVector(Thickness, 0.55f, Reach + Tail), HandMat, /*bBlockingCollision*/ false);
+			ClockBuild.Box(Out * (Reach * 0.62f) + FVector(0.f, Y, 0.f), FRotator(Degrees + 45.f, 0.f, 0.f),
+				FVector(Thickness * 2.9f, 0.5f, Thickness * 2.9f), HandMat, /*bBlockingCollision*/ false);
+			ClockBuild.Box(Out * (-Tail * 0.72f) + FVector(0.f, Y, 0.f), FRotator(Degrees + 45.f, 0.f, 0.f),
+				FVector(Thickness * 2.2f, 0.5f, Thickness * 2.2f), HandMat, /*bBlockingCollision*/ false);
 		};
 
 		// Stopped at four minutes past eleven. The hour is not a clue and is not meant to be
 		// solved — it is the date the house keeps coming back to, and the detective has no way
 		// yet of knowing why that should mean anything.
-		Hand(332.f, 11.f, 1.6f, 0.7f);  // hour
-		Hand(24.f, 16.f, 1.1f, 0.9f);   // minute
-		ClockBuild.Box(FVector(0.f, -1.1f, 0.f), FRotator::ZeroRotator, FVector(2.4f, 0.8f, 2.4f), HandMat, /*bBlockingCollision*/ false);
+		Hand(332.f, 10.6f, 2.6f, 1.05f, -14.95f); // hour
+		Hand(24.f, 15.2f, 3.4f, 0.8f, -15.35f);   // minute
 
-		// The hour marks, so the hands have something to have stopped against.
-		for (int32 Mark = 0; Mark < 12; ++Mark)
-		{
-			const float Radians = FMath::DegreesToRadians(Mark * 30.f);
-			const FVector Direction(FMath::Sin(Radians), 0.f, FMath::Cos(Radians));
-			const bool bQuarter = (Mark % 3) == 0;
-			ClockBuild.Box(Direction * 16.f - FVector(0.f, 0.4f, 0.f),
-				FRotator(-Mark * 30.f, 0.f, 0.f),
-				FVector(bQuarter ? 1.4f : 0.7f, 0.4f, bQuarter ? 4.2f : 2.6f), HandMat,
-				/*bBlockingCollision*/ false);
-		}
+		// The collet the hands sit on, and the cap over it.
+		ClockBuild.Cyl(FVector(0.f, -15.75f, 0.f), FRotator(0.f, 0.f, 90.f), FVector(3.2f, 3.2f, 1.1f), Brass, /*bBlockingCollision*/ false);
+		ClockBuild.Cyl(FVector(0.f, -15.95f, 0.f), FRotator(0.f, 0.f, 90.f), FVector(1.4f, 1.4f, 0.7f), HandMat, /*bBlockingCollision*/ false);
 
-		if (UStaticMeshComponent* Face = ClockBuild.Prop(RoomProps::WallClock, FVector::ZeroVector, FRotator::ZeroRotator, 44.f))
-		{
-			// Slot 1 is the crystal, and the imported instance is opaque — a solid white disc laid
-			// over the dial, which is why the clock read as a blank plate with a wedge out of it.
-			//
-			// Clearer than the window glass, which is the room default: the window is meant to be
-			// dirty and the crystal is meant to be looked through. At the window value the dial
-			// went behind a grey veil and the numerals, which are hairlines, disappeared into it.
-			Face->SetMaterial(1, ClockBuild.Glass(FLinearColor(0.16f, 0.17f, 0.17f), 0.08f, 0.03f));
-		}
+		// The crystal, held under the inner lip of the bezel. Very nearly nothing, and far clearer
+		// than the window glass that is the room default: the window is meant to be dirty and this
+		// is meant to be looked through. A mirror-smooth disc thirty-four centimetres across
+		// standing in front of a lantern is not a crystal, it is a white plate — at the value the
+		// panes use, the reflection took the numerals and then the whole dial with them.
+		ClockBuild.Cyl(FVector(0.f, CrystalY, 0.f), FRotator(0.f, 0.f, 90.f), FVector(34.f, 34.f, 0.5f),
+			ClockBuild.Glass(FLinearColor(0.16f, 0.17f, 0.17f), 0.035f, 0.14f), /*bBlockingCollision*/ false);
+
+		// No starred glass on it, and the clue text carries that instead.
+		//
+		// It was seven thin bars radiating from a point off the middle of the dial, which on a
+		// face that already has two bars radiating from the middle of it is not a crack — it is
+		// nine hands. The same lesson as the flaking paint on the door: at this size a box is
+		// never a hairline, it is a stick, and a split in glass needs a torn alpha to be a split
+		// at all. Better an uncracked crystal than a clock with too many hands.
+
+		// --- The trunk ------------------------------------------------------------------------
+
+		// The drop under the drum, which is the part doing most of the work. A round clock on a
+		// wall is a round clock on a wall whatever it is made of; a drum with a glazed trunk
+		// hanging off it is a weight-driven clock, and there has not been one of those in a house
+		// anybody would call modern.
+		//
+		// Built as a frame rather than a box with a dark rectangle painted on the front: the
+		// pendulum has to be genuinely inside something for the glass to be glass.
+		ClockBuild.Box(FVector(0.f, -8.2f, -21.f), FRotator::ZeroRotator, FVector(19.f, 10.f, 8.f), CaseWood);
+		ClockBuild.Box(FVector(0.f, -3.9f, -40.f), FRotator::ZeroRotator, FVector(22.f, 1.4f, 30.f), CaseWood, /*bBlockingCollision*/ false);
+		ClockBuild.Box(FVector(-9.3f, -8.2f, -40.f), FRotator::ZeroRotator, FVector(3.4f, 10.f, 30.f), CaseWood);
+		ClockBuild.Box(FVector(9.3f, -8.2f, -40.f), FRotator::ZeroRotator, FVector(3.4f, 10.f, 30.f), CaseWood);
+		ClockBuild.Box(FVector(0.f, -8.2f, -26.7f), FRotator::ZeroRotator, FVector(22.f, 10.f, 3.4f), CaseWood);
+		ClockBuild.Box(FVector(0.f, -8.2f, -53.2f), FRotator::ZeroRotator, FVector(22.f, 10.f, 3.6f), CaseWood);
+
+		// The trunk glass is the dirty one. Nobody has opened this door in decades and the room
+		// has been coming through it the whole time.
+		ClockBuild.Box(FVector(0.f, -12.9f, -40.f), FRotator::ZeroRotator, FVector(15.2f, 0.5f, 23.f),
+			ClockBuild.Glass(RoomPalette::GlassShard, 0.14f, 0.22f), /*bBlockingCollision*/ false);
+
+		// The pendulum, hanging plumb inside a case that is not.
+		//
+		// That is the whole trick of it: the clue is pitched three degrees, so a pendulum built
+		// straight down the trunk would be three degrees off vertical — which is the one thing in
+		// the world that never is. Turned back by the same three about its suspension point, it
+		// hangs true and the case leans past it, and the case reads as crooked instead of the
+		// room. Dead still, because the clock is stopped: a pendulum at rest is a plumb line.
+		const float PendulumY = -8.4f;
+		ClockBuild.Box(FVector(0.73f, PendulumY, -32.97f), FRotator(3.f, 0.f, 0.f), FVector(0.9f, 0.9f, 28.f), Brass, /*bBlockingCollision*/ false);
+		ClockBuild.Cyl(FVector(1.47f, PendulumY, -46.96f), FRotator(0.f, 0.f, 90.f), FVector(8.2f, 8.2f, 1.6f), Brass, /*bBlockingCollision*/ false);
+		ClockBuild.Cyl(FVector(1.6f, PendulumY, -51.6f), FRotator(0.f, 0.f, 90.f), FVector(2.2f, 2.2f, 1.2f), Brass, /*bBlockingCollision*/ false);
+
+		// The finial under the case. A turned drop, which is three primitives and the last of the
+		// silhouette — a trunk that stops square at the bottom is a cupboard.
+		ClockBuild.Cyl(FVector(0.f, -8.2f, -56.4f), FRotator(0.f, 0.f, 90.f), FVector(6.4f, 6.4f, 2.4f), CaseWood, /*bBlockingCollision*/ false);
+		ClockBuild.Sph(FVector(0.f, -8.2f, -59.4f), 5.2f, CaseWood);
+		ClockBuild.Cyl(FVector(0.f, -8.2f, -62.8f), FRotator(0.f, 0.f, 90.f), FVector(2.2f, 2.2f, 2.6f), CaseWood, /*bBlockingCollision*/ false);
 	}
 
 	// Rusted tools spilled out of a box by the door. Somebody was working on this room.
@@ -1211,8 +1433,14 @@ void ARoomDressingActor::BuildClues()
 		}
 	}
 
-	// Bottles in the corner, lined up rather than thrown. Someone sat here and drank, methodically.
-	if (AClueActor* Bottles = SpawnClue(FVector(WidthHalf - 60.f, -DepthHalf + 74.f, 0.f), FRotator::ZeroRotator, TEXT("Examine the bottles"),
+	// Bottles against the skirting, lined up rather than thrown. Someone sat here and drank,
+	// methodically.
+	//
+	// Along the north wall, not in the corner the bookcase is standing in: at the old spot the row
+	// was inside the carcass, so six translucent bottles showed through the bottom of the shelves
+	// like something half-materialised. This stretch of wall is the only one long enough for them
+	// — the wardrobe takes everything left of 175 and the bookcase everything right of 327.
+	if (AClueActor* Bottles = SpawnClue(FVector(240.f, -DepthHalf + 26.f, 0.f), FRotator(0.f, 90.f, 0.f), TEXT("Examine the bottles"),
 		TEXT("Six empty bottles, stood up in a row against the skirting. Not thrown, not knocked over. Placed. Somebody spent a great many evenings in this room alone.")))
 	{
 		FRoomBuilder BottleBuild(Bottles, Bottles->GetRootScene());
@@ -1226,11 +1454,53 @@ void ARoomDressingActor::BuildClues()
 	}
 
 	// A stack of books nobody has opened in decades, beside the collapsed shelf.
+	//
+	// Built, because decorative_book_set_01 is not a stack of books — it is a *catalogue*. Ninety
+	// different volumes stood side by side in a single mesh, the way a library ships them for
+	// picking, so placing it as one prop laid a two-metre rank of pale upright books across the
+	// boards beside the shelf: a white comb on the floor of a room in which nothing is white. That
+	// was already known when the same asset came off the bookcase floor, and this clue kept it.
+	// The manifest still fetches it; nothing places it now.
+	//
+	// A volume is a block of leaves between two cloth boards with a spine down one side — four
+	// boxes, and the leaves have to be left showing on the other three edges, because a single
+	// box wrapped round them is a brick. Cloth and dusty page edges are both already in the room:
+	// the linen photograph, tinted the way the curtains and the loose papers are.
 	if (AClueActor* Books = SpawnClue(FVector(WidthHalf - 78.f, -186.f, 4.f), FRotator(0.f, 27.f, 0.f), TEXT("Examine the books"),
 		TEXT("Ledgers, not novels — columns of dates and figures in the same tight hand as the letter. The dust on top is thick enough to write in. Nobody has.")))
 	{
 		FRoomBuilder BookBuild(Books, Books->GetRootScene());
-		BookBuild.Prop(RoomProps::LooseBooks, FVector::ZeroVector, FRotator(0.f, 14.f, 0.f), 16.f);
+
+		// Its own stream, so the size of the stack does not relay every clue built after it.
+		FRandomStream StackRandom(1955);
+
+		// Spine to fore-edge along the volume’s own X, head to tail along its Y.
+		auto Ledger = [&](const FVector& Middle, const FRotator& Lie, float Wide, float Deep, float Thick, bool bBlocks)
+		{
+			BookBuild.Box(Middle, Lie, FVector(Wide - 1.8f, Deep - 1.8f, Thick - 1.6f), MatPaperDamp, bBlocks);
+			BookBuild.Box(Middle + Lie.RotateVector(FVector(0.f, 0.f, (Thick - 0.8f) * 0.5f)), Lie, FVector(Wide, Deep, 0.8f), MatCloth, /*bBlockingCollision*/ false);
+			BookBuild.Box(Middle - Lie.RotateVector(FVector(0.f, 0.f, (Thick - 0.8f) * 0.5f)), Lie, FVector(Wide, Deep, 0.8f), MatCloth, /*bBlockingCollision*/ false);
+			BookBuild.Box(Middle + Lie.RotateVector(FVector(-Wide * 0.5f, 0.f, 0.f)), Lie, FVector(1.4f, Deep, Thick), MatCloth, /*bBlockingCollision*/ false);
+		};
+
+		// Five of them. No two the same size and no two square to each other: a pile somebody put
+		// down is not a pile somebody built.
+		float Rest = 0.f;
+		for (int32 Volume = 0; Volume < 5; ++Volume)
+		{
+			const float Wide = StackRandom.FRandRange(21.f, 27.f);
+			const float Deep = StackRandom.FRandRange(30.f, 36.f);
+			const float Thick = StackRandom.FRandRange(4.f, 7.f);
+			Ledger(
+				FVector(StackRandom.FRandRange(-2.5f, 2.5f), StackRandom.FRandRange(-2.5f, 2.5f), Rest + Thick * 0.5f),
+				FRotator(0.f, StackRandom.FRandRange(-11.f, 11.f), 0.f),
+				Wide, Deep, Thick, /*bBlocks*/ Volume == 0);
+			Rest += Thick;
+		}
+
+		// And one that came off the top and stayed where it landed, on its side against the pile.
+		// A stack with a straight top edge is a stack somebody squared up.
+		Ledger(FVector(19.f, -8.f, 12.f), FRotator(0.f, 58.f, 76.f), 23.f, 33.f, 5.4f, /*bBlocks*/ false);
 	}
 
 	// The half-open drawer, a clue in its own right rather than only furniture.

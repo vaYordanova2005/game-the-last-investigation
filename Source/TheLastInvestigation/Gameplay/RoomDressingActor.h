@@ -116,7 +116,6 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFloorboards;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFloorboardsWorn;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatRoughWood;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPlankWood;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatCloth;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatIron;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatRust;
