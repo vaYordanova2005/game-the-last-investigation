@@ -66,6 +66,12 @@ MODELS = {
     "hanging_picture_frame_01": "the picture frame",
     "Lantern_01": "the detective's lantern",
     "wooden_crate_01": "debris",
+    # The bedroom corner. The room is where the detective wakes up, and until now he woke up on
+    # bare boards in a room with no reason to be slept in; a bed is what makes the house a house
+    # somebody lived in rather than a set of walls with furniture against them.
+    "GothicBed_01": "the four-poster in the corner",
+    "ArmChair_01": "the armchair beside it",
+    "ClassicNightstand_01": "the nightstand",
 }
 
 

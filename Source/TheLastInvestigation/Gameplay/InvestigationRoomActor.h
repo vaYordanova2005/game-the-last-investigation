@@ -37,8 +37,21 @@ public:
 	 * window, locked door — is in a single frame. The game mode places the pawn here, and the
 	 * dressing keeps the spot clear of furniture and debris.
 	 */
-	static FVector GetWakeLocation() { return FVector(-210.f, -62.f, 100.f); }
-	static FRotator GetWakeRotation() { return FRotator(-7.f, 5.f, 0.f); }
+	/**
+	 * Where the detective comes round, and which way he is facing when he does.
+	 *
+	 * He used to wake in the west corner looking down the room at the window. The corner is a
+	 * bedroom now and the bed is the largest thing in the house, so waking there means waking
+	 * inside it. He wakes under the window instead — on the floor, in the one part of the room
+	 * the storm actually lights, which is a better place to open your eyes in any case — turned
+	 * so that the locked door is in front of him. The brief is explicit that the door has to be
+	 * visible from the first frame: it is the thing he is trying to reach.
+	 *
+	 * The bed is then behind him and to the right. Waking with your back to it is worth more than
+	 * waking looking at it.
+	 */
+	static FVector GetWakeLocation() { return FVector(228.f, -110.f, 100.f); }
+	static FRotator GetWakeRotation() { return FRotator(-7.f, 128.f, 0.f); }
 
 	virtual void BeginPlay() override;
 

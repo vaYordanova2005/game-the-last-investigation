@@ -10,6 +10,7 @@ class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UDecalComponent;
+class UProceduralMeshComponent;
 
 /**
  * The surface sets built by Tools/build_art.py from CC0 Poly Haven textures. Each name matches a
@@ -63,6 +64,10 @@ namespace RoomProps
 	extern const TCHAR* PictureFrame;
 	extern const TCHAR* Lantern;
 	extern const TCHAR* Crate;
+	/** The corner the detective wakes up in: a bed, and the things that stand around one. */
+	extern const TCHAR* Bed;
+	extern const TCHAR* Armchair;
+	extern const TCHAR* Nightstand;
 }
 
 /**
@@ -196,6 +201,27 @@ public:
 	 * offset is a different direction for every rotation.
 	 */
 	UStaticMeshComponent* PropSeated(const TCHAR* Name, const FVector& Seat, const FRotator& Rotation, float DesiredHeightCm = 0.f, bool bBlockingCollision = true);
+
+	/**
+	 * A piece of cloth lying over something: a sheet on a bed, a dust cover over a chair.
+	 *
+	 * Generated rather than assembled, for the same reason the curtains are. Cloth laid over a
+	 * shape is a continuous surface that sags between what holds it up and falls away over the
+	 * edges, and neither of those is a thing a primitive has: a box is a slab with four corners,
+	 * and a heap of squashed spheres — which is the other obvious way to do a thrown-back quilt —
+	 * comes out as a clutch of eggs, because each one closes its own outline.
+	 *
+	 * The surface is a grid in the part's own XY plane, lifted by layered noise (Rumple) and
+	 * pulled down near its boundary (EdgeFall) so that the cloth goes over the side of whatever it
+	 * is on. The outline is eaten into by the same kind of noise the drapes use, so the hem is
+	 * ragged and there are holes in it — a quilt that has been in this house as long as the house
+	 * has been shut is not hemmed any more.
+	 *
+	 * Both faces are generated: M_RoomSurface is single-sided, and the underside of a quilt
+	 * hanging over the edge of a bed is half of what is seen of it.
+	 */
+	UProceduralMeshComponent* Cloth(const FVector& Centre, const FRotator& Facing, const FVector2D& SizeUU,
+		float Rumple, float EdgeFall, int32 Seed, UMaterialInterface* Mat, float TexelSizeCm = 34.f);
 
 	UStaticMeshComponent* Box(const FVector& Location, const FRotator& Rotation, const FVector& SizeUU, UMaterialInterface* Mat, bool bBlockingCollision = true);
 	UStaticMeshComponent* Cyl(const FVector& Location, const FRotator& Rotation, const FVector& SizeUU, UMaterialInterface* Mat, bool bBlockingCollision = true);

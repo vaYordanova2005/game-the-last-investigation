@@ -4,6 +4,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/DecalComponent.h"
+#include "ProceduralMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -53,6 +54,9 @@ namespace RoomProps
 	const TCHAR* PictureFrame = TEXT("hanging_picture_frame_01");
 	const TCHAR* Lantern = TEXT("Lantern_01");
 	const TCHAR* Crate = TEXT("wooden_crate_01");
+	const TCHAR* Bed = TEXT("GothicBed_01");
+	const TCHAR* Armchair = TEXT("ArmChair_01");
+	const TCHAR* Nightstand = TEXT("ClassicNightstand_01");
 }
 
 namespace RoomPalette
@@ -653,6 +657,194 @@ UStaticMeshComponent* FRoomBuilder::PropSeated(const TCHAR* Name, const FVector&
 
 	Component->SetRelativeLocation(Seat - Correction);
 	return Component;
+}
+
+UProceduralMeshComponent* FRoomBuilder::Cloth(const FVector& Centre, const FRotator& Facing, const FVector2D& SizeUU,
+	float Rumple, float EdgeFall, int32 Seed, UMaterialInterface* Mat, float TexelSizeCm)
+{
+	if (!Owner || !ParentComponent)
+	{
+		return nullptr;
+	}
+
+	// About two centimetres a step, which is fine enough that the ragged outline does not read as
+	// a staircase, and bounded so a dust sheet over a whole room does not cost a hundred thousand
+	// triangles.
+	const int32 Cols = FMath::Clamp(FMath::RoundToInt(SizeUU.X / 2.2f), 12, 96);
+	const int32 Rows = FMath::Clamp(FMath::RoundToInt(SizeUU.Y / 2.2f), 12, 96);
+	const float Thickness = 0.7f;
+	const float EdgeWidth = FMath::Max(SizeUU.GetMin() * 0.16f, 10.f);
+
+	FRandomStream Weave(Seed);
+	const float Grain = Weave.FRandRange(0.f, 40.f);
+
+	// Where the cloth has rotted away: the outline is pulled in by a wandering amount and two
+	// holes are eaten out of the middle.
+	struct FHole { float U; float V; float RU; float RV; };
+	FHole Holes[2];
+	for (FHole& Hole : Holes)
+	{
+		Hole.U = Weave.FRandRange(0.2f, 0.8f);
+		Hole.V = Weave.FRandRange(0.2f, 0.8f);
+		// Small. At a tenth of the piece a hole plus the frayed hem meet each other and take a
+		// whole corner off, and what is left reads as a torn flag rather than as worn cloth.
+		Hole.RU = Weave.FRandRange(0.028f, 0.06f);
+		Hole.RV = Weave.FRandRange(0.028f, 0.06f);
+	}
+
+	auto Solid = [&](float U, float V) -> bool
+	{
+		// The hem, eaten in by up to a twelfth of the piece and never by the same amount twice.
+		const float Frayed = 0.038f * (0.5f + 0.5f * FMath::PerlinNoise1D((U + V * 1.7f) * 5.3f + Grain));
+		if (U < Frayed || U > 1.f - Frayed || V < Frayed || V > 1.f - Frayed)
+		{
+			return false;
+		}
+		for (const FHole& Hole : Holes)
+		{
+			const float DU = (U - Hole.U) / Hole.RU;
+			const float DV = (V - Hole.V) / Hole.RV;
+			const float Edge = 1.f + 0.5f * FMath::PerlinNoise2D(FVector2D(U * 13.f + Grain, V * 13.f));
+			if (DU * DU + DV * DV < Edge * Edge)
+			{
+				return false;
+			}
+		}
+		return true;
+	};
+
+	auto Surface = [&](float U, float V) -> FVector
+	{
+		const float X = (U - 0.5f) * SizeUU.X;
+		const float Y = (V - 0.5f) * SizeUU.Y;
+
+		// Two octaves of sag. One alone gives an even swell that reads as a moulded lid.
+		float Height = Rumple * 0.62f * FMath::PerlinNoise2D(FVector2D(U * 3.1f + Grain, V * 4.7f));
+		Height += Rumple * 0.38f * FMath::PerlinNoise2D(FVector2D(U * 8.3f + Grain, V * 11.9f));
+
+		// And the fall over the edges of whatever it is lying on. Cloth does not stop at the edge
+		// of a mattress, it goes over it, and that fall is most of what says the thing underneath
+		// has a shape at all.
+		const float ToEdge = FMath::Min(
+			FMath::Min(U, 1.f - U) * SizeUU.X,
+			FMath::Min(V, 1.f - V) * SizeUU.Y);
+		const float Over = FMath::Clamp(1.f - ToEdge / EdgeWidth, 0.f, 1.f);
+		Height -= EdgeFall * FMath::Pow(Over, 1.7f);
+
+		return FVector(X, Y, Height);
+	};
+
+	const int32 Grid = Cols * Rows;
+	TArray<FVector> Verts;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UVs;
+	TArray<FProcMeshTangent> Tangents;
+	TArray<int32> Tris;
+	Verts.SetNum(Grid * 2);
+	Normals.Init(FVector::ZeroVector, Grid * 2);
+	UVs.SetNum(Grid * 2);
+	Tangents.SetNum(Grid * 2);
+
+	for (int32 Col = 0; Col < Cols; ++Col)
+	{
+		for (int32 Row = 0; Row < Rows; ++Row)
+		{
+			const float U = Col / static_cast<float>(Cols - 1);
+			const float V = Row / static_cast<float>(Rows - 1);
+			const FVector Point = Surface(U, V);
+			const int32 Index = Col * Rows + Row;
+			Verts[Index] = Point;
+			Verts[Index + Grid] = Point - FVector(0.f, 0.f, Thickness);
+			const FVector2D UV(Point.X / TexelSizeCm, Point.Y / TexelSizeCm);
+			UVs[Index] = UV;
+			UVs[Index + Grid] = UV;
+		}
+	}
+
+	// Both windings per face, and the shading normal forced by which sheet the triangle is in.
+	// The curtains learned this the hard way: winding decides what the rasteriser keeps and the
+	// normal array decides how it is lit, and a single-sided material makes the first of them a
+	// silent killer.
+	auto Face = [&](int32 A, int32 B, int32 C, bool bUpward)
+	{
+		Tris.Add(A);
+		Tris.Add(B);
+		Tris.Add(C);
+		Tris.Add(A);
+		Tris.Add(C);
+		Tris.Add(B);
+
+		FVector N = FVector::CrossProduct(Verts[B] - Verts[A], Verts[C] - Verts[A]);
+		if ((N.Z > 0.f) != bUpward)
+		{
+			N = -N;
+		}
+		Normals[A] += N;
+		Normals[B] += N;
+		Normals[C] += N;
+	};
+
+	for (int32 Col = 0; Col + 1 < Cols; ++Col)
+	{
+		for (int32 Row = 0; Row + 1 < Rows; ++Row)
+		{
+			const float U0 = Col / static_cast<float>(Cols - 1);
+			const float U1 = (Col + 1) / static_cast<float>(Cols - 1);
+			const float V0 = Row / static_cast<float>(Rows - 1);
+			const float V1 = (Row + 1) / static_cast<float>(Rows - 1);
+			if (!Solid(U0, V0) || !Solid(U1, V0) || !Solid(U0, V1) || !Solid(U1, V1))
+			{
+				continue;
+			}
+
+			const int32 A = Col * Rows + Row;
+			const int32 B = (Col + 1) * Rows + Row;
+			const int32 C = (Col + 1) * Rows + Row + 1;
+			const int32 D = Col * Rows + Row + 1;
+
+			Face(A, B, C, /*bUpward*/ true);
+			Face(A, C, D, /*bUpward*/ true);
+			Face(A + Grid, B + Grid, C + Grid, /*bUpward*/ false);
+			Face(A + Grid, C + Grid, D + Grid, /*bUpward*/ false);
+		}
+	}
+
+	for (int32 Col = 0; Col < Cols; ++Col)
+	{
+		for (int32 Row = 0; Row < Rows; ++Row)
+		{
+			const int32 Index = Col * Rows + Row;
+			const int32 Before = FMath::Max(Col - 1, 0) * Rows + Row;
+			const int32 After = FMath::Min(Col + 1, Cols - 1) * Rows + Row;
+			const FVector Along = (Verts[After] - Verts[Before]).GetSafeNormal();
+			Tangents[Index] = FProcMeshTangent(Along, false);
+			Tangents[Index + Grid] = FProcMeshTangent(Along, false);
+
+			Normals[Index] = Normals[Index].GetSafeNormal();
+			Normals[Index + Grid] = Normals[Index + Grid].GetSafeNormal();
+		}
+	}
+
+	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(Owner, MakeUniqueObjectName(Owner, UProceduralMeshComponent::StaticClass(), TEXT("Cloth")));
+	Mesh->SetMobility(EComponentMobility::Movable);
+	Mesh->AttachToComponent(ParentComponent, FAttachmentTransformRules::KeepRelativeTransform);
+	Mesh->SetRelativeLocationAndRotation(Centre, Facing);
+	Mesh->bUseAsyncCooking = false;
+	Mesh->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, UVs, TArray<FLinearColor>(), Tangents, /*bCreateCollision*/ false);
+	if (Mat)
+	{
+		// The UVs are already in repeats, so the instance must not scale them again.
+		if (UMaterialInstanceDynamic* Instance = Cast<UMaterialInstanceDynamic>(Mat))
+		{
+			Instance->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(1.f, 1.f, 0.f, 1.f));
+			Instance->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(0.f, 0.f, 0.f, 1.f));
+		}
+		Mesh->SetMaterial(0, Mat);
+	}
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh->RegisterComponent();
+	Owner->AddInstanceComponent(Mesh);
+	return Mesh;
 }
 
 UStaticMeshComponent* FRoomBuilder::Box(const FVector& Location, const FRotator& Rotation, const FVector& SizeUU, UMaterialInterface* Mat, bool bBlockingCollision)

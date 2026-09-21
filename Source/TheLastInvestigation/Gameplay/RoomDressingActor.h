@@ -69,6 +69,10 @@ private:
 	void BuildFloor(FRoomBuilder& Build);
 	void BuildCeiling(FRoomBuilder& Build);
 	void BuildFurniture(FRoomBuilder& Build);
+	/** The corner he wakes up in: the bed, the chair beside it, and what is left on the walls. */
+	void BuildBedroom(FRoomBuilder& Build);
+	/** Where the bed stands, so that nothing else in the room is scattered through it. */
+	void BedFootprint(FVector2D& OutCentre, FVector2D& OutHalfExtent) const;
 	/** Standing water: the floor is wet where the roof and the broken pane let the storm in. */
 	void BuildPuddles(FRoomBuilder& Build);
 	/**
@@ -117,6 +121,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFloorboardsWorn;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatRoughWood;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatCloth;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBedding;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatIron;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatRust;
 

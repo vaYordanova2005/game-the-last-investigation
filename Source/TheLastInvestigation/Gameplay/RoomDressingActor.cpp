@@ -86,6 +86,11 @@ void ARoomDressingActor::CacheMaterials(FRoomBuilder& Build)
 	// green_metal_rust is, flat, a sheet of green paint with four rust pinholes in it — the rust
 	// the name promises is a handful of pixels. Tinted neutral it stayed green, which is how the
 	// lamp cord and the hook came to be green things hanging from the ceiling.
+	// Bedding: the same grey the curtains are, and on the same coarse-tiled linen, because a
+	// sheet is a two-metre piece of cloth and the weave is the thing being looked at. Warm-leaning
+	// rather than neutral for the same reason as the drapes — the only fill in that corner is the
+	// cold rectangle of sky at the far end of the room.
+	MatBedding = Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.214f, 0.150f, 0.099f));
 	MatIron = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(0.847f, 0.448f, 0.703f));
 	MatRust = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(0.988f, 0.407f, 0.499f));
 
@@ -126,6 +131,19 @@ bool ARoomDressingActor::IsFloorSpotClear(const FVector2D& Point, float Radius) 
 		return false;
 	}
 
+	// And nothing scattered through the bed. The debris, the papers and the dust are all thrown
+	// at random floor positions, and until the corner had a bed in it that was harmless.
+	{
+		FVector2D BedCentre;
+		FVector2D BedHalf;
+		BedFootprint(BedCentre, BedHalf);
+		if (FMath::Abs(Point.X - BedCentre.X) < BedHalf.X + Radius
+			&& FMath::Abs(Point.Y - BedCentre.Y) < BedHalf.Y + Radius)
+		{
+			return false;
+		}
+	}
+
 	// Keep the doorway approach and the window bay walkable.
 	if (FMath::Abs(Point.X - Setup.DoorOpeningCenterX) < Setup.DoorOpeningWidth * 0.5f + Radius && Point.Y > DepthHalf - 90.f - Radius)
 	{
@@ -159,6 +177,7 @@ void ARoomDressingActor::BeginPlay()
 	BuildFloor(Build);
 	BuildCeiling(Build);
 	BuildFurniture(Build);
+	BuildBedroom(Build);
 	BuildDebris(Build);
 	BuildTraces(Build);
 	BuildClues();
@@ -910,6 +929,155 @@ void ARoomDressingActor::BuildFurniture(FRoomBuilder& Build)
 	// A crate shoved into the far corner behind him, out of the opening shot: it is there for the
 	// walk back, not for the wake-up.
 	Build.Prop(RoomProps::Crate, FVector(-WidthHalf + 62.f, DepthHalf - 74.f, 0.f), FRotator(0.f, 34.f, 0.f), 46.f);
+}
+
+void ARoomDressingActor::BedFootprint(FVector2D& OutCentre, FVector2D& OutHalfExtent) const
+{
+	// GothicBed_01 is authored at 149 by 204 by 153 and is placed at 186 tall, which scales its
+	// footprint to 181 by 247: a grand four-poster rather than the half-tester it ships as. A bed
+	// is one of the few things in a room whose real size the player already knows, so the way to
+	// make a room read as somebody's bedroom is to let the bed be the largest object in it.
+	//
+	// The head goes against the west wall, so the bed faces the window straight down the length
+	// of the room. That is the only wall in here it can face from: the window is the room's one
+	// view and its second light source, and a bed is a thing you lie in looking at something.
+	// Against the north wall it faces the wardrobe.
+	//
+	// Turned a quarter from the mesh's own axes, so the long side runs east-west.
+	OutHalfExtent = FVector2D(123.7f, 90.6f);
+
+	const float WestFace = -Setup.Width * 0.5f + Setup.WallThickness * 0.5f;
+
+	// Standing clear on three sides rather than jammed into the corner, which is how the reference
+	// is composed and how a four-poster is actually arranged: it is a piece of furniture you walk
+	// round, with the wall only behind the head of it.
+	OutCentre = FVector2D(WestFace + 3.f + OutHalfExtent.X, -150.f);
+}
+
+void ARoomDressingActor::BuildBedroom(FRoomBuilder& Build)
+{
+	// Until now there was no reason for the detective to have woken up in this room at all: bare
+	// boards, a wardrobe against one wall, and nothing in it that says anybody ever lived here. A
+	// bed is what makes a house a house. It also does something for the story the rest of the
+	// dressing cannot — the room is where he opens his eyes at the start and where the whole thing
+	// closes at the end, so what is in here has to be worth coming back to.
+	//
+	// Composed from a reference frame: the four-poster centred against the wall with a block of
+	// hung frames over the headboard, an armchair to the left of it, a nightstand at the head, all
+	// of it grey and half rotted. The three pieces are CC0 Poly Haven meshes; everything on and
+	// around them is built, the same as the rest of the room.
+	//
+	// Its own stream: everything after this in the build order — the debris, the traces, every
+	// clue — draws from the room's, and one more random number in here would relay all of it.
+	FRandomStream BedRandom(19550416);
+
+	FVector2D BedCentre;
+	FVector2D BedHalf;
+	BedFootprint(BedCentre, BedHalf);
+
+	const float WestFace = -Setup.Width * 0.5f + Setup.WallThickness * 0.5f;
+	const float BedHeight = 186.f;
+
+	// A degree and a half off square. Nobody moved this bed in fifty years, but nobody lined it up
+	// with the wall in the first place either.
+	const FRotator BedFacing(0.f, -88.4f, 0.f);
+	Build.PropSeated(RoomProps::Bed, FVector(BedCentre.X, BedCentre.Y, 0.f), BedFacing, BedHeight);
+
+	// Everything that lies on the bed is placed in the bed's own frame: Across runs from one side
+	// to the other and Along runs from the head to the foot. Numbers guessed in room coordinates
+	// against a bed that is not square to the room is how the bookcase ended up with a row of
+	// books growing out of the side of it.
+	const FVector BedOrigin(BedCentre.X, BedCentre.Y, 0.f);
+	auto OnBed = [&](float Across, float Along, float Up)
+	{
+		return BedOrigin + BedFacing.RotateVector(FVector(Across, Along, Up));
+	};
+	const float HalfLength = 123.7f;   // head to foot, after scaling
+	const float MattressZ = 54.f;      // the mattress top at 44 authored units, scaled
+
+	// The armchair, to the left of the bed and turned back towards it, the way the reference has
+	// it: a chair somebody sat in to look at something is a different object from a chair pushed
+	// against a wall.
+	Build.PropSeated(RoomProps::Armchair, FVector(WestFace + 66.f, BedCentre.Y + BedHalf.Y + 62.f, 0.f), FRotator(0.f, 14.f, 0.f), 0.f);
+
+	// The nightstand at the head of the bed, on the other side of it.
+	const FVector NightstandSeat(WestFace + 46.f, BedCentre.Y - BedHalf.Y - 32.f, 0.f);
+	Build.PropSeated(RoomProps::Nightstand, NightstandSeat, FRotator(0.f, -88.f, 0.f), 0.f);
+
+	// And what is on it: a candle burnt down to nothing in its own wax, on a saucer. The one thing
+	// in the corner that was last touched by somebody rather than left by somebody.
+	const FVector CandleBase = NightstandSeat + FVector(-4.f, 3.f, 70.f);
+	Build.Cyl(CandleBase + FVector(0.f, 0.f, 0.6f), FRotator::ZeroRotator, FVector(11.f, 11.f, 1.2f), MatIron, /*bBlockingCollision*/ false);
+	Build.Cyl(CandleBase + FVector(0.f, 0.f, 1.8f), FRotator::ZeroRotator, FVector(7.6f, 7.6f, 1.6f), MatPaper, /*bBlockingCollision*/ false);
+	Build.Cyl(CandleBase + FVector(1.f, -0.5f, 4.4f), FRotator(0.f, 0.f, 3.f), FVector(3.4f, 3.4f, 4.4f), MatPaper, /*bBlockingCollision*/ false);
+	Build.Cyl(CandleBase + FVector(1.f, -0.5f, 6.8f), FRotator(0.f, 0.f, 3.f), FVector(1.1f, 1.1f, 1.6f), MatVoid, /*bBlockingCollision*/ false);
+
+	// The bedding, and it is generated cloth rather than anything assembled.
+	//
+	// It was three slabs first, with a fourth standing over the foot rail like a crate; then a
+	// heap of squashed spheres, which came out as a clutch of eggs on the mattress, because each
+	// sphere closes its own outline and a quilt has exactly one. Cloth laid over something is a
+	// continuous surface that sags where nothing holds it up and falls away over the edges, which
+	// is what FRoomBuilder::Cloth generates — and what neither a box nor a ball can be.
+	Build.Cloth(OnBed(0.f, 2.f, MattressZ + 1.5f), BedFacing, FVector2D(150.f, 208.f),
+		/*Rumple*/ 4.f, /*EdgeFall*/ 12.f, 4416, MatBedding);
+	// The quilt: thrown back off the pillows towards the foot, and over the near side of the frame.
+	// Kept up the bed rather than over the foot rail: at forty-four centimetres of fall it hung
+	// off the footboard as a pale sheet with a bite out of it, which is a flag, not a quilt.
+	Build.Cloth(OnBed(-14.f, 30.f, MattressZ + 9.f), BedFacing + FRotator(0.f, -7.f, 0.f), FVector2D(148.f, 124.f),
+		/*Rumple*/ 11.f, /*EdgeFall*/ 26.f, 1955, MatBedding);
+
+	// Two pillows, both flattened and one shoved sideways. Ellipsoids are right here and wrong for
+	// the quilt, for the same reason either way: a pillow is a closed sack and a quilt is a sheet.
+	Build.Add(FRoomShapes::Sphere(), OnBed(-32.f, -HalfLength + 40.f, MattressZ + 8.f),
+		BedFacing + FRotator(0.f, 8.f, 0.f), FVector(62.f, 40.f, 18.f), MatBedding, /*bBlockingCollision*/ false);
+	Build.Add(FRoomShapes::Sphere(), OnBed(34.f, -HalfLength + 33.f, MattressZ + 7.f),
+		BedFacing + FRotator(0.f, -21.f, 0.f), FVector(57.f, 37.f, 16.f), MatBedding, /*bBlockingCollision*/ false);
+
+	// The wall above the headboard. Frames, most of them empty — the reference has a block of five
+	// hung over the bed, and it is the detail that makes the corner somebody's rather than a set
+	// of furniture standing in one.
+	//
+	// hanging_picture_frame_01 measures 59 by 1.6 by 84: a portrait frame lying in its own XZ
+	// plane, so its face looks along local **Y**. On the west wall it has to look east, which is
+	// a yaw of minus ninety — at yaw zero it is edge-on, which is what hung over the bed the first
+	// time round: five slivers a centimetre and a half wide. The crooked hang is *pitch*, which
+	// turns the frame about its own face normal, the way a picture on one nail does. Roll would
+	// tip it off the wall.
+	struct FHungFrame { float Y; float Z; float Size; float Tilt; bool bGlazed; };
+	const FHungFrame Hung[5] = {
+		{ -68.f, 228.f, 48.f,  -4.f, true  },
+		{ -14.f, 252.f, 36.f,   6.f, false },
+		{  32.f, 222.f, 42.f, -11.f, true  },
+		{ -10.f, 198.f, 30.f,   3.f, false },
+		{  56.f, 258.f, 32.f,   8.f, false },
+	};
+	for (const FHungFrame& Frame : Hung)
+	{
+		UStaticMeshComponent* Hanging = Build.Prop(RoomProps::PictureFrame,
+			FVector(WestFace + 5.f, BedCentre.Y + Frame.Y, Frame.Z),
+			FRotator(Frame.Tilt, -90.f, 0.f), Frame.Size, /*bBlockingCollision*/ false);
+		if (Hanging)
+		{
+			// hanging_picture_frame_01 ships with the engine checkerboard on its glass and its
+			// frame and only its artwork slot textured — the same fault as the one in the bookcase.
+			Hanging->SetMaterial(0, Frame.bGlazed ? Cast<UMaterialInterface>(MatGlass) : Cast<UMaterialInterface>(MatVoid));
+			Hanging->SetMaterial(2, MatRoughWood);
+		}
+	}
+
+	// And the two that came off the wall. What is left where they hung is a clean rectangle, which
+	// is the only place in this room a hard edge is right: that is exactly the shape of the dirt
+	// that did not land there. The nail is still in the plaster, which is what says the picture
+	// was taken down rather than that it fell.
+	const FVector2D Gone[2] = { FVector2D(-112.f, 246.f), FVector2D(94.f, 210.f) };
+	for (const FVector2D& Ghost : Gone)
+	{
+		Build.Mark(FVector(WestFace + 1.f, BedCentre.Y + Ghost.X, Ghost.Y), FRotator(-90.f, 0.f, 0.f),
+			FVector2D(BedRandom.FRandRange(30.f, 42.f), BedRandom.FRandRange(24.f, 34.f)), MatPaperDamp);
+		Build.Cyl(FVector(WestFace + 3.f, BedCentre.Y + Ghost.X, Ghost.Y + 20.f), FRotator(0.f, 0.f, 90.f),
+			FVector(1.f, 1.f, 5.f), MatIron, /*bBlockingCollision*/ false);
+	}
 }
 
 void ARoomDressingActor::BuildBookcaseContents(const FVector& Spot, const FRotator& Facing, float HeightCm)
