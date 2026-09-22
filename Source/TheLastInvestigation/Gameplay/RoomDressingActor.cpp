@@ -5,6 +5,7 @@
 #include "DustMotesComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/World.h"
 
@@ -40,6 +41,14 @@ ARoomDressingActor::ARoomDressingActor()
 void ARoomDressingActor::Configure(const FRoomDressingSetup& InSetup)
 {
 	Setup = InSetup;
+
+	// Has to happen here, not in BeginPlay: AActor::BeginPlay dispatches BeginPlay to every
+	// registered component before it returns, and UDustMotesComponent::BeginPlay is where the
+	// motes are scattered through the volume. Configured from BeginPlay the dust is already
+	// built — from the defaults, which put specks inside the walls and above the ceiling.
+	DustMotes->ConfigureVolume(
+		FVector(Setup.Width * 0.46f, Setup.Depth * 0.46f, Setup.Height * 0.46f),
+		FVector(0.f, 0.f, Setup.Height * 0.5f));
 }
 
 void ARoomDressingActor::CacheMaterials(FRoomBuilder& Build)
@@ -155,7 +164,7 @@ bool ARoomDressingActor::IsFloorSpotClear(const FVector2D& Point, float Radius) 
 	{
 		return false;
 	}
-	if (FMath::Abs(Point.Y) < Setup.WindowOpeningWidth * 0.5f && Point.X > WidthHalf - 70.f - Radius)
+	if (FMath::Abs(Point.Y) < Setup.WindowOpeningWidth * 0.5f + Radius && Point.X > WidthHalf - 70.f - Radius)
 	{
 		return false;
 	}
@@ -175,10 +184,6 @@ void ARoomDressingActor::BeginPlay()
 	FRoomBuilder Build(this, DressingRoot);
 	CacheMaterials(Build);
 
-	DustMotes->ConfigureVolume(
-		FVector(Setup.Width * 0.46f, Setup.Depth * 0.46f, Setup.Height * 0.46f),
-		FVector(0.f, 0.f, Setup.Height * 0.5f));
-
 	BuildWalls(Build);
 	BuildFloor(Build);
 	BuildCeiling(Build);
@@ -187,6 +192,7 @@ void ARoomDressingActor::BeginPlay()
 	BuildDebris(Build);
 	BuildTraces(Build);
 	BuildClues();
+	PruneBodilessClues();
 }
 
 void ARoomDressingActor::BuildWalls(FRoomBuilder& Build)
@@ -1394,8 +1400,50 @@ AClueActor* ARoomDressingActor::SpawnClue(const FVector& LocalLocation, const FR
 	if (Clue)
 	{
 		Clue->Configure(FText::FromString(ShortName), FText::FromString(Description));
+		SpawnedClues.Add(Clue);
 	}
 	return Clue;
+}
+
+void ARoomDressingActor::PruneBodilessClues()
+{
+	// A clue carries no mesh of its own: the dressing builds its body under RootScene right after
+	// spawning it. The bodies made of primitives always turn up, but the ones that are a single
+	// imported prop do not — Prop() returns null when the art pipeline has not been run on this
+	// machine, which is the documented fallback everywhere else in the room. For a clue that
+	// leaves an actor with nothing under it: no geometry to see and nothing to line-trace, so it
+	// is not a stand-in, it is a clue that quietly does not exist. Better to take it out than to
+	// leave an invisible one in.
+	for (int32 i = SpawnedClues.Num() - 1; i >= 0; --i)
+	{
+		AClueActor* Clue = SpawnedClues[i];
+		if (!Clue)
+		{
+			SpawnedClues.RemoveAt(i);
+			continue;
+		}
+
+		TArray<USceneComponent*> Parts;
+		Clue->GetRootScene()->GetChildrenComponents(/*bIncludeAllDescendants*/ true, Parts);
+
+		bool bHasBody = false;
+		for (const USceneComponent* Part : Parts)
+		{
+			if (Part->IsA<UPrimitiveComponent>())
+			{
+				bHasBody = true;
+				break;
+			}
+		}
+
+		if (!bHasBody)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Clue '%s' has no body — its prop mesh is missing. Removing it."),
+				*Clue->GetInteractPrompt(nullptr).ToString());
+			Clue->Destroy();
+			SpawnedClues.RemoveAt(i);
+		}
+	}
 }
 
 void ARoomDressingActor::BuildClues()
@@ -2030,8 +2078,10 @@ void ARoomDressingActor::Tick(float DeltaTime)
 	const float Gust = Storm.IsValid() ? Storm->GetWindGust() : 0.f;
 	DustMotes->SetWindStrength(Gust);
 
-	// Loose wallpaper and cobweb strands lift on the same gust that moves the curtains, so the
-	// whole room breathes together when the wind comes through the broken panes.
+	// The cobweb strands in the ceiling corners lift on the same gust that moves the curtains, so
+	// the room breathes together when the wind comes through the broken panes. Only the webs:
+	// the wallpaper here survives as patches still stuck to the plaster rather than as strips
+	// hanging off it, and a patch has nothing to lift.
 	for (int32 i = 0; i < WindMovedParts.Num(); ++i)
 	{
 		USceneComponent* Part = WindMovedParts[i];

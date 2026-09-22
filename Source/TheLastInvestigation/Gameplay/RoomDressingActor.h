@@ -102,7 +102,14 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Dressing")
 	TObjectPtr<UDustMotesComponent> DustMotes;
 
-	/** Loose wallpaper strips and cobwebs, which breathe with the wind from the broken window. */
+	/** Removes any clue whose body never got built, because its prop mesh was not on disk. */
+	void PruneBodilessClues();
+
+	/** Every clue spawned this pass, so PruneBodilessClues can check each one has a body. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AClueActor>> SpawnedClues;
+
+	/** The cobweb strands, which breathe with the wind coming through the broken window. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USceneComponent>> WindMovedParts;
 

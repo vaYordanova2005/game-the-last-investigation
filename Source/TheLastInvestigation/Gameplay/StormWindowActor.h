@@ -116,6 +116,9 @@ private:
 
 	TArray<FVector> RainPositions;
 	TArray<float> RainSpeeds;
+
+	/** Scratch buffer for the per-frame instance update, kept alive so the tick allocates nothing. */
+	TArray<FTransform> RainTransforms;
 	TArray<float> TreePhases;
 
 	FRandomStream Random;

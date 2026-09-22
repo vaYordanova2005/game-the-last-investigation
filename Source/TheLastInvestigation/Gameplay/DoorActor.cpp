@@ -56,6 +56,14 @@ ADoorActor::ADoorActor()
 void ADoorActor::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// The door's own stream, for the same reason the clock has one. Every other piece of this
+	// room is laid out from a fixed seed so that it is the same room every time the detective
+	// wakes in it; the door was the one thing drawing from the global RNG, which meant the rot
+	// blooms, the splits and the rust streaks moved every session — on the object the player
+	// spends the longest looking at, and the one two -RoomShot frames most need to agree on.
+	Random.Initialize(19551104 + 7);
+
 	BuildDoorDetail();
 }
 
@@ -177,10 +185,10 @@ void ADoorActor::BuildDoorDetail()
 	Build.Box(FVector(-Proud(0.35f), LeafY, LeafZ - 94.f), FRotator::ZeroRotator, FVector(1.f, 104.f, 20.f), RotMat, /*bBlockingCollision*/ false);
 	for (int32 i = 0; i < 6; ++i)
 	{
-		const float BloomY = LeafY + FMath::FRandRange(-48.f, 48.f);
-		const float BloomZ = LeafZ - 86.f + FMath::FRandRange(0.f, 42.f);
-		Build.Box(FVector(Proud(0.35f), BloomY, BloomZ), FRotator(0.f, 0.f, FMath::FRandRange(-10.f, 10.f)),
-			FVector(1.f, FMath::FRandRange(12.f, 28.f), FMath::FRandRange(14.f, 34.f)), RotMat, /*bBlockingCollision*/ false);
+		const float BloomY = LeafY + Random.FRandRange(-48.f, 48.f);
+		const float BloomZ = LeafZ - 86.f + Random.FRandRange(0.f, 42.f);
+		Build.Box(FVector(Proud(0.35f), BloomY, BloomZ), FRotator(0.f, 0.f, Random.FRandRange(-10.f, 10.f)),
+			FVector(1.f, Random.FRandRange(12.f, 28.f), Random.FRandRange(14.f, 34.f)), RotMat, /*bBlockingCollision*/ false);
 	}
 
 	// Where the rot has gone all the way through: a hole low in one field, with the dark of the
@@ -192,12 +200,12 @@ void ADoorActor::BuildDoorDetail()
 	// put through the lower panel and the wood has never been replaced.
 	for (int32 i = 0; i < 5; ++i)
 	{
-		const float CrackY = LeafY + FMath::FRandRange(-42.f, 42.f);
+		const float CrackY = LeafY + Random.FRandRange(-42.f, 42.f);
 		// Flat against the face and hair-thin. At better than a centimetre proud and nearly two
 		// wide these stood off the door like twigs stuck to it.
-		Build.Box(FVector(Proud(0.45f), CrackY, LeafZ + FMath::FRandRange(-70.f, 60.f)),
-			FRotator(0.f, 0.f, FMath::FRandRange(-3.f, 3.f)),
-			FVector(0.5f, 0.9f, FMath::FRandRange(40.f, 110.f)), CrackMat, /*bBlockingCollision*/ false);
+		Build.Box(FVector(Proud(0.45f), CrackY, LeafZ + Random.FRandRange(-70.f, 60.f)),
+			FRotator(0.f, 0.f, Random.FRandRange(-3.f, 3.f)),
+			FVector(0.5f, 0.9f, Random.FRandRange(40.f, 110.f)), CrackMat, /*bBlockingCollision*/ false);
 	}
 
 	// Hinges, seized with rust, on the hinge edge.
@@ -241,11 +249,11 @@ void ADoorActor::BuildDoorDetail()
 	{
 		for (int32 Streak = 0; Streak < 3; ++Streak)
 		{
-			const float Length = FMath::FRandRange(24.f, 62.f);
+			const float Length = Random.FRandRange(24.f, 62.f);
 			Build.Box(
-				FVector(Proud(0.45f), BleedY[i] + FMath::FRandRange(-9.f, 9.f), BleedFrom[i] - Length * 0.5f),
-				FRotator(0.f, 0.f, FMath::FRandRange(-2.f, 2.f)),
-				FVector(1.2f, FMath::FRandRange(2.5f, 6.f), Length),
+				FVector(Proud(0.45f), BleedY[i] + Random.FRandRange(-9.f, 9.f), BleedFrom[i] - Length * 0.5f),
+				FRotator(0.f, 0.f, Random.FRandRange(-2.f, 2.f)),
+				FVector(1.2f, Random.FRandRange(2.5f, 6.f), Length),
 				RustMat,
 				/*bBlockingCollision*/ false);
 		}
@@ -283,11 +291,19 @@ void ADoorActor::Interact(AActor* Interactor)
 	TargetYaw = bIsOpen ? 100.f : 0.f;
 }
 
-FText ADoorActor::GetInteractPrompt() const
+FText ADoorActor::GetInteractPrompt(const AActor* Interactor) const
 {
 	if (bIsLocked)
 	{
-		return FText::FromString(TEXT("Locked. The iron has rusted into the frame."));
+		// The same test Interact makes. Without it the player picks the key off the sill, walks
+		// back to the door and is told it is locked — the one moment in this room where the way
+		// out has been found, and nothing on screen admits it.
+		const ADetectiveCharacter* Detective = Cast<const ADetectiveCharacter>(Interactor);
+		if (!Detective || !Detective->bHasRoomKey)
+		{
+			return FText::FromString(TEXT("Locked. The iron has rusted into the frame."));
+		}
+		return FText::FromString(TEXT("[E] Unlock the door"));
 	}
 	return bIsOpen ? FText::FromString(TEXT("[E] Close door")) : FText::FromString(TEXT("[E] Open door"));
 }

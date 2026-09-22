@@ -75,8 +75,9 @@ void UDustMotesComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 	// Wind coming through the broken window pushes the air along -Y and lifts it slightly.
 	const float Gust = FMath::Lerp(0.6f, 5.5f, FMath::Clamp(WindStrength, 0.f, 1.f));
 
-	TArray<FTransform> Transforms;
-	Transforms.Reserve(Positions.Num());
+	// Reused rather than rebuilt: three hundred transforms allocated and discarded every frame
+	// for the life of the level, for nothing. Reset keeps the slack it already has.
+	Transforms.Reset(Positions.Num());
 
 	for (int32 i = 0; i < Positions.Num(); ++i)
 	{

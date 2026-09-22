@@ -22,7 +22,14 @@ class UDustMotesComponent : public UActorComponent
 public:
 	UDustMotesComponent();
 
-	/** Volume the motes fill, in the owner's local space. Call before BeginPlay. */
+	/**
+	 * Volume the motes fill, in the owner's local space.
+	 *
+	 * Must be called before the owner's BeginPlay, not from inside it: AActor::BeginPlay
+	 * dispatches BeginPlay to every registered component before it returns, so by the time an
+	 * owner's own BeginPlay body runs, the motes have already been scattered. The owner is
+	 * spawned deferred, so Configure() is the place.
+	 */
 	void ConfigureVolume(const FVector& InExtent, const FVector& InCenter);
 
 	/** Pushed in each frame by the storm so a gust visibly stirs the room's air. */
@@ -38,6 +45,9 @@ private:
 	TArray<FVector> Positions;
 	TArray<float> Phases;
 	TArray<float> Sizes;
+
+	/** Scratch buffer for the per-frame instance update, kept alive so the tick allocates nothing. */
+	TArray<FTransform> Transforms;
 
 	FVector Extent = FVector(400.f, 325.f, 170.f);
 	FVector Center = FVector(0.f, 0.f, 170.f);

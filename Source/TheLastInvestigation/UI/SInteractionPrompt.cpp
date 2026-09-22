@@ -9,6 +9,12 @@ void SInteractionPrompt::Construct(const FArguments& InArgs)
 {
 	TAttribute<FText> PromptText = InArgs._PromptText;
 
+	// The whole widget is a readout, and a readout must never be a mouse target. The SBox fills
+	// the viewport and by default swallows every click that lands on it. Room01 has no UI input
+	// so nothing shows today, but the first pause or menu screen drawn under this would find its
+	// buttons dead.
+	SetVisibility(EVisibility::HitTestInvisible);
+
 	ChildSlot
 	[
 		SNew(SBox)
@@ -22,7 +28,7 @@ void SInteractionPrompt::Construct(const FArguments& InArgs)
 			.Padding(FMargin(18.f, 10.f))
 			.Visibility_Lambda([PromptText]()
 			{
-				return PromptText.Get().IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible;
+				return PromptText.Get().IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible;
 			})
 			[
 				SAssignNew(PromptTextBlock, STextBlock)

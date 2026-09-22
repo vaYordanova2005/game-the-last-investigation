@@ -31,7 +31,7 @@ public:
 	USceneComponent* GetRootScene() const { return RootScene; }
 
 	virtual void Interact(AActor* Interactor) override;
-	virtual FText GetInteractPrompt() const override;
+	virtual FText GetInteractPrompt(const AActor* Interactor) const override;
 
 	bool WasExamined() const { return bExamined; }
 

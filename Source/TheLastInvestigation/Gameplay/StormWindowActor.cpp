@@ -831,8 +831,9 @@ void AStormWindowActor::TickRain(float DeltaTime)
 	const float WindDrift = FMath::Lerp(180.f, 620.f, Gust);
 	const float Slant = FMath::Lerp(-10.f, -30.f, Gust);
 
-	TArray<FTransform> Transforms;
-	Transforms.Reserve(RainPositions.Num());
+	// Reused across frames rather than rebuilt: four hundred-odd transforms allocated and thrown
+	// away every tick is a heap churn nothing in this scene has any use for. Reset keeps the slack.
+	RainTransforms.Reset(RainPositions.Num());
 
 	for (int32 i = 0; i < RainPositions.Num(); ++i)
 	{
@@ -848,16 +849,17 @@ void AStormWindowActor::TickRain(float DeltaTime)
 			Position.Z = Random.FRandRange(700.f, 900.f);
 		}
 
-		Transforms.Add(FTransform(FRotator(0.f, 0.f, Slant), Position, FVector(0.008f, 0.008f, 0.45f)));
+		RainTransforms.Add(FTransform(FRotator(0.f, 0.f, Slant), Position, FVector(0.008f, 0.008f, 0.45f)));
 	}
 
-	RainInstances->BatchUpdateInstancesTransforms(0, Transforms, /*bWorldSpace*/ false, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ true);
+	RainInstances->BatchUpdateInstancesTransforms(0, RainTransforms, /*bWorldSpace*/ false, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ true);
 }
 
 void AStormWindowActor::BeginStrike()
 {
-	// Each strike is a short burst. The first sub-flash is the brightest; the rest are the
-	// flickering afterbeats that make lightning feel like a discharge rather than a light switch.
+	// Each strike is a short burst of two to five sub-flashes (RandRange is inclusive at both
+	// ends). The first is the brightest; the rest are the flickering afterbeats that make
+	// lightning feel like a discharge rather than a light switch.
 	SubFlashesRemaining = Random.RandRange(2, 5);
 	StrikeIntensity = Random.FRandRange(StrikeLux.X, StrikeLux.Y);
 	bSubFlashOn = true;

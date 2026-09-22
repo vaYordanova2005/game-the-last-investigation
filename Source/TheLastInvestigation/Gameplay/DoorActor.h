@@ -20,7 +20,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 	virtual void Interact(AActor* Interactor) override;
-	virtual FText GetInteractPrompt() const override;
+	virtual FText GetInteractPrompt(const AActor* Interactor) const override;
 
 	UPROPERTY(EditAnywhere, Category = "Door")
 	bool bIsLocked = true;
@@ -46,4 +46,7 @@ private:
 
 	bool bIsOpen = false;
 	float TargetYaw = 0.f;
+
+	/** Fixed seed, so the door's rot, splits and rust streaks are the same door every session. */
+	FRandomStream Random;
 };

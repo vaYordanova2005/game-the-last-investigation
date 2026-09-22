@@ -203,6 +203,30 @@ FRoomBuilder::FRoomBuilder(AActor* InOwner, USceneComponent* InParent)
 {
 }
 
+void FRoomBuilder::AddReferencedObjects(FReferenceCollector& Collector)
+{
+	// Everything the builder is the sole owner of while a build pass is running. SurfaceOrigins
+	// is keyed on material pointers, but every one of those keys is a value in SurfaceCache or
+	// TilingCache and so is already held below — which is just as well, since rooting a key in
+	// place would be rehashing a map from under itself.
+	for (TPair<FString, TObjectPtr<UMaterialInstanceDynamic>>& Entry : SurfaceCache)
+	{
+		Collector.AddReferencedObject(Entry.Value);
+	}
+	for (TPair<FString, TObjectPtr<UMaterialInstanceDynamic>>& Entry : TilingCache)
+	{
+		Collector.AddReferencedObject(Entry.Value);
+	}
+	for (TPair<FString, TObjectPtr<UMaterialInstanceDynamic>>& Entry : DecalCache)
+	{
+		Collector.AddReferencedObject(Entry.Value);
+	}
+	for (TPair<UMaterialInterface*, FSurfaceOrigin>& Entry : SurfaceOrigins)
+	{
+		Collector.AddReferencedObject(Entry.Value.Asset);
+	}
+}
+
 UMaterialInstanceDynamic* FRoomBuilder::Flat(const FLinearColor& Color, float Roughness, float Metallic) const
 {
 	UMaterialInterface* BaseMaterial = LoadFlatBaseMaterial();
@@ -278,7 +302,7 @@ UMaterialInstanceDynamic* FRoomBuilder::Surface(const FRoomSurface& Set, const F
 	}
 
 	const FString Key = FString::Printf(TEXT("%s|%s|%.2f"), Set.Set, *Tint.ToString(), RoughnessScale);
-	if (UMaterialInstanceDynamic** Found = SurfaceCache.Find(Key))
+	if (TObjectPtr<UMaterialInstanceDynamic>* Found = SurfaceCache.Find(Key))
 	{
 		return *Found;
 	}
@@ -359,7 +383,7 @@ UMaterialInterface* FRoomBuilder::ResolveTiling(UMaterialInterface* Mat, const F
 	const float OffsetV = ((CropSeed / CropCount) % CropCount) / static_cast<float>(CropCount);
 
 	const FString Key = FString::Printf(TEXT("%p|%.2f|%.2f|%.2f|%.2f"), Mat, TilingU, TilingV, OffsetU, OffsetV);
-	if (UMaterialInstanceDynamic** Found = TilingCache.Find(Key))
+	if (TObjectPtr<UMaterialInstanceDynamic>* Found = TilingCache.Find(Key))
 	{
 		return *Found;
 	}
@@ -397,7 +421,7 @@ UMaterialInstanceDynamic* FRoomBuilder::Cobweb(const FLinearColor& Tint, float O
 	}
 
 	const FString Key = FString::Printf(TEXT("web|%s|%.2f|%.2f"), *Tint.ToString(), Opacity, Sharpness);
-	if (UMaterialInstanceDynamic** Found = DecalCache.Find(Key))
+	if (TObjectPtr<UMaterialInstanceDynamic>* Found = DecalCache.Find(Key))
 	{
 		return *Found;
 	}
@@ -490,7 +514,7 @@ UDecalComponent* FRoomBuilder::Stain(const FRoomSurface& Set, const FVector& Loc
 		Set.Set, *Tint.ToString(), Opacity, EdgeNoise, RoughnessScale, TilingU, TilingV, OffsetU, OffsetV);
 
 	UMaterialInstanceDynamic* Instance = nullptr;
-	if (UMaterialInstanceDynamic** Found = DecalCache.Find(Key))
+	if (TObjectPtr<UMaterialInstanceDynamic>* Found = DecalCache.Find(Key))
 	{
 		Instance = *Found;
 	}
@@ -543,7 +567,7 @@ UDecalComponent* FRoomBuilder::Crack(const FVector& Location, const FRotator& Ro
 
 	const FString Key = FString::Printf(TEXT("crack|%.2f|%.2f"), Opacity, Sharpness);
 	UMaterialInstanceDynamic* Instance = nullptr;
-	if (UMaterialInstanceDynamic** Found = DecalCache.Find(Key))
+	if (TObjectPtr<UMaterialInstanceDynamic>* Found = DecalCache.Find(Key))
 	{
 		Instance = *Found;
 	}
@@ -578,7 +602,7 @@ UMaterialInstanceDynamic* FRoomBuilder::GlassCrack(const FLinearColor& Tint, flo
 	}
 
 	const FString Key = FString::Printf(TEXT("glasscrack|%s|%.3f|%.3f|%.3f"), *Tint.ToString(), Opacity, Haze, Roughness);
-	if (UMaterialInstanceDynamic** Found = DecalCache.Find(Key))
+	if (TObjectPtr<UMaterialInstanceDynamic>* Found = DecalCache.Find(Key))
 	{
 		return *Found;
 	}
@@ -897,8 +921,14 @@ UProceduralMeshComponent* FRoomBuilder::Pane(const FVector& Centre, const FRotat
 	// The fix is not a finer grid, it is a different question — a cell goes if the split crosses
 	// the cell *at all*, which makes the crack exactly one cell wide and therefore continuous by
 	// construction, and the grid step is then what sets how fine a crack can be.
-	const int32 Cols = FMath::Clamp(FMath::RoundToInt(SizeUU.X / 0.45f), 16, 140);
-	const int32 Rows = FMath::Clamp(FMath::RoundToInt(SizeUU.Y / 0.45f), 16, 140);
+	// ...but only where there is damage to resolve. An undamaged pane is a flat rectangle, and
+	// a flat rectangle needs four vertices, not nine thousand. Fourteen of this window's sixteen
+	// panes are whole, and at the crack grid each of them was costing seventeen thousand
+	// triangles to describe a sheet of glass that two triangles describe exactly.
+	const bool bWhole = Damage.HoleRadiusCm <= 0.f && Damage.StarRays == 0 && Damage.EdgeCracks == 0;
+
+	const int32 Cols = bWhole ? 2 : FMath::Clamp(FMath::RoundToInt(SizeUU.X / 0.45f), 16, 140);
+	const int32 Rows = bWhole ? 2 : FMath::Clamp(FMath::RoundToInt(SizeUU.Y / 0.45f), 16, 140);
 	const float CellDiagonal = FVector2D(SizeUU.X / Cols, SizeUU.Y / Rows).Size();
 
 	FRandomStream Break(Seed);

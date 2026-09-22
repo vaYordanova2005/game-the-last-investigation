@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UObject/GCObject.h"
 
 class AActor;
 class USceneComponent;
@@ -130,11 +131,22 @@ struct FPaneDamage
  *
  * Keep one builder alive for a whole build pass: it caches the material instances it creates, and
  * a fresh builder per function would make hundreds of duplicates.
+ *
+ * An FGCObject because those caches are the builder's own strong references to UObjects, and a
+ * plain C++ class cannot hold a UPROPERTY. In practice every instance it hands out is attached to
+ * a component almost immediately and kept alive that way, but between creating one and assigning
+ * it the only thing referencing it is a bare pointer in a TMap — and a collection landing in that
+ * window would leave the cache holding dangling pointers it would go on handing out.
  */
-class FRoomBuilder
+class FRoomBuilder : public FGCObject
 {
 public:
 	FRoomBuilder(AActor* InOwner, USceneComponent* InParent);
+
+	//~ FGCObject
+	virtual void AddReferencedObjects(FReferenceCollector& Collector) override;
+	virtual FString GetReferencerName() const override { return TEXT("FRoomBuilder"); }
+	//~ End FGCObject
 
 	/**
 	 * A dynamic instance of a photographed surface set.
@@ -319,7 +331,7 @@ private:
 	 */
 	struct FSurfaceOrigin
 	{
-		UMaterialInterface* Asset = nullptr;
+		TObjectPtr<UMaterialInterface> Asset = nullptr;
 		FLinearColor Tint = FLinearColor::White;
 		float RoughnessScale = 1.f;
 		float TexelSizeCm = 100.f;
@@ -332,8 +344,8 @@ private:
 	UDecalComponent* AddDecal(UMaterialInterface* Mat, const FVector& Location, const FRotator& Rotation, const FVector2D& SizeUU);
 
 	/** Base instance per surface set + tint, and the per-size variants derived from them. */
-	TMap<FString, UMaterialInstanceDynamic*> SurfaceCache;
-	TMap<FString, UMaterialInstanceDynamic*> TilingCache;
-	TMap<FString, UMaterialInstanceDynamic*> DecalCache;
+	TMap<FString, TObjectPtr<UMaterialInstanceDynamic>> SurfaceCache;
+	TMap<FString, TObjectPtr<UMaterialInstanceDynamic>> TilingCache;
+	TMap<FString, TObjectPtr<UMaterialInstanceDynamic>> DecalCache;
 	TMap<UMaterialInterface*, FSurfaceOrigin> SurfaceOrigins;
 };

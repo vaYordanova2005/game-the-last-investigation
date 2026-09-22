@@ -30,7 +30,7 @@ void AKeyPickupActor::Interact(AActor* Interactor)
 	Destroy();
 }
 
-FText AKeyPickupActor::GetInteractPrompt() const
+FText AKeyPickupActor::GetInteractPrompt(const AActor* /*Interactor*/) const
 {
 	return FText::FromString(TEXT("[E] Pick up key"));
 }

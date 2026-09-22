@@ -238,6 +238,21 @@ void ADetectiveCharacter::UpdateLanternSway(float DeltaTime)
 
 	// Turn lag. The arm is heavy: a fast look drags it behind the camera and it swings back after.
 	const FRotator Control = GetControlRotation();
+
+	// Primed on the first frame the lantern is actually swayed, not at construction and not in
+	// PossessedBy. The previous angles started at zero while the waking pose is yaw 128, pitch -7,
+	// so the first tick measured a turn of a hundred and twenty-eight degrees in one frame: the
+	// lag target slammed into its clamp and took half a second to crawl back. That is the frame
+	// the detective opens his eyes on — the lantern was being thrown aside in it. Priming in
+	// PossessedBy does not help either, because the game mode sets the waking rotation *after*
+	// possession, so the pose would still arrive as a jump.
+	if (!bSwayPrimed)
+	{
+		PreviousControlYaw = Control.Yaw;
+		PreviousControlPitch = Control.Pitch;
+		bSwayPrimed = true;
+	}
+
 	const float YawRate = FMath::UnwindDegrees(Control.Yaw - PreviousControlYaw) / DeltaTime;
 	const float PitchRate = FMath::UnwindDegrees(Control.Pitch - PreviousControlPitch) / DeltaTime;
 	PreviousControlYaw = Control.Yaw;

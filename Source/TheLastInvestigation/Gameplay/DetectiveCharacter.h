@@ -90,4 +90,7 @@ private:
 	FVector SwayLag = FVector::ZeroVector;
 	float PreviousControlYaw = 0.f;
 	float PreviousControlPitch = 0.f;
+
+	/** False until the turn-lag has seeded itself from a real control rotation. See UpdateLanternSway. */
+	bool bSwayPrimed = false;
 };

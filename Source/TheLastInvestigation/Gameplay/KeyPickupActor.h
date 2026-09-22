@@ -17,7 +17,7 @@ public:
 	AKeyPickupActor();
 
 	virtual void Interact(AActor* Interactor) override;
-	virtual FText GetInteractPrompt() const override;
+	virtual FText GetInteractPrompt(const AActor* Interactor) const override;
 
 private:
 	UPROPERTY(VisibleAnywhere, Category = "Key")

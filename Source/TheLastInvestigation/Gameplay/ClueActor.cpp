@@ -23,7 +23,7 @@ void AClueActor::Interact(AActor* Interactor)
 	bExamined = true;
 }
 
-FText AClueActor::GetInteractPrompt() const
+FText AClueActor::GetInteractPrompt(const AActor* /*Interactor*/) const
 {
 	if (bExamined && !Description.IsEmpty())
 	{

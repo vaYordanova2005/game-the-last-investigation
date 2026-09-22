@@ -56,7 +56,7 @@ FText UInteractionComponent::GetCurrentPromptText() const
 	{
 		if (const IInteractableInterface* Interactable = Cast<const IInteractableInterface>(Target))
 		{
-			return Interactable->GetInteractPrompt();
+			return Interactable->GetInteractPrompt(GetOwner());
 		}
 	}
 	return FText::GetEmpty();
