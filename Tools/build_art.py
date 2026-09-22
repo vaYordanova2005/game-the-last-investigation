@@ -18,6 +18,7 @@ What it produces:
     /Game/Materials/M_RoomDecal     projected grime, damp and stains — ragged-edged, not rectangles
     /Game/Materials/M_RoomCrack     projected fissures, drawn from noise rather than from a texture
     /Game/Materials/M_RoomWeb       cobweb: a net of filaments, also drawn from noise
+    /Game/Materials/M_RoomGlassCrack the fracture on a struck pane, from the baked crack map
     /Game/Materials/MI_<set>        an instance per texture set (floor, wallpaper, plaster, ...)
     /Game/Textures/T_*              the imported maps
     /Game/Meshes/<Model>            the imported props, with their materials already assigned
@@ -40,6 +41,7 @@ EMISSIVE_PATH = MATERIAL_PACKAGE + "/M_RoomEmissive"
 DECAL_PATH = MATERIAL_PACKAGE + "/M_RoomDecal"
 CRACK_PATH = MATERIAL_PACKAGE + "/M_RoomCrack"
 WEB_PATH = MATERIAL_PACKAGE + "/M_RoomWeb"
+GLASS_CRACK_PATH = MATERIAL_PACKAGE + "/M_RoomGlassCrack"
 
 ASSET_TOOLS = unreal.AssetToolsHelpers.get_asset_tools()
 MAT_LIB = unreal.MaterialEditingLibrary
@@ -958,6 +960,196 @@ def build_models(master):
         unreal.log("Mesh {} ({} slots, {} texture groups)".format(model_id, len(slot_names), len(by_slot)))
 
 
+
+GENERATED_SOURCE = os.path.join(PROJECT_DIR, "Art", "Source", "Generated")
+
+
+def import_generated(file_name, asset_name, compression, sampler_type):
+    """
+    One of the maps Tools/make_glass_crack.py bakes.
+
+    Kept out of import_texture and out of Art/Source/Textures on purpose: that folder is scanned
+    as a library of photographed surface *sets*, keyed by the map suffix in the filename, and a
+    pair of one-off maps dropped into it would come back out as a phantom material instance for a
+    surface that does not exist. These are not a surface. They are one object's damage.
+    """
+    path = os.path.join(GENERATED_SOURCE, file_name)
+    if not os.path.isfile(path):
+        unreal.log_error("Missing {} — run: python Tools/make_glass_crack.py".format(path))
+        return None
+
+    asset_path = "{}/{}".format(TEXTURE_PACKAGE, asset_name)
+    task = unreal.AssetImportTask()
+    task.filename = path
+    task.destination_path = TEXTURE_PACKAGE
+    task.destination_name = asset_name
+    task.automated = True
+    task.replace_existing = True
+    task.save = True
+    ASSET_TOOLS.import_asset_tasks([task])
+
+    texture = ASSET_LIB.load_asset(asset_path)
+    if not texture:
+        unreal.log_error("Failed to import " + path)
+        return None
+
+    texture.set_editor_property("compression_settings", compression)
+    # Linear, both of them. The mask is three unrelated numbers packed into R/G/B and the normal
+    # map is a direction; running either through a gamma curve is meaningless, and a sampler
+    # whose type disagrees with its texture fails the whole material to WorldGridMaterial.
+    texture.set_editor_property("srgb", False)
+    # Clamped, so that nothing of the star repeats if a UV ever strays outside the sheet. A
+    # second, ghostly impact in the corner of a pane is the kind of thing nobody can explain and
+    # everybody can see.
+    texture.set_editor_property("address_x", unreal.TextureAddress.TA_CLAMP)
+    texture.set_editor_property("address_y", unreal.TextureAddress.TA_CLAMP)
+    # Biased one level sharper than the chain would pick. Mipmapping is an average, and the
+    # average of a hairline and the glass either side of it is glass: at the distance this window
+    # is usually looked at, a split lands on a third of a pixel and the correct mip is the one
+    # where it has been averaged out of existence. Every other texture in the room is a surface,
+    # where that average is exactly right; this one is a line, where it is the whole problem.
+    texture.set_editor_property("lod_bias", -1)
+    ASSET_LIB.save_loaded_asset(texture)
+    return texture, sampler_type
+
+
+def build_glass_crack_master():
+    """
+    The fracture on a struck pane, sampled from the map Tools/make_glass_crack.py bakes.
+
+        Opacity   = Mask.R * Opacity + Mask.B * Haze
+        BaseColor = Tint * lerp(0.42, 1, Mask.G)
+        Normal    = the groove normals
+        Roughness = RoughnessBase
+
+    WHY A TEXTURE, in a project that builds everything else out of primitives and noise:
+
+    This material used to draw the network itself, from the contour of a signed noise field in
+    polar coordinates about the impact — the same trick that draws the cracks in the plaster and
+    the cobwebs in the corners, and it is the right trick for both of those. It is the wrong one
+    here, and the reason is worth keeping: the contour of a smooth field is a smooth meandering
+    curve. It wanders, it closes loops, it doubles back on itself. Sharpening it, tapering it and
+    fading it out only ever produced a tidier scribble, because what was wrong was not the width
+    or the reach — it was that the line had no idea where the stone hit.
+
+    A fracture is a set of very nearly straight lines out of a single point, kinking at corners,
+    forking where there was energy to spare, dying where there was not, and tied to each other by
+    short chords across the gaps. Straightness and a common origin are the whole of what the eye
+    reads as broken glass, and neither is something a noise field has. A generator can do it in
+    thirty lines; a material graph cannot do it at all.
+
+    What stays in the material is what a texture cannot know: the tint, how far the network has
+    opened, and the *lighting* — which is the other half of why a painted crack reads as painted.
+    The groove normals give every split two faces tilted opposite ways, so one of them catches
+    the lantern and the other does not, and which one changes as the player moves.
+    """
+    if ASSET_LIB.does_asset_exist(GLASS_CRACK_PATH):
+        ASSET_LIB.delete_asset(GLASS_CRACK_PATH)
+
+    mask = import_generated("glass_crack_mask.png", "T_glass_crack_mask",
+                            unreal.TextureCompressionSettings.TC_BC7,
+                            unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR)
+    normal = import_generated("glass_crack_nor.png", "T_glass_crack_nor",
+                              unreal.TextureCompressionSettings.TC_NORMALMAP,
+                              unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+    if not mask or not normal:
+        return
+
+    material = ASSET_TOOLS.create_asset(
+        "M_RoomGlassCrack", MATERIAL_PACKAGE, unreal.Material, unreal.MaterialFactoryNew())
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    material.set_editor_property("two_sided", True)
+    # Forward shading, because a crack is only visible at all through specular: the fracture
+    # faces are polished glass and what they do is *glint*. The cheaper translucency modes give
+    # a translucent surface diffuse lighting and no highlight, which lights the whole network
+    # evenly — and a network lit evenly is a drawing of one, whatever shape it is.
+    for mode_name in ("TLM_SURFACE_FORWARD_SHADING", "TLM_SURFACE_PER_PIXEL_LIGHTING", "TLM_SURFACE"):
+        mode = getattr(unreal.TranslucencyLightingMode, mode_name, None)
+        if mode is not None:
+            material.set_editor_property("translucency_lighting_mode", mode)
+            break
+
+    def scalar(name, value, x, y):
+        node = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionScalarParameter, x, y)
+        node.set_editor_property("parameter_name", name)
+        node.set_editor_property("default_value", value)
+        return node
+
+    def sampler(name, imported, x, y):
+        texture, sampler_type = imported
+        node = MAT_LIB.create_material_expression(
+            material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
+        node.set_editor_property("parameter_name", name)
+        node.set_editor_property("texture", texture)
+        node.set_editor_property("sampler_type", sampler_type)
+        return node
+
+    mask_node = sampler("CrackMask", mask, -900, -100)
+    normal_node = sampler("CrackNormal", normal, -900, 420)
+
+    # Opacity: the splits themselves, plus a trace of the micro-fracture haze that runs alongside
+    # them. The haze is deliberately feeble — it is the knob that turns the whole star into a
+    # glow the moment it is given any rope.
+    opacity_param = scalar("Opacity", 0.95, -520, 60)
+    haze_param = scalar("Haze", 0.07, -520, 210)
+
+    splits = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -300, 20)
+    MAT_LIB.connect_material_expressions(mask_node, "R", splits, "A")
+    MAT_LIB.connect_material_expressions(opacity_param, "", splits, "B")
+
+    haze = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -300, 200)
+    MAT_LIB.connect_material_expressions(mask_node, "B", haze, "A")
+    MAT_LIB.connect_material_expressions(haze_param, "", haze, "B")
+
+    total = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionAdd, -120, 110)
+    MAT_LIB.connect_material_expressions(splits, "", total, "A")
+    MAT_LIB.connect_material_expressions(haze, "", total, "B")
+
+    opacity = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionClamp, 60, 110)
+    MAT_LIB.connect_material_expressions(total, "", opacity, "")
+    opacity.set_editor_property("min_default", 0.0)
+    opacity.set_editor_property("max_default", 1.0)
+
+    # Not every stretch of a split scatters the same amount of light — some of it is a clean
+    # parting the eye can barely find and some of it is crushed. That is the G channel.
+    variation = MAT_LIB.create_material_expression(
+        material, unreal.MaterialExpressionLinearInterpolate, -300, -180)
+    variation.set_editor_property("const_a", 0.42)
+    variation.set_editor_property("const_b", 1.0)
+    MAT_LIB.connect_material_expressions(mask_node, "G", variation, "Alpha")
+
+    tint = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -520, -330)
+    tint.set_editor_property("parameter_name", "Tint")
+    tint.set_editor_property("default_value", unreal.LinearColor(0.60, 0.63, 0.68, 1.0))
+
+    base = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -80, -260)
+    MAT_LIB.connect_material_expressions(tint, "", base, "A")
+    MAT_LIB.connect_material_expressions(variation, "", base, "B")
+
+    # Zero by default, and it should stay zero. It is here because a crack that cannot be seen at
+    # all until the lantern is on it may yet turn out to be too subtle, and the honest fix for
+    # that is a trace of self-illumination rather than a brighter tint — a brighter tint takes
+    # the *dark* stretches up with it and flattens the whole network back into a line drawing.
+    glow_param = scalar("Glow", 0.0, -80, -420)
+    glow = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, 120, -400)
+    MAT_LIB.connect_material_expressions(base, "", glow, "A")
+    MAT_LIB.connect_material_expressions(glow_param, "", glow, "B")
+
+    roughness = scalar("RoughnessBase", 0.16, -80, 330)
+    specular = scalar("Specular", 1.0, -80, 470)
+
+    MAT_LIB.connect_material_property(base, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    MAT_LIB.connect_material_property(glow, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MAT_LIB.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    MAT_LIB.connect_material_property(normal_node, "", unreal.MaterialProperty.MP_NORMAL)
+    MAT_LIB.connect_material_property(roughness, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    MAT_LIB.connect_material_property(specular, "", unreal.MaterialProperty.MP_SPECULAR)
+
+    MAT_LIB.recompile_material(material)
+    ASSET_LIB.save_loaded_asset(material)
+    unreal.log("Built " + GLASS_CRACK_PATH)
+
+
 def stage_requested():
     """-ArtStage=<name> on the command line, or None for the whole pipeline.
 
@@ -989,6 +1181,7 @@ STANDALONE_STAGES = {
     "emissive": build_emissive_master,
     "crack": build_crack_master,
     "web": build_web_master,
+    "glasscrack": build_glass_crack_master,
     "models": rebuild_models,
 }
 
@@ -1020,6 +1213,7 @@ def run():
     build_decal_master(defaults=defaults)
     build_crack_master()
     build_web_master()
+    build_glass_crack_master()
 
     build_surface_instances(master, sets)
     build_models(master)

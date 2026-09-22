@@ -562,6 +562,39 @@ UDecalComponent* FRoomBuilder::Crack(const FVector& Location, const FRotator& Ro
 	return AddDecal(Instance, Location, Rotation, SizeUU);
 }
 
+UMaterialInstanceDynamic* FRoomBuilder::GlassCrack(const FLinearColor& Tint, float Opacity,
+	float Haze, float Roughness)
+{
+	if (!Owner)
+	{
+		return nullptr;
+	}
+
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_RoomGlassCrack.M_RoomGlassCrack"));
+	if (!Base)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("M_RoomGlassCrack not found — run Tools/build_art.py -ArtStage=glasscrack"));
+		return nullptr;
+	}
+
+	const FString Key = FString::Printf(TEXT("glasscrack|%s|%.3f|%.3f|%.3f"), *Tint.ToString(), Opacity, Haze, Roughness);
+	if (UMaterialInstanceDynamic** Found = DecalCache.Find(Key))
+	{
+		return *Found;
+	}
+
+	UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(Base, Owner);
+	if (Instance)
+	{
+		Instance->SetVectorParameterValue(TEXT("Tint"), Tint);
+		Instance->SetScalarParameterValue(TEXT("Opacity"), Opacity);
+		Instance->SetScalarParameterValue(TEXT("Haze"), Haze);
+		Instance->SetScalarParameterValue(TEXT("RoughnessBase"), Roughness);
+		DecalCache.Add(Key, Instance);
+	}
+	return Instance;
+}
+
 UStaticMeshComponent* FRoomBuilder::Add(UStaticMesh* Mesh, const FVector& Location, const FRotator& Rotation, const FVector& SizeUU, UMaterialInterface* Mat, bool bBlockingCollision)
 {
 	if (!Owner || !ParentComponent || !Mesh)
@@ -845,6 +878,296 @@ UProceduralMeshComponent* FRoomBuilder::Cloth(const FVector& Centre, const FRota
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Mesh->RegisterComponent();
 	Owner->AddInstanceComponent(Mesh);
+	return Mesh;
+}
+
+UProceduralMeshComponent* FRoomBuilder::Pane(const FVector& Centre, const FRotator& Facing, const FVector2D& SizeUU,
+	const FPaneDamage& Damage, int32 Seed, UMaterialInterface* Mat, UMaterialInterface* SplitMat)
+{
+	if (!Owner || !ParentComponent)
+	{
+		return nullptr;
+	}
+
+	// Four and a half millimetres a step, and a crack is one cell wide.
+	//
+	// A crack cut by testing the four corners of every cell comes out *dashed*: a split three
+	// millimetres across only removes a cell when it happens to pass within a millimetre and a
+	// half of one of its corners, and on a six-millimetre grid that is a miss more often than not.
+	// The fix is not a finer grid, it is a different question — a cell goes if the split crosses
+	// the cell *at all*, which makes the crack exactly one cell wide and therefore continuous by
+	// construction, and the grid step is then what sets how fine a crack can be.
+	const int32 Cols = FMath::Clamp(FMath::RoundToInt(SizeUU.X / 0.45f), 16, 140);
+	const int32 Rows = FMath::Clamp(FMath::RoundToInt(SizeUU.Y / 0.45f), 16, 140);
+	const float CellDiagonal = FVector2D(SizeUU.X / Cols, SizeUU.Y / Rows).Size();
+
+	FRandomStream Break(Seed);
+	const float Grain = Break.FRandRange(0.f, 30.f);
+	const FVector2D BreakCm((Damage.BreakAt.X - 0.5f) * SizeUU.X, (Damage.BreakAt.Y - 0.5f) * SizeUU.Y);
+	const FVector2D HalfSize = SizeUU * 0.5f;
+
+	// A crack is a *gap* in the glass rather than a line drawn on it, which is the whole reason
+	// this moved into the mesh. Drawn as bars it was a heap of sticks lying on the pane — bars
+	// have to be thick enough to render, and anything thick enough to render shows its side. A
+	// missing three millimetres shows nothing but the two edges either side of it, which is what
+	// a split in glass is.
+	struct FSplit { FVector2D From; FVector2D To; float Half; };
+	TArray<FSplit> Splits;
+	Splits.Reserve(64);
+
+	// One crack, wandering. It kinks as it goes because it follows whatever is weakest in front of
+	// it, and it narrows because it is running out of the energy that drove it.
+	auto Wander = [&](FVector2D At, float Bearing, float Length, float Half, int32 Legs)
+	{
+		for (int32 Leg = 0; Leg < Legs; ++Leg)
+		{
+			const float Step = Length / Legs;
+			const float Radians = FMath::DegreesToRadians(Bearing);
+			FVector2D To = At + FVector2D(FMath::Cos(Radians), FMath::Sin(Radians)) * Step;
+			To.X = FMath::Clamp(To.X, -HalfSize.X, HalfSize.X);
+			To.Y = FMath::Clamp(To.Y, -HalfSize.Y, HalfSize.Y);
+
+			const float Taper = Half * FMath::Lerp(1.f, 0.42f, Leg / static_cast<float>(FMath::Max(Legs, 1)));
+			Splits.Add({ At, To, Taper });
+
+			// A fork now and then: one side of a split takes over and the other stops.
+			if (Break.FRand() < 0.3f && Splits.Num() < 56)
+			{
+				const float ForkRadians = FMath::DegreesToRadians(Bearing + Break.FRandRange(-58.f, 58.f));
+				FVector2D Fork = To + FVector2D(FMath::Cos(ForkRadians), FMath::Sin(ForkRadians)) * Step * Break.FRandRange(0.35f, 0.8f);
+				Fork.X = FMath::Clamp(Fork.X, -HalfSize.X, HalfSize.X);
+				Fork.Y = FMath::Clamp(Fork.Y, -HalfSize.Y, HalfSize.Y);
+				Splits.Add({ To, Fork, Taper * 0.7f });
+			}
+
+			At = To;
+			Bearing += Break.FRandRange(-19.f, 19.f);
+		}
+	};
+
+	// The star, if it was hit: splits running out from the point of impact.
+	const float Span = FMath::Min(SizeUU.X, SizeUU.Y);
+	for (int32 Ray = 0; Ray < Damage.StarRays; ++Ray)
+	{
+		const float Bearing = Ray * (360.f / FMath::Max(Damage.StarRays, 1)) + Break.FRandRange(-15.f, 15.f);
+		Wander(BreakCm, Bearing, Span * Break.FRandRange(0.3f, 0.85f), 0.06f, 3);
+	}
+
+	// And the splits a house puts in glass on its own: in from an edge, where the pane is held and
+	// the frame has been moving for fifty years. These start at the rebate because that is where
+	// the load is, which is also why they are the cracks that turn up in windows nobody touched.
+	for (int32 Crack = 0; Crack < Damage.EdgeCracks; ++Crack)
+	{
+		const int32 Side = Break.RandRange(0, 3);
+		const float Along = Break.FRandRange(-0.42f, 0.42f);
+		FVector2D At;
+		float Bearing = 0.f;
+		switch (Side)
+		{
+		case 0: At = FVector2D(-HalfSize.X, Along * SizeUU.Y); Bearing = 0.f; break;
+		case 1: At = FVector2D(HalfSize.X, Along * SizeUU.Y); Bearing = 180.f; break;
+		case 2: At = FVector2D(Along * SizeUU.X, -HalfSize.Y); Bearing = 90.f; break;
+		default: At = FVector2D(Along * SizeUU.X, HalfSize.Y); Bearing = -90.f; break;
+		}
+		Wander(At, Bearing + Break.FRandRange(-42.f, 42.f), Span * Break.FRandRange(0.35f, 1.1f), 0.05f, 3);
+	}
+
+	// Three wedges taken out around the hole, so its outline has corners: a piece leaves a pane
+	// along the cracks that freed it, and a hole with no corners is a drilled one.
+	struct FSlit { float Bearing; float Spread; float Reach; };
+	FSlit Slits[3];
+	for (FSlit& Slit : Slits)
+	{
+		Slit.Bearing = Break.FRandRange(0.f, 2.f * PI);
+		Slit.Spread = Break.FRandRange(0.1f, 0.34f);
+		Slit.Reach = Break.FRandRange(1.35f, 2.3f);
+	}
+
+	auto Solid = [&](float U, float V) -> bool
+	{
+		const FVector2D At((U - 0.5f) * SizeUU.X, (V - 0.5f) * SizeUU.Y);
+
+		if (Damage.HoleRadiusCm > 0.f)
+		{
+			const FVector2D Offset = At - BreakCm;
+			const float Distance = Offset.Size();
+			if (Distance < KINDA_SMALL_NUMBER)
+			{
+				return false;
+			}
+			const float Bearing = FMath::Atan2(Offset.Y, Offset.X);
+
+			// The edge of the hole as a radius that wanders with the angle. Sampled on a circle so
+			// it joins up at the far side instead of seaming where the angle wraps.
+			float Edge = Damage.HoleRadiusCm * (0.66f + 0.5f * FMath::Abs(FMath::PerlinNoise2D(
+				FVector2D(FMath::Cos(Bearing) * 2.3f + Grain, FMath::Sin(Bearing) * 2.3f))));
+
+			for (const FSlit& Slit : Slits)
+			{
+				const float Off = FMath::Abs(FMath::UnwindRadians(Bearing - Slit.Bearing));
+				if (Off < Slit.Spread)
+				{
+					const float Along = 1.f - Off / Slit.Spread;
+					Edge = FMath::Max(Edge, Damage.HoleRadiusCm * FMath::Lerp(1.f, Slit.Reach, Along * Along));
+				}
+			}
+
+			if (Distance < Edge)
+			{
+				return false;
+			}
+		}
+
+		return true;
+	};
+
+	// The splits are tested against the middle of a cell rather than its corners, with the cell's
+	// own half-diagonal added to the width, so a cell goes whenever a split crosses it.
+	auto Fractured = [&](float U, float V) -> bool
+	{
+		if (SplitMat)
+		{
+			return false; // drawn, not cut
+		}
+		const FVector2D At((U - 0.5f) * SizeUU.X, (V - 0.5f) * SizeUU.Y);
+		for (const FSplit& Fracture : Splits)
+		{
+			const FVector2D Run = Fracture.To - Fracture.From;
+			const float LengthSq = Run.SizeSquared();
+			const float Along = LengthSq > KINDA_SMALL_NUMBER
+				? FMath::Clamp(FVector2D::DotProduct(At - Fracture.From, Run) / LengthSq, 0.f, 1.f)
+				: 0.f;
+			if (FVector2D::Distance(At, Fracture.From + Run * Along) < Fracture.Half + CellDiagonal * 0.5f)
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
+	const int32 Grid = Cols * Rows;
+	TArray<FVector> Verts;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UVs;
+	TArray<FProcMeshTangent> Tangents;
+	TArray<int32> Tris;
+	Verts.SetNum(Grid);
+	Normals.Init(FVector::ZeroVector, Grid);
+	UVs.SetNum(Grid);
+	Tangents.SetNum(Grid);
+
+	for (int32 Col = 0; Col < Cols; ++Col)
+	{
+		for (int32 Row = 0; Row < Rows; ++Row)
+		{
+			const float U = Col / static_cast<float>(Cols - 1);
+			const float V = Row / static_cast<float>(Rows - 1);
+			const int32 Index = Col * Rows + Row;
+			Verts[Index] = FVector((U - 0.5f) * SizeUU.X, (V - 0.5f) * SizeUU.Y, 0.f);
+			UVs[Index] = FVector2D(U, V);
+		}
+	}
+
+	// CRITICAL: wound so the face the player is looking at is the *front* face, and on a
+	// translucent material that is not a culling question, it is the whole appearance.
+	//
+	// M_RoomGlass sets its opacity to Lerp(Opacity, 1.0, Fresnel), which is what makes a pane
+	// nearly clear head-on and a pale sheet at a grazing angle — exactly what real glass does. The
+	// Fresnel node reads the *shading* normal, and for a two-sided material the renderer flips
+	// that normal according to the triangle's winding, not according to the normal array. Wind the
+	// sheet the wrong way and every pixel of it is treated as the back of the surface: the normal
+	// points away from the camera, the Fresnel term goes to one, the opacity goes to one, and a
+	// translucent pane renders as an opaque rectangle of its own near-black tint.
+	//
+	// Which is precisely what a smashed pane looked like — a black rectangle with the hole showing
+	// through it as the only bright thing in it. The curtains and the bedding never hit this
+	// because they emit both windings, so one of the two is always right.
+	auto Face = [&](int32 A, int32 B, int32 C)
+	{
+		Tris.Add(A);
+		Tris.Add(C);
+		Tris.Add(B);
+
+		FVector N = FVector::CrossProduct(Verts[B] - Verts[A], Verts[C] - Verts[A]);
+		if (N.Z < 0.f)
+		{
+			N = -N;
+		}
+		Normals[A] += N;
+		Normals[B] += N;
+		Normals[C] += N;
+	};
+
+	for (int32 Col = 0; Col + 1 < Cols; ++Col)
+	{
+		for (int32 Row = 0; Row + 1 < Rows; ++Row)
+		{
+			const float U0 = Col / static_cast<float>(Cols - 1);
+			const float U1 = (Col + 1) / static_cast<float>(Cols - 1);
+			const float V0 = Row / static_cast<float>(Rows - 1);
+			const float V1 = (Row + 1) / static_cast<float>(Rows - 1);
+			if (!Solid(U0, V0) || !Solid(U1, V0) || !Solid(U0, V1) || !Solid(U1, V1))
+			{
+				continue;
+			}
+			if (Fractured((U0 + U1) * 0.5f, (V0 + V1) * 0.5f))
+			{
+				continue;
+			}
+
+			const int32 A = Col * Rows + Row;
+			const int32 B = (Col + 1) * Rows + Row;
+			const int32 C = (Col + 1) * Rows + Row + 1;
+			const int32 D = Col * Rows + Row + 1;
+
+			Face(A, B, C);
+			Face(A, C, D);
+		}
+	}
+
+	for (int32 Index = 0; Index < Grid; ++Index)
+	{
+		Tangents[Index] = FProcMeshTangent(FVector(1.f, 0.f, 0.f), false);
+		Normals[Index] = Normals[Index].GetSafeNormal();
+	}
+
+	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(Owner, MakeUniqueObjectName(Owner, UProceduralMeshComponent::StaticClass(), TEXT("Pane")));
+	Mesh->SetMobility(EComponentMobility::Movable);
+	Mesh->AttachToComponent(ParentComponent, FAttachmentTransformRules::KeepRelativeTransform);
+	Mesh->SetRelativeLocationAndRotation(Centre, Facing);
+	Mesh->bUseAsyncCooking = false;
+	Mesh->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, UVs, TArray<FLinearColor>(), Tangents, /*bCreateCollision*/ false);
+	if (Mat)
+	{
+		Mesh->SetMaterial(0, Mat);
+	}
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// What should print on the far wall is the muntin grid, not a dim rectangle over it.
+	Mesh->SetCastShadow(false);
+	Mesh->RegisterComponent();
+	Owner->AddInstanceComponent(Mesh);
+
+	// Drawn splits: one bar per leg of the network, standing a few millimetres proud of the glass
+	// so that it takes a highlight. Where a bar is put and which way it points come out of the
+	// same two numbers — the span itself — which is the one rule this room keeps relearning.
+	if (SplitMat)
+	{
+		for (const FSplit& Fracture : Splits)
+		{
+			const FVector2D Leg = Fracture.To - Fracture.From;
+			const float Length = Leg.Size();
+			if (Length < 0.6f)
+			{
+				continue;
+			}
+			const FVector2D Middle = Fracture.From + Leg * 0.5f;
+			const FVector Along = Facing.RotateVector(FVector(Leg.X, Leg.Y, 0.f)).GetSafeNormal();
+			const FVector At = Centre + Facing.RotateVector(FVector(Middle.X, Middle.Y, 0.45f));
+			Add(FRoomShapes::Cube(), At, FRotationMatrix::MakeFromZ(Along).Rotator(),
+				FVector(0.42f, 0.55f, Length + 0.3f), SplitMat, /*bBlockingCollision*/ false);
+		}
+	}
+
 	return Mesh;
 }
 

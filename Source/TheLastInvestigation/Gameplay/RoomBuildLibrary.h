@@ -107,6 +107,22 @@ struct FRoomShapes
 };
 
 /**
+ * What has happened to one pane of glass. Everything here is in the pane's own space: BreakAt is
+ * a fraction of the pane, the rest is centimetres and counts.
+ */
+struct FPaneDamage
+{
+	/** Where it was hit, as a fraction of the pane. Only used if something radiates from it. */
+	FVector2D BreakAt = FVector2D(0.5f, 0.5f);
+	/** Radius of the hole knocked out at BreakAt. Zero leaves the pane whole. */
+	float HoleRadiusCm = 0.f;
+	/** Splits running out from BreakAt. A pane can be starred without losing anything. */
+	int32 StarRays = 0;
+	/** Splits that wander in from the edges — the ones a house puts in glass without being hit. */
+	int32 EdgeCracks = 0;
+};
+
+/**
  * Runtime geometry helper. The project is code-first — no editor GUI — so the room is assembled
  * from meshes and tinted primitives at BeginPlay rather than placed by hand. This wraps the
  * NewObject/AttachTo/RegisterComponent dance, the Size-in-world-units convention, and the tiling
@@ -179,6 +195,28 @@ public:
 	 */
 	UMaterialInstanceDynamic* Cobweb(const FLinearColor& Tint, float Opacity = 0.55f, float Sharpness = 11.f);
 
+	/**
+	 * The fracture on a struck pane: a translucent sheet laid over the glass, carrying the crack
+	 * map that Tools/make_glass_crack.py bakes.
+	 *
+	 * Neither assembled nor drawn in the material, and both were tried. Assembled, a crack is a
+	 * heap of sticks: a bar has to be thick enough to render, and anything thick enough to render
+	 * shows its side from everywhere but dead ahead, has two square ends, and keeps one width the
+	 * whole way. Drawn from a noise contour — the trick the wall cracks and the cobwebs use — it
+	 * is a scribble, because the contour of a smooth field is a smooth meandering curve that loops
+	 * and doubles back and has no idea where the stone hit.
+	 *
+	 * A fracture is very nearly straight lines out of one point, kinking, forking, dying, tied
+	 * together by short chords. A generator can lay that out and a material graph cannot, so it is
+	 * baked, and what is left here are the things a texture cannot know: the tint, how far the
+	 * splits have opened, and how they take the light.
+	 *
+	 * The sheet must be SQUARE and centred on the impact. The map covers a square patch of glass,
+	 * so that the star lands on a pane of any proportion without coming out elliptical.
+	 */
+	UMaterialInstanceDynamic* GlassCrack(const FLinearColor& Tint, float Opacity = 0.95f,
+		float Haze = 0.07f, float Roughness = 0.16f);
+
 	UStaticMeshComponent* Add(UStaticMesh* Mesh, const FVector& Location, const FRotator& Rotation, const FVector& SizeUU, UMaterialInterface* Mat, bool bBlockingCollision = true);
 
 	/**
@@ -224,6 +262,32 @@ public:
 	 */
 	UProceduralMeshComponent* Cloth(const FVector& Centre, const FRotator& Facing, const FVector2D& SizeUU,
 		float Rumple, float EdgeFall, int32 Seed, UMaterialInterface* Mat, float TexelSizeCm = 34.f);
+
+	/**
+	 * A pane of glass with a hole smashed through it.
+	 *
+	 * The rectangle is kept — the edges of a pane are held in the rebate and that is where glass
+	 * survives — and what is removed is a blob around the break point whose radius wanders with
+	 * the angle, plus a few narrow wedges running further out from it, which are the splits that
+	 * opened and let a piece drop. So the remaining glass is a ragged border with a jagged hole in
+	 * the middle of it, which is what a smashed window actually is.
+	 *
+	 * This cannot be assembled out of boxes. Every arrangement of rectangles around an opening
+	 * leaves the opening with straight inner edges, and the straight edge is the entire tell: a
+	 * pane that has been hit has no straight line anywhere on it except the four the frame holds.
+	 *
+	 * The plate is built in the part's own XY plane with Z as its thickness, so a window pane
+	 * wants a Facing of (90, 0, 0): that puts local X up the wall, local Y across it and the
+	 * plate's normal into the room.
+	 *
+	 * SplitMat decides what a crack *is*. Left null, every split is cut out of the sheet and reads
+	 * as a dark line, because a gap shows whatever is behind the glass. Given a material, the
+	 * splits are drawn instead — a thin bar along each leg, in the plane of the pane — and a
+	 * polished groove in glass takes a highlight along its whole length and glints white, which is
+	 * what a crack in a lit pane actually does. The hole is cut either way.
+	 */
+	UProceduralMeshComponent* Pane(const FVector& Centre, const FRotator& Facing, const FVector2D& SizeUU,
+		const FPaneDamage& Damage, int32 Seed, UMaterialInterface* Mat, UMaterialInterface* SplitMat = nullptr);
 
 	UStaticMeshComponent* Box(const FVector& Location, const FRotator& Rotation, const FVector& SizeUU, UMaterialInterface* Mat, bool bBlockingCollision = true);
 	UStaticMeshComponent* Cyl(const FVector& Location, const FRotator& Rotation, const FVector& SizeUU, UMaterialInterface* Mat, bool bBlockingCollision = true);

@@ -336,13 +336,44 @@ void AStormWindowActor::BuildWindow()
 	// Thin and nearly clear head-on. The grime is still there in the roughness, but the panes have
 	// to be *seen through* — the trees, the rain and the bolt behind them are the point of the
 	// window, and at a quarter opacity the glass was a sheet of frost with a view painted on it.
+	//
+	// REVERSED back to these values. They were taken down to 0.055 and 0.03 on the reading that
+	// the sheen was washing the view out; it was not — the panes were fine and the broken ones
+	// were black for an unrelated reason, and clearing the glass this far only took the window's
+	// dirt with it. A pane of glass in a house like this is meant to be *nearly* clear.
 	UMaterialInstanceDynamic* GlassMat = Build.Glass(FLinearColor(0.10f, 0.13f, 0.16f), 0.12f, 0.05f);
 	if (GlassMat)
 	{
 		GlassMat->SetScalarParameterValue(TEXT("RoughnessSmear"), 0.20f);
 	}
-	UMaterialInstanceDynamic* ShardMat = Build.Glass(FLinearColor(0.20f, 0.24f, 0.28f), 0.34f, 0.04f);
-	UMaterialInstanceDynamic* CrackMat = Build.Flat(FLinearColor(0.010f, 0.012f, 0.014f), 0.35f);
+	// The fracture on the starred pane, carried on a sheet laid over the glass.
+	//
+	// The network itself is baked by Tools/make_glass_crack.py, and it took three goes to get
+	// here. It was bars twice, and both times the answer was the same object with a different
+	// colour on it: a bar has to be thick enough to render, and anything thick enough to render
+	// shows its side from everywhere but dead ahead. Then it was drawn in the material from the
+	// contour of a noise field — the trick that draws the cracks in the plaster and the cobwebs in
+	// the corners — and it came out a scribble, because a noise contour is a smooth curve that
+	// wanders, loops and doubles back, and knows nothing about where the stone hit.
+	//
+	// What the eye reads as broken glass is straightness and a common origin, and that is a thing
+	// a generator can lay out and a material graph cannot.
+	//
+	// Dim, and ROUGH. The first pass had it near-white at a polished 0.16 roughness, on the
+	// reasoning that a fracture in glass is glass — and it came back a star drawn in chalk, with
+	// a bloom around the impact, because a mirror-smooth surface a metre in front of a sky portal
+	// mirrors the sky portal. The physics runs the other way: a fracture face is conchoidal and
+	// microscopically rough, which is the whole reason a crack is visible at all. Polish it and it
+	// would disappear. Rough, and held under the brightness the bloom picks up, it is a hairline
+	// again instead of a stroke of paint with a glow round it.
+	//
+	// The tint is then the balance between those two failures, and it is set high rather than low:
+	// this pane is looked at from across the room far more often than from arm's length, and at
+	// that distance the mip chain is averaging a sub-pixel line into the glass around it. A split
+	// that is honest about its width and its brightness at the same time is not there at all.
+	UMaterialInstanceDynamic* CrackMat = Build.GlassCrack(
+		FLinearColor(0.38f, 0.40f, 0.44f), /*Opacity*/ 0.95f, /*Haze*/ 0.16f, /*Roughness*/ 0.45f);
+
 	// Both of these were near-neutral tints on photographs that are not neutral — rough_linen is a
 	// blue linen and green_metal_rust is a sheet of green paint — and a tint multiplies rather than
 	// neutralises, so the curtains hung blue and the bars read green. See ARoomDressingActor's
@@ -425,6 +456,10 @@ void AStormWindowActor::BuildWindow()
 
 	// Glass. Two panes are gone — that is where the wind and the rain get in, and where the glass
 	// lying on the boards below came from — and one has taken a knock without letting go.
+	//
+	// Every pane is generated, because a hole in a pane has to be an *outline*: any arrangement of
+	// boxes around an opening leaves the opening with straight inner edges, and a straight edge is
+	// the one thing a pane that has been hit does not have.
 	const FIntPoint BlownPanes[2] = { FIntPoint(0, 2), FIntPoint(2, 3) };
 	const FIntPoint CrackedPane(1, 1);
 
@@ -435,68 +470,50 @@ void AStormWindowActor::BuildWindow()
 			const FVector2D Center = CellCenter(Col, Row);
 			const FIntPoint Cell(Col, Row);
 			const bool bBlown = (BlownPanes[0] == Cell) || (BlownPanes[1] == Cell);
+			const bool bCracked = (Cell == CrackedPane);
 
+			// Only the blown panes are damaged in the mesh, and only by losing glass. Splits were
+			// cut into every pane for a while, and sixteen cracked panes is not a broken window,
+			// it is a texture — it takes the two holes and the one starred pane down with it.
+			// Damage is worth what it is worth by being somewhere and not everywhere.
+			FPaneDamage Damage;
 			if (bBlown)
 			{
-				// What is left clinging to the rebate: a few slivers around the edge of an
-				// otherwise empty hole.
-				const int32 ShardCount = Random.RandRange(3, 5);
-				for (int32 i = 0; i < ShardCount; ++i)
-				{
-					const bool bVertical = Random.FRand() < 0.5f;
-					const float Along = Random.FRandRange(-0.34f, 0.34f);
-					const float Edge = Random.FRand() < 0.5f ? -0.42f : 0.42f;
-					const FVector ShardLocation(
-						SashX,
-						Center.X + (bVertical ? Edge : Along) * CellW,
-						Center.Y + (bVertical ? Along : Edge) * CellH);
-					Build.Box(ShardLocation, FRotator(Random.FRandRange(-9.f, 9.f), 0.f, Random.FRandRange(-24.f, 24.f)),
-						FVector(1.1f,
-							bVertical ? Random.FRandRange(4.f, 11.f) : Random.FRandRange(8.f, 18.f),
-							bVertical ? Random.FRandRange(8.f, 18.f) : Random.FRandRange(4.f, 11.f)),
-						ShardMat, /*bBlockingCollision*/ false);
-				}
-				continue;
+				Damage.BreakAt = FVector2D(Random.FRandRange(0.34f, 0.66f), Random.FRandRange(0.32f, 0.68f));
+				Damage.HoleRadiusCm = FMath::Min(CellW, CellH) * Random.FRandRange(0.34f, 0.46f);
 			}
 
-			// The pane itself throws no shadow. What should print on the far wall is the *grid* —
-			// the bars between the panes — and a translucent sheet casting its own dim rectangle
-			// over that pattern washes the whole effect out.
-			if (UStaticMeshComponent* Pane = Build.Box(FVector(SashX, Center.X, Center.Y), FRotator::ZeroRotator, FVector(1.2f, CellW + 1.f, CellH + 1.f), GlassMat, /*bBlockingCollision*/ false))
-			{
-				Pane->SetCastShadow(false);
-			}
+			// Local X runs up the pane and local Y across it, which is what the pitch is for.
+			Build.Pane(
+				FVector(SashX, Center.X, Center.Y), FRotator(90.f, 0.f, 0.f),
+				FVector2D(CellH + 1.f, CellW + 1.f),
+				Damage, Random.RandRange(1, 90000), GlassMat);
 
-			if (Cell == CrackedPane)
+			if (bCracked)
 			{
-				// A spiderweb: lines running out from the point of impact, plus two rings across
-				// them. Drawn as dark slivers on the glass rather than as a texture — there is no
-				// Material Editor in this workflow, and at lantern range this reads correctly.
-				const FVector2D Impact(Center.X - CellW * 0.12f, Center.Y + CellH * 0.08f);
-				for (int32 i = 0; i < 9; ++i)
+				// One sheet, laid a centimetre in front of the glass, SQUARE and centred on the
+				// impact. The crack map covers a square patch of glass so that the star lands on
+				// a pane of any proportion without coming out elliptical — stretch this sheet to
+				// the pane's own 5:3 and the network turns into an oval, which nothing that has
+				// ever been hit looks like. Square on the pane's height means the splits running
+				// up and down leave the glass at the muntin, the way a crack does when it reaches
+				// the frame, and the ones running across have room to die out in open glass.
+				//
+				// The impact is a hand's width off the middle of the pane, because a break in the
+				// exact centre of a rectangle is the one place it reads as decoration. Off-centre
+				// across only: the sheet is as tall as the pane, so moving it up or down would
+				// hang it over the muntin.
+				//
+				// A plane rather than a thin box, because a box has four rims the alpha never
+				// touches — that is what left a rectangle of pale sticks hanging in every ceiling
+				// corner when the cobwebs were slabs.
+				const float ImpactY = Center.X - CellW * 0.13f;
+				if (UStaticMeshComponent* Fracture = Build.Add(FRoomShapes::Plane(),
+					FVector(SashX - 1.f, ImpactY, Center.Y), FRotator(90.f, 0.f, 0.f),
+					FVector(CellH, CellH, 1.f), CrackMat, /*bBlockingCollision*/ false))
 				{
-					const float Angle = i * (360.f / 9.f) + Random.FRandRange(-9.f, 9.f);
-					const float Length = Random.FRandRange(CellH * 0.35f, CellH * 0.95f);
-					const float Radians = FMath::DegreesToRadians(Angle);
-					Build.Box(
-						FVector(SashX - 0.9f, Impact.X + FMath::Cos(Radians) * Length * 0.5f, Impact.Y + FMath::Sin(Radians) * Length * 0.5f),
-						FRotator(0.f, 0.f, Angle),
-						FVector(0.8f, 0.5f, Length),
-						CrackMat, /*bBlockingCollision*/ false);
-				}
-				for (int32 Ring = 0; Ring < 2; ++Ring)
-				{
-					const float Radius = CellH * (0.2f + Ring * 0.22f);
-					for (int32 i = 0; i < 9; ++i)
-					{
-						const float Angle = i * (360.f / 9.f) + 20.f;
-						const float Radians = FMath::DegreesToRadians(Angle);
-						Build.Box(
-							FVector(SashX - 0.9f, Impact.X + FMath::Cos(Radians) * Radius, Impact.Y + FMath::Sin(Radians) * Radius),
-							FRotator(0.f, 0.f, Angle + 90.f),
-							FVector(0.8f, 0.5f, Radius * 0.85f),
-							CrackMat, /*bBlockingCollision*/ false);
-					}
+					// What should print on the far wall is the muntin grid, as with the panes.
+					Fracture->SetCastShadow(false);
 				}
 			}
 		}
@@ -594,6 +611,17 @@ void AStormWindowActor::BuildOutsideWorld()
 	// the treeline reads as a silhouette at all — a shaded backdrop at this albedo, lit by the
 	// same six lux that lights the room, would come out as black as the wall beside the window.
 	SkyMaterial = Build.Emissive(FLinearColor(0.42f, 0.52f, 0.68f), SkyGlowFloor);
+
+	// REVERSED: the treeline and the ground are lit surfaces again, and very dark ones.
+	//
+	// They were made emissive at a fifth of the sky to stop a *hole* in the window reading as a
+	// black rectangle — on the theory that rain scatters the sky into anything forty metres off,
+	// so a wood at night goes the colour of the sky and darker rather than black. The theory is
+	// sound and it was fixing the wrong thing: the black rectangle was a winding bug in the
+	// generated panes (see FRoomBuilder::Pane), and with that fixed, all the emissive treeline did
+	// was take the silhouette away. A wood lit to a fifth of the sky behind it is a flat grey
+	// cut-out; a wood at two per cent albedo against a storm sky is a shape, and the shape is the
+	// whole of what a window at night has to show.
 	UMaterialInstanceDynamic* GroundMat = Build.Flat(FLinearColor(0.020f, 0.022f, 0.018f), 1.f);
 	UMaterialInstanceDynamic* TrunkMat = Build.Flat(FLinearColor(0.016f, 0.014f, 0.012f), 1.f);
 	UMaterialInstanceDynamic* LeafMat = Build.Flat(RoomPalette::Foliage, 1.f);
