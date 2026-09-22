@@ -1178,23 +1178,34 @@ void ARoomDressingActor::BuildBookcaseContents(const FVector& Spot, const FRotat
 	// Books stand near the front edge, not pushed back against the panel, the way books do.
 	const float Front = 9.f * S;
 
-	// Nothing on a shelf is square to it.
+	// Nothing on a shelf is square to it — but a row of books can only be *turned*, never leant.
 	//
-	// book_encyclopedia_set_01 is one rigid row of twenty matched volumes, so anything built out
-	// of it starts out looking machine-set — and four of them placed at the same angle at the same
-	// depth on four shelves looks like a shop display, which is the one thing a room nobody has
-	// been into for fifty years is not. The row cannot be bent, but every other freedom it has is
-	// worth spending: each one gets its own height, its own angle across the shelf, its own lean,
-	// and its own distance back from the edge. The lean is what does most of the work — a row with
-	// nothing holding up one end goes over, and then stays gone over.
-	// Top shelf, shoved to one end and leaning hard into the space the missing volumes left.
+	// book_encyclopedia_set_01 is one rigid bar of twenty matched volumes, so anything built out
+	// of it starts out looking machine-set, and four of them at the same angle at the same depth
+	// on four shelves is a shop display, which is the one thing a room nobody has been into for
+	// fifty years is not. Each row therefore gets its own height, its own angle across the shelf
+	// and its own distance back from the edge.
+	//
+	// REVERSED: they used to get a lean as well — thirteen degrees of roll on the top one — on the
+	// argument that a row with nothing holding up one end goes over and stays gone over. That is
+	// true of books and false of this mesh. Rolling a rigid bar tips it like a brick: every volume
+	// leans by exactly the same amount, the row stays perfectly straight while it does it, and
+	// PropSeated then rests its lowest corner on the board, so the far end hangs in the air with
+	// daylight under it. What it reads as is a solid block someone has propped up, and the end of
+	// the bar turns to face the room while it is at it. Only yaw keeps the books on the shelf.
+	// The angles are small, and that is the second half of the same lesson. A row half a metre
+	// long swings its ends five centimetres in depth for every ten degrees of yaw, and the boards
+	// are twenty deep: at eleven degrees one end of a row hung out past the front edge of the
+	// carcass with nothing under it, which reads as a row of books falling out of the shelf.
+	// Four degrees is a row nobody straightened; eleven is a row nobody could have put there.
+	// Top shelf, shoved to one end, across the space the missing volumes left.
 	Shelf.PropSeated(RoomProps::ShelfBooks, FVector(-24.f * S, Front + 3.f * S, ShelfZ[5]),
-		FRotator(0.f, 5.f, 13.f), 26.f, /*bBlockingCollision*/ false);
+		FRotator(0.f, 4.f, 0.f), 26.f, /*bBlockingCollision*/ false);
 
-	// The shelf below it: two short stands with a gap between them, at different angles, because
-	// what is left of a row that has been raided is groups, not a row.
-	Shelf.PropSeated(RoomProps::ShelfBooks, FVector(14.f * S, Front - 4.f * S, ShelfZ[4]),
-		FRotator(0.f, -6.f, -8.f), 24.f, /*bBlockingCollision*/ false);
+	// The shelf below it: pushed the other way, because what is left of a row that has been raided
+	// is groups at odd angles, not a row.
+	Shelf.PropSeated(RoomProps::ShelfBooks, FVector(14.f * S, Front - 6.f * S, ShelfZ[4]),
+		FRotator(0.f, -3.f, 0.f), 24.f, /*bBlockingCollision*/ false);
 
 	// The one thing in this room somebody chose to keep where they would see it: a small frame,
 	// stood on the shelf rather than hung, and knocked off square.
@@ -1210,7 +1221,7 @@ void ARoomDressingActor::BuildBookcaseContents(const FVector& Spot, const FRotat
 
 	// Two shelves down, pushed well back and almost straight — this is the one nobody touched.
 	Shelf.PropSeated(RoomProps::ShelfBooks, FVector(22.f * S, Front - 9.f * S, ShelfZ[2]),
-		FRotator(0.f, 3.f, -2.f), 23.f, /*bBlockingCollision*/ false);
+		FRotator(0.f, 2.f, 0.f), 23.f, /*bBlockingCollision*/ false);
 
 	// The shelf under that is empty. It is the one the carcass lost, and an empty shelf is what
 	// makes the full ones read as having been emptied rather than as decoration.
@@ -1713,6 +1724,135 @@ void ARoomDressingActor::BuildClues()
 		ClockBuild.Cyl(FVector(0.f, -8.2f, -56.4f), FRotator(0.f, 0.f, 90.f), FVector(6.4f, 6.4f, 2.4f), CaseWood, /*bBlockingCollision*/ false);
 		ClockBuild.Sph(FVector(0.f, -8.2f, -59.4f), 5.2f, CaseWood);
 		ClockBuild.Cyl(FVector(0.f, -8.2f, -62.8f), FRotator(0.f, 0.f, 90.f), FVector(2.2f, 2.2f, 2.6f), CaseWood, /*bBlockingCollision*/ false);
+	}
+
+	// The mirror, on the same wall as the clock, between it and the door.
+	//
+	// Nothing shows in it, and that is the whole point of it rather than a limitation. A real
+	// mirror is a planar reflection — expensive, and in a room lit by one flame it would hand the
+	// player a second view of everything the lantern is carefully not showing them. What this one
+	// is instead is the honest end state of a mirror that has hung in a wet house since the
+	// sixties: the silvering behind the glass has gone black, so the glass holds no lantern, no
+	// room and no detective. It is also the first quiet placement of the thing the whole story
+	// ends on — the dusty mirror he wipes at the finale — and a mirror that has already refused
+	// him once is worth more then.
+	//
+	// The glass is a photographed surface held at three per cent albedo rather than a flat black,
+	// for the usual reason: flat black at this size is a hole cut in the wall, and what makes it
+	// read as glass is that there is *something* in it, faint, that does not move.
+	//
+	// Same frame as the clock: the face looks along -Y into the room, Y = 0 is the plaster, and
+	// the crooked hang is pitch, which is rotation about the axis the mirror faces along.
+	if (AClueActor* Mirror = SpawnClue(FVector(48.f, DepthHalf + Setup.WallThickness * 0.5f, 168.f), FRotator(-2.2f, 0.f, 0.f), TEXT("Examine the mirror"),
+		TEXT("A mirror, in a frame somebody once thought a great deal of, and broken — struck once, low and off centre, and left. The silver behind what is left of the glass has gone black: it gives back no lantern, no room, and no detective. Only the dark. He holds the light closer, and the dark does not move.")))
+	{
+		FRoomBuilder MirrorBuild(Mirror, Mirror->GetRootScene());
+
+		UMaterialInstanceDynamic* Frame = MirrorBuild.Surface(RoomSurfaces::RoughWood, FLinearColor(0.152f, 0.096f, 0.062f));
+		UMaterialInstanceDynamic* Gilt = MirrorBuild.Surface(RoomSurfaces::RustedIron, FLinearColor(0.870f, 0.436f, 0.196f), 0.8f);
+		UMaterialInstanceDynamic* Dead = MirrorBuild.Surface(RoomSurfaces::Damp, FLinearColor(0.031f, 0.032f, 0.031f), 1.35f);
+		UMaterialInstanceDynamic* Iron = MirrorBuild.Surface(RoomSurfaces::RustedIron, FLinearColor(0.847f, 0.448f, 0.703f));
+
+		// The board the glass is bedded on. It is what the player is looking at wherever the glass
+		// is gone, so it is the darkest thing in the frame rather than the back of a cupboard.
+		MirrorBuild.Box(FVector(0.f, -1.6f, 0.f), FRotator::ZeroRotator, FVector(62.f, 3.2f, 100.f), Frame);
+		MirrorBuild.Box(FVector(0.f, -2.6f, 0.f), FRotator::ZeroRotator, FVector(54.f, 0.8f, 84.f), MatVoid, /*bBlockingCollision*/ false);
+
+		// And the glass, which is not a pane any more.
+		//
+		// Struck once, low and off centre. What is left is seven pieces still in the rebate, each
+		// turned off the others and each at its own depth in it — that last part is what does the
+		// work, because a mirror reads as broken through the *edges* of its pieces: every shard
+		// catches the lantern along a different line, and a network of bright lines that do not
+		// join is the one thing a whole sheet of glass can never produce. Two are gone altogether
+		// and the board shows through where they were.
+		//
+		// Overhanging the opening is fine and deliberate: the rails stand five centimetres in
+		// front of the glass, so a shard wider than the rebate is hidden behind the frame, exactly
+		// as a real one is. And the rotation is pitch — the axis the mirror faces along, so the
+		// pieces turn *in* the glass rather than out of it.
+		struct FShard { float X; float Z; float Wide; float Tall; float Turn; float Depth; };
+		const FShard Shards[7] = {
+			{ -17.f,  26.f, 27.f, 39.f,  12.f, -3.4f },
+			{  13.f,  30.f, 29.f, 31.f, -18.f, -4.1f },
+			{ -21.f,  -8.f, 25.f, 45.f,  -7.f, -3.6f },
+			{  11.f,  -3.f, 23.f, 37.f,  24.f, -4.4f },
+			{  -7.f, -32.f, 31.f, 27.f,   9.f, -3.5f },
+			{  20.f, -27.f, 23.f, 35.f, -14.f, -4.2f },
+			{   3.f,   7.f, 19.f, 17.f,  38.f, -3.9f },
+		};
+		for (const FShard& Piece : Shards)
+		{
+			MirrorBuild.Box(FVector(Piece.X, Piece.Depth, Piece.Z), FRotator(Piece.Turn, 0.f, 0.f),
+				FVector(Piece.Wide, 0.9f, Piece.Tall), Dead, /*bBlockingCollision*/ false);
+		}
+
+		// The fracture network over the whole of it, projected rather than modelled: a split in
+		// glass is a contour, and no arrangement of boxes is a hairline.
+		MirrorBuild.Crack(FVector(4.f, -8.f, -6.f), FRotator(0.f, 90.f, 0.f), FVector2D(58.f, 86.f), 0.9f, 21.f);
+
+		// What came out of it is on the floor under it, because nobody swept this room either.
+		for (int32 Piece = 0; Piece < 7; ++Piece)
+		{
+			MirrorBuild.Box(
+				FVector(Random.FRandRange(-34.f, 34.f), -Random.FRandRange(14.f, 46.f), -162.f),
+				FRotator(0.f, Random.FRandRange(0.f, 360.f), Random.FRandRange(-9.f, 9.f)),
+				FVector(Random.FRandRange(4.f, 13.f), Random.FRandRange(3.f, 9.f), 0.9f),
+				Dead, /*bBlockingCollision*/ false);
+		}
+
+		// The frame: four rails standing five centimetres proud of the glass, with a block at each
+		// corner. The depth is what makes it a frame — a flat border painted round a mirror is a
+		// picture of a frame, and the shadow the rail throws onto the glass is most of what says
+		// there is a rebate behind it.
+		MirrorBuild.Box(FVector(0.f, -5.6f, 46.f), FRotator::ZeroRotator, FVector(68.f, 4.8f, 8.f), Frame, /*bBlockingCollision*/ false);
+		MirrorBuild.Box(FVector(0.f, -5.6f, -46.f), FRotator::ZeroRotator, FVector(68.f, 4.8f, 8.f), Frame, /*bBlockingCollision*/ false);
+		MirrorBuild.Box(FVector(-30.f, -5.6f, 0.f), FRotator::ZeroRotator, FVector(8.f, 4.8f, 100.f), Frame, /*bBlockingCollision*/ false);
+		MirrorBuild.Box(FVector(30.f, -5.6f, 0.f), FRotator::ZeroRotator, FVector(8.f, 4.8f, 100.f), Frame, /*bBlockingCollision*/ false);
+		for (int32 Corner = 0; Corner < 4; ++Corner)
+		{
+			const float CornerX = (Corner % 2 == 0) ? -30.f : 30.f;
+			const float CornerZ = (Corner < 2) ? 46.f : -46.f;
+			MirrorBuild.Box(FVector(CornerX, -6.2f, CornerZ), FRotator::ZeroRotator, FVector(10.f, 5.6f, 10.f), Frame, /*bBlockingCollision*/ false);
+		}
+
+		// The gilt bead round the opening. Most of the gold is gone; what is left of it is the one
+		// warm thing on this wall, and it is the detail that separates a mirror somebody paid for
+		// from a sheet of glass in a box.
+		MirrorBuild.Box(FVector(0.f, -6.6f, 41.f), FRotator::ZeroRotator, FVector(56.f, 2.4f, 2.2f), Gilt, /*bBlockingCollision*/ false);
+		MirrorBuild.Box(FVector(0.f, -6.6f, -41.f), FRotator::ZeroRotator, FVector(56.f, 2.4f, 2.2f), Gilt, /*bBlockingCollision*/ false);
+		MirrorBuild.Box(FVector(-26.f, -6.6f, 0.f), FRotator::ZeroRotator, FVector(2.2f, 2.4f, 84.f), Gilt, /*bBlockingCollision*/ false);
+		MirrorBuild.Box(FVector(26.f, -6.6f, 0.f), FRotator::ZeroRotator, FVector(2.2f, 2.4f, 84.f), Gilt, /*bBlockingCollision*/ false);
+
+		// A crest over the top of it, which is the silhouette that says the frame was carved
+		// rather than cut: a stepped cornice and a turned finial.
+		MirrorBuild.Box(FVector(0.f, -5.2f, 52.5f), FRotator::ZeroRotator, FVector(32.f, 4.6f, 7.f), Frame, /*bBlockingCollision*/ false);
+		MirrorBuild.Box(FVector(0.f, -5.2f, 57.5f), FRotator::ZeroRotator, FVector(19.f, 4.2f, 5.f), Frame, /*bBlockingCollision*/ false);
+		MirrorBuild.Sph(FVector(0.f, -5.2f, 62.f), 7.f, Frame);
+
+		// The nail it hangs off, which is why it is not level. Just the nail: the cord is behind the
+		// frame, where a cord is.
+		//
+		// It had a visible pair of them before, and they were antennas. Two faults at once, both
+		// worth remembering. They were angled with *roll*, and roll on this wall tips a part out
+		// of the plaster into the room — in-plane is pitch, the axis the mirror faces along, which
+		// is the same thing the picture frames over the bed got wrong. And they were thirty-two
+		// centimetres long against a crest sixty-five high, so even aimed correctly they would
+		// have stood a hand's width over the top of the frame. Nothing about a hanging cord is
+		// visible on a mirror this size except the nail above it.
+		MirrorBuild.Cyl(FVector(0.f, -2.4f, 69.f), FRotator(0.f, 0.f, 90.f), FVector(1.1f, 1.1f, 4.4f), Iron, /*bBlockingCollision*/ false);
+
+		// Damp in the glass rather than on it: the blooms where the silvering let go first. Aimed
+		// along +Y, into the front of the mirror, and the nine-centimetre reach stops well short
+		// of the plaster behind it.
+		for (int32 Bloom = 0; Bloom < 3; ++Bloom)
+		{
+			MirrorBuild.Stain(RoomSurfaces::Damp,
+				FVector(Random.FRandRange(-16.f, 16.f), -10.f, Random.FRandRange(-30.f, 30.f)),
+				FRotator(0.f, 90.f, Random.FRandRange(0.f, 360.f)),
+				FVector2D(Random.FRandRange(20.f, 38.f), Random.FRandRange(18.f, 34.f)),
+				FLinearColor(0.055f, 0.050f, 0.044f), Random.FRandRange(0.5f, 0.8f), 1.f, 1.4f);
+		}
 	}
 
 	// Rusted tools spilled out of a box by the door. Somebody was working on this room.
