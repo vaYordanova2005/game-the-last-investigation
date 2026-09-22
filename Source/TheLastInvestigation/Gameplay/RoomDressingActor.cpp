@@ -18,6 +18,12 @@ namespace
 		East,  // the window wall, at +X
 		West
 	};
+
+	/**
+	 * The top of the nightstand. ClassicNightstand_01 is authored 56.8 by 42.4 by 70 and goes in
+	 * unscaled, so its top surface is at 70 and the usable part of it is 54.8 by 41.3.
+	 */
+	constexpr float NightstandTopZ = 70.f;
 }
 
 ARoomDressingActor::ARoomDressingActor()
@@ -976,6 +982,16 @@ void ARoomDressingActor::BedFootprint(FVector2D& OutCentre, FVector2D& OutHalfEx
 	OutCentre = FVector2D(WestFace + 11.f + OutHalfExtent.X, 0.f);
 }
 
+FVector ARoomDressingActor::NightstandSeat() const
+{
+	FVector2D BedCentre;
+	FVector2D BedHalf;
+	BedFootprint(BedCentre, BedHalf);
+
+	const float WestFace = -Setup.Width * 0.5f + Setup.WallThickness * 0.5f;
+	return FVector(WestFace + 46.f, BedCentre.Y - BedHalf.Y - 32.f, 0.f);
+}
+
 void ARoomDressingActor::BuildBedroom(FRoomBuilder& Build)
 {
 	// Until now there was no reason for the detective to have woken up in this room at all: bare
@@ -1070,12 +1086,13 @@ void ARoomDressingActor::BuildBedroom(FRoomBuilder& Build)
 	Build.PropSeated(RoomProps::Press, FVector(WestFace + 52.f, -225.f, 0.f), FRotator(0.f, -88.f, 0.f), 208.f);
 
 	// The nightstand at the head of the bed, on the other side of it.
-	const FVector NightstandSeat(WestFace + 46.f, BedCentre.Y - BedHalf.Y - 32.f, 0.f);
-	Build.PropSeated(RoomProps::Nightstand, NightstandSeat, FRotator(0.f, -88.f, 0.f), 0.f);
+	const FVector StandSeat = NightstandSeat();
+	Build.PropSeated(RoomProps::Nightstand, StandSeat, FRotator(0.f, -88.f, 0.f), 0.f);
 
 	// And what is on it: a candle burnt down to nothing in its own wax, on a saucer. The one thing
-	// in the corner that was last touched by somebody rather than left by somebody.
-	const FVector CandleBase = NightstandSeat + FVector(-4.f, 3.f, 70.f);
+	// in the corner that was last touched by somebody rather than left by somebody — and now the
+	// photograph lies beside it, which is the whole reason it is worth being the one thing.
+	const FVector CandleBase = StandSeat + FVector(-4.f, 3.f, NightstandTopZ);
 	Build.Cyl(CandleBase + FVector(0.f, 0.f, 0.6f), FRotator::ZeroRotator, FVector(11.f, 11.f, 1.2f), MatIron, /*bBlockingCollision*/ false);
 	Build.Cyl(CandleBase + FVector(0.f, 0.f, 1.8f), FRotator::ZeroRotator, FVector(7.6f, 7.6f, 1.6f), MatPaper, /*bBlockingCollision*/ false);
 	Build.Cyl(CandleBase + FVector(1.f, -0.5f, 4.4f), FRotator(0.f, 0.f, 3.f), FVector(3.4f, 3.4f, 4.4f), MatPaper, /*bBlockingCollision*/ false);
@@ -1405,13 +1422,34 @@ void ARoomDressingActor::BuildClues()
 		ChairBuild.Prop(RoomProps::Chair, FVector(0.f, 0.f, 24.f), FRotator(0.f, 0.f, 88.f), 92.f);
 	}
 
-	// A photograph on the cabinet. Face up, so whoever left it was looking at it.
-	if (AClueActor* Photograph = SpawnClue(FVector(68.f, -DepthHalf + 36.f, 178.f), FRotator(0.f, 96.f, 0.f), TEXT("Examine the photograph"),
+	// A photograph, face up on the nightstand beside the burnt-out candle.
+	//
+	// It lay on top of the wardrobe before, at 178 — twelve centimetres over the detective's eye,
+	// and a thing laid face up is only face up for somebody looking down on it. All he could ever
+	// see of it from the floor was the twelve-millimetre edge of the print, lit by the lantern
+	// against the black top of the wardrobe: a pale plank floating in the air, which is exactly
+	// what it was reported as. **A surface has to be below the eye that is meant to read it.**
+	//
+	// (It was floating, at that: the print sat at 178.4 on a wardrobe 176 tall.)
+	//
+	// The nightstand is where it belongs anyway. The candle on that top is the one object in the
+	// room that was last touched by somebody rather than left by somebody, and a photograph next
+	// to it says who was sitting there — two things at the head of the bed rather than one thing
+	// on a nightstand and one thing nobody can see.
+	const FVector PhotoSpot = NightstandSeat() + FVector(3.f, -15.f, NightstandTopZ);
+	if (AClueActor* Photograph = SpawnClue(PhotoSpot, FRotator(0.f, -82.f, 0.f), TEXT("Examine the photograph"),
 		TEXT("A woman and two children on a doorstep, squinting into the sun. Somebody wiped the dust off this one. Recently is impossible. But somebody did.")))
 	{
 		FRoomBuilder PhotoBuild(Photograph, Photograph->GetRootScene());
-		PhotoBuild.Box(FVector(0.f, 0.f, 1.f), FRotator::ZeroRotator, FVector(28.f, 36.f, 1.2f), MatPhoto);
-		PhotoBuild.Mark(FVector(0.f, 0.f, 1.8f), FRotator::ZeroRotator, FVector2D(22.f, 30.f), MatPaper);
+		// Seventeen by twenty-three, not twenty-eight by thirty-six: that was most of the width of
+		// a nightstand and a print nobody ever had made. Six degrees off the stand, and the far
+		// half of the top left to the candle.
+		//
+		// The border is the print stock and the image is what is laid on it — the other way round
+		// from how this was built, which put the pale paper on top and left the photograph showing
+		// as a dark frame around it.
+		PhotoBuild.Box(FVector(0.f, 0.f, 0.6f), FRotator::ZeroRotator, FVector(17.f, 23.f, 1.2f), MatPaper);
+		PhotoBuild.Mark(FVector(0.f, 0.f, 1.2f), FRotator::ZeroRotator, FVector2D(13.f, 19.f), MatPhoto);
 	}
 
 	// A letter on the floor near the window, the ink half gone where the rain has reached it.

@@ -73,6 +73,11 @@ private:
 	void BuildBedroom(FRoomBuilder& Build);
 	/** Where the bed stands, so that nothing else in the room is scattered through it. */
 	void BedFootprint(FVector2D& OutCentre, FVector2D& OutHalfExtent) const;
+	/**
+	 * Where the nightstand stands. Shared with the clues, because the photograph lies on its top:
+	 * a position worked out twice is a position that agrees until one of the two is nudged.
+	 */
+	FVector NightstandSeat() const;
 	/** Standing water: the floor is wet where the roof and the broken pane let the storm in. */
 	void BuildPuddles(FRoomBuilder& Build);
 	/**
