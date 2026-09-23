@@ -481,7 +481,10 @@ UMaterialInterface* FRoomBuilder::ResolveTiling(UMaterialInterface* Mat, const F
 	Tiled->SetScalarParameterValue(TEXT("RoughnessScale"), Origin->RoughnessScale);
 	Tiled->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(TilingU, TilingV, 0.f, 1.f));
 	Tiled->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(OffsetU, OffsetV, 0.f, 1.f));
-	RegisterOrigin(Tiled, *Origin);
+	// Copied first: Origin points into SurfaceOrigins, and registering Tiled adds to that same map,
+	// so a rehash would have it read the value out of memory the map has just freed.
+	const FSurfaceOrigin OriginCopy = *Origin;
+	RegisterOrigin(Tiled, OriginCopy);
 	TilingCache.Add(Key, Tiled);
 	return Tiled;
 }

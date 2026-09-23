@@ -98,7 +98,7 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Room|Layout")
 	float RoomHeight = 305.f;
 
-	UPROPERTY(EditAnywhere, Category = "Room|Layout")
+	UPROPERTY(VisibleAnywhere, Category = "Room|Layout")
 	float WallThickness = 20.f;
 
 	// Opening sizes, shared with the door, the storm and the dressing so nothing overlaps a gap.
