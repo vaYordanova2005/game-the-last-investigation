@@ -159,8 +159,11 @@ bool ARoomDressingActor::IsFloorSpotClear(const FVector2D& Point, float Radius) 
 		}
 	}
 
-	// Keep the doorway approach and the window bay walkable.
-	if (FMath::Abs(Point.X - Setup.DoorOpeningCenterX) < Setup.DoorOpeningWidth * 0.5f + Radius && Point.Y > DepthHalf - 90.f - Radius)
+	// Keep the doorway approach and the window bay walkable. The door arc is the leaf's full
+	// width deep (it swings inward about its hinge), and at 100 degrees it reaches ~20cm past the
+	// opening on the hinge side, so both sides get that margin.
+	if (FMath::Abs(Point.X - Setup.DoorOpeningCenterX) < Setup.DoorOpeningWidth * 0.5f + 20.f + Radius
+		&& Point.Y > DepthHalf - Setup.WallThickness * 0.5f - Setup.DoorOpeningWidth - 15.f - Radius)
 	{
 		return false;
 	}

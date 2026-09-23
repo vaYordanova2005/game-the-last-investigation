@@ -90,16 +90,33 @@ namespace RoomPalette
 
 namespace
 {
+	/**
+	 * The loaders below cache in function statics, and a static is invisible to the garbage
+	 * collector. In the editor RF_Standalone keeps engine content alive anyway; in a packaged build
+	 * it does not, so the first level unload would collect the mesh and leave the cache dangling.
+	 * Rooted rather than held by a static TStrongObjectPtr, whose destructor would run after the
+	 * UObject system has already shut down.
+	 */
+	template <typename T>
+	T* Rooted(T* Object)
+	{
+		if (Object)
+		{
+			Object->AddToRoot();
+		}
+		return Object;
+	}
+
 	UStaticMesh* LoadBasicShape(const TCHAR* Path)
 	{
-		return LoadObject<UStaticMesh>(nullptr, Path);
+		return Rooted(LoadObject<UStaticMesh>(nullptr, Path));
 	}
 
 	UMaterialInterface* LoadFlatBaseMaterial()
 	{
 		// Loaded by name, never taken from a mesh's own material slot: /Engine/BasicShapes/Cube
 		// ships with a WorldGridMaterial assigned, and tinting that gives a tinted checkerboard.
-		static UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+		static UMaterialInterface* Base = Rooted(LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")));
 		return Base;
 	}
 
@@ -180,6 +197,7 @@ UStaticMesh* FRoomShapes::Prop(const TCHAR* Name)
 
 	// Cached per name: a missing prop means the art pipeline has not been run on this machine, and
 	// the room falls back to its primitive stand-in rather than failing to build.
+	// Rooted for the same reason as the basic shapes (see Rooted above).
 	static TMap<FString, UStaticMesh*> Cache;
 	const FString Key(Name);
 	if (UStaticMesh** Found = Cache.Find(Key))
@@ -188,7 +206,7 @@ UStaticMesh* FRoomShapes::Prop(const TCHAR* Name)
 	}
 
 	const FString Path = FString::Printf(TEXT("/Game/Meshes/%s.%s"), Name, Name);
-	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *Path);
+	UStaticMesh* Mesh = Rooted(LoadObject<UStaticMesh>(nullptr, *Path));
 	if (!Mesh)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Prop mesh %s not found — run Tools/fetch_assets.py then Tools/build_art.py"), Name);
@@ -323,19 +341,81 @@ UMaterialInstanceDynamic* FRoomBuilder::Surface(const FRoomSurface& Set, const F
 		CopyTextureParameters(Parent, Instance);
 		Instance->SetVectorParameterValue(TEXT("Tint"), Tint);
 		Instance->SetScalarParameterValue(TEXT("RoughnessScale"), RoughnessScale);
-		SurfaceOrigins.Add(Instance, FSurfaceOrigin{ Parent, Tint, RoughnessScale, FMath::Max(Set.TexelSizeCm, 1.f) });
+		RegisterOrigin(Instance, FSurfaceOrigin{ Parent, Tint, RoughnessScale, FMath::Max(Set.TexelSizeCm, 1.f) });
 	}
 
 	SurfaceCache.Add(Key, Instance);
 	return Instance;
 }
 
+namespace
+{
+	/**
+	 * Every surface instance any builder has made, weakly keyed. Clue bodies and the curtains are
+	 * built by their own FRoomBuilder from materials the dressing's builder created, and a lookup
+	 * in the local map alone missed them: those parts kept one repeat per face and one crop.
+	 */
+	struct FSharedSurfaceOrigin
+	{
+		TWeakObjectPtr<UMaterialInterface> Asset;
+		FLinearColor Tint;
+		float RoughnessScale;
+		float TexelSizeCm;
+	};
+
+	TMap<TWeakObjectPtr<UMaterialInterface>, FSharedSurfaceOrigin>& SharedSurfaceOrigins()
+	{
+		static TMap<TWeakObjectPtr<UMaterialInterface>, FSharedSurfaceOrigin> Registry;
+		return Registry;
+	}
+}
+
+void FRoomBuilder::RegisterOrigin(UMaterialInterface* Mat, const FSurfaceOrigin& Origin)
+{
+	SurfaceOrigins.Add(Mat, Origin);
+
+	TMap<TWeakObjectPtr<UMaterialInterface>, FSharedSurfaceOrigin>& Registry = SharedSurfaceOrigins();
+	// Instances die with the level; drop the stale entries now and then so the map stays small.
+	if (Registry.Num() > 0 && Registry.Num() % 256 == 0)
+	{
+		for (auto It = Registry.CreateIterator(); It; ++It)
+		{
+			if (!It.Key().IsValid() || !It.Value().Asset.IsValid())
+			{
+				It.RemoveCurrent();
+			}
+		}
+	}
+	Registry.Add(Mat, FSharedSurfaceOrigin{ Origin.Asset.Get(), Origin.Tint, Origin.RoughnessScale, Origin.TexelSizeCm });
+}
+
+const FRoomBuilder::FSurfaceOrigin* FRoomBuilder::FindOrigin(UMaterialInterface* Mat)
+{
+	if (!Mat)
+	{
+		return nullptr;
+	}
+	if (const FSurfaceOrigin* Local = SurfaceOrigins.Find(Mat))
+	{
+		return Local;
+	}
+
+	const FSharedSurfaceOrigin* Shared = SharedSurfaceOrigins().Find(Mat);
+	UMaterialInterface* Asset = Shared ? Shared->Asset.Get() : nullptr;
+	if (!Asset)
+	{
+		return nullptr;
+	}
+	// Adopted into this builder, whose AddReferencedObjects then keeps the asset alive.
+	return &SurfaceOrigins.Add(Mat, FSurfaceOrigin{ Asset, Shared->Tint, Shared->RoughnessScale, Shared->TexelSizeCm });
+}
+
 UMaterialInterface* FRoomBuilder::ResolveTiling(UMaterialInterface* Mat, const FVector& SizeUU, const FVector& Location)
 {
-	const FSurfaceOrigin* Origin = SurfaceOrigins.Find(Mat);
+	const FSurfaceOrigin* Origin = FindOrigin(Mat);
 	if (!Origin || !Origin->Asset)
 	{
-		return Mat; // a flat colour, or a material this builder did not make — nothing to tile
+		return Mat; // a flat colour, or a material no builder made — nothing to tile
 	}
 
 	float SizeU = 0.f;
@@ -374,8 +454,8 @@ UMaterialInterface* FRoomBuilder::ResolveTiling(UMaterialInterface* Mat, const F
 	// flat rectangles. Sixteen crops is enough to break the repetition and few enough to keep the
 	// material instance count bounded; the part's own position picks one, so the room is stable
 	// between runs and a part never changes crop when something near it moves.
-	const int32 CropCount = 4;
-	const int32 CropSeed = GetTypeHash(FIntVector(
+	const uint32 CropCount = 4;
+	const uint32 CropSeed = GetTypeHash(FIntVector(
 		FMath::FloorToInt(Location.X / 17.f),
 		FMath::FloorToInt(Location.Y / 17.f),
 		FMath::FloorToInt(Location.Z / 17.f)));
@@ -401,7 +481,7 @@ UMaterialInterface* FRoomBuilder::ResolveTiling(UMaterialInterface* Mat, const F
 	Tiled->SetScalarParameterValue(TEXT("RoughnessScale"), Origin->RoughnessScale);
 	Tiled->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(TilingU, TilingV, 0.f, 1.f));
 	Tiled->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(OffsetU, OffsetV, 0.f, 1.f));
-	SurfaceOrigins.Add(Tiled, *Origin);
+	RegisterOrigin(Tiled, *Origin);
 	TilingCache.Add(Key, Tiled);
 	return Tiled;
 }
@@ -502,8 +582,8 @@ UDecalComponent* FRoomBuilder::Stain(const FRoomSurface& Set, const FVector& Loc
 		TilingV *= Boost;
 	}
 
-	const int32 CropCount = 4;
-	const int32 CropSeed = GetTypeHash(FIntVector(
+	const uint32 CropCount = 4;
+	const uint32 CropSeed = GetTypeHash(FIntVector(
 		FMath::FloorToInt(Location.X / 13.f),
 		FMath::FloorToInt(Location.Y / 13.f),
 		FMath::FloorToInt(Location.Z / 13.f)));

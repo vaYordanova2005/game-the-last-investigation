@@ -28,6 +28,7 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void PossessedBy(AController* NewController) override;
+	virtual void UnPossessed() override;
 
 	/** Set once the room key has been picked up; the door checks this. */
 	UPROPERTY(BlueprintReadOnly, Category = "Investigation")

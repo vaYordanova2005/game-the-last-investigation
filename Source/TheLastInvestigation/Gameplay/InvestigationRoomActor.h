@@ -87,13 +87,15 @@ private:
 
 	// Roughly 8m x 6.5m with a 3m ceiling — a large, hollow old room rather than a cell, but low
 	// enough overhead that the ceiling is part of the picture rather than lost in the dark.
-	UPROPERTY(EditAnywhere, Category = "Room|Layout")
+	// Visible, not editable: the shell is built in the constructor from these defaults, so an
+	// edited value would only move the dressing away from the walls.
+	UPROPERTY(VisibleAnywhere, Category = "Room|Layout")
 	float RoomWidth = 800.f;
 
-	UPROPERTY(EditAnywhere, Category = "Room|Layout")
+	UPROPERTY(VisibleAnywhere, Category = "Room|Layout")
 	float RoomDepth = 650.f;
 
-	UPROPERTY(EditAnywhere, Category = "Room|Layout")
+	UPROPERTY(VisibleAnywhere, Category = "Room|Layout")
 	float RoomHeight = 305.f;
 
 	UPROPERTY(EditAnywhere, Category = "Room|Layout")

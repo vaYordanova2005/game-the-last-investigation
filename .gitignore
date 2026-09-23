@@ -25,3 +25,7 @@ Art/Source/
 *.sdf
 *.opendb
 *.ipch
+
+# Python bytecode
+__pycache__/
+*.pyc

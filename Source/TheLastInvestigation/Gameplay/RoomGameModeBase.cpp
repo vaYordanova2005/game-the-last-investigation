@@ -120,6 +120,15 @@ void ARoomGameModeBase::HandleStartingNewPlayer_Implementation(APlayerController
 
 	Super::HandleStartingNewPlayer_Implementation(NewPlayer);
 
+	// The main menu leaves the viewport in UI-only mode (input ignored, mouse uncaptured), and the
+	// viewport client survives OpenLevel — so without this, New Game drops the detective into a
+	// room where he can neither walk nor look. -RoomShot never saw it: it opens Room01 directly.
+	if (NewPlayer)
+	{
+		NewPlayer->SetInputMode(FInputModeGameOnly());
+		NewPlayer->SetShowMouseCursor(false);
+	}
+
 	// The room is always built at the world origin, so the player is placed relative to it
 	// directly — this makes correct spawn placement independent of wherever the level's
 	// PlayerStart was hand-dragged to, which is otherwise an easy thing to get wrong. The room

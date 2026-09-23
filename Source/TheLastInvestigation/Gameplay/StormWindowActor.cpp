@@ -949,9 +949,12 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 	{
 		BoltMaterials[ActiveBolt]->SetScalarParameterValue(TEXT("Intensity"), bDischarging ? 14.f : 0.f);
 	}
-	if (!bDischarging && ActiveBolt != INDEX_NONE && Bolts.IsValidIndex(ActiveBolt) && Bolts[ActiveBolt])
+	// Visibility follows the discharge both ways: hiding it between sub-flashes and only showing
+	// it again in BeginStrike left every sub-flash after the first lighting a hidden channel.
+	if (ActiveBolt != INDEX_NONE && Bolts.IsValidIndex(ActiveBolt) && Bolts[ActiveBolt]
+		&& Bolts[ActiveBolt]->IsVisible() != bDischarging)
 	{
-		Bolts[ActiveBolt]->SetVisibility(false, /*bPropagateToChildren*/ true);
+		Bolts[ActiveBolt]->SetVisibility(bDischarging, /*bPropagateToChildren*/ true);
 	}
 
 	// The whole sky lights up with the discharge, not just the channel — from inside the room that

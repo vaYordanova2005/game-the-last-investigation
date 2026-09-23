@@ -188,11 +188,20 @@ void SFogBackdrop::RegenerateFogTexture()
 		}
 	});
 
-	FTexture2DMipMap& Mip = FogTexture->GetPlatformData()->Mips[0];
-	void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
-	FMemory::Memcpy(Data, PixelScratch.GetData(), PixelScratch.Num() * sizeof(FColor));
-	Mip.BulkData.Unlock();
-	FogTexture->UpdateResource();
+	// Streamed into the existing RHI texture rather than UpdateResource(), which tears the
+	// resource down and creates a new one on every call. The upload runs on the render thread
+	// later, so it gets its own copy of the pixels (PixelScratch is rewritten next refresh) and
+	// the cleanup callback frees it once the copy has been consumed.
+	const int32 NumBytes = PixelScratch.Num() * sizeof(FColor);
+	uint8* Upload = static_cast<uint8*>(FMemory::Malloc(NumBytes));
+	FMemory::Memcpy(Upload, PixelScratch.GetData(), NumBytes);
+	FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, TexWidth, TexHeight);
+	FogTexture->UpdateTextureRegions(0, 1, Region, TexWidth * sizeof(FColor), sizeof(FColor), Upload,
+		[](uint8* SrcData, const FUpdateTextureRegion2D* Regions)
+		{
+			FMemory::Free(SrcData);
+			delete Regions;
+		});
 }
 
 FVector2D SFogBackdrop::ComputeDesiredSize(float) const

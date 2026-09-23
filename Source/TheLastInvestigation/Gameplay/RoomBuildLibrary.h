@@ -348,4 +348,13 @@ private:
 	TMap<FString, TObjectPtr<UMaterialInstanceDynamic>> TilingCache;
 	TMap<FString, TObjectPtr<UMaterialInstanceDynamic>> DecalCache;
 	TMap<UMaterialInterface*, FSurfaceOrigin> SurfaceOrigins;
+
+	/**
+	 * This builder's origin for Mat, falling back to the process-wide registry so a surface made
+	 * by one builder still tiles when it is handed to another (clue bodies, the curtains).
+	 */
+	const FSurfaceOrigin* FindOrigin(UMaterialInterface* Mat);
+
+	/** Records Mat in this builder and in the shared registry. */
+	void RegisterOrigin(UMaterialInterface* Mat, const FSurfaceOrigin& Origin);
 };

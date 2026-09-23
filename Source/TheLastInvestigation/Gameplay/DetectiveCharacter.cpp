@@ -281,6 +281,20 @@ void ADetectiveCharacter::PossessedBy(AController* NewController)
 	}
 }
 
+void ADetectiveCharacter::UnPossessed()
+{
+	// Mirror of PossessedBy: the context lives on the local player, which outlives this pawn.
+	if (const APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+		{
+			Subsystem->RemoveMappingContext(MappingContext);
+		}
+	}
+
+	Super::UnPossessed();
+}
+
 void ADetectiveCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);

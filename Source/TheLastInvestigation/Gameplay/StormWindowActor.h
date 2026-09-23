@@ -124,7 +124,7 @@ private:
 	FRandomStream Random;
 	float ElapsedTime = 0.f;
 
-	// Lightning state. A strike is a burst of 2-4 sub-flashes rather than a single blink, which is
+	// Lightning state. A strike is a burst of 2-5 sub-flashes rather than a single blink, which is
 	// what makes real lightning read as unpredictable instead of as a metronome.
 	float TimeUntilNextStrike = 4.f;
 	int32 SubFlashesRemaining = 0;
