@@ -11,11 +11,15 @@ public class TheLastInvestigation : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"InputCore",
+			"EnhancedInput",
 			"Slate",
 			"SlateCore",
 			"UMG",
 			"RenderCore",
-			"RHI"
+			"RHI",
+			// The curtains are a generated surface, not an arrangement of boxes: a drape is a
+			// curved sheet with a torn outline, and neither of those is a thing a primitive has.
+			"ProceduralMeshComponent"
 		});
 	}
 }

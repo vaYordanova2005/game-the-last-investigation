@@ -12,6 +12,10 @@ Build/
 Content/Developers/
 Content/Collections/
 
+# Raw downloaded texture source files. The imported .uasset in Content/ is what the game uses;
+# these are just the originals, and Tools/fetch_textures.sh re-downloads them on demand.
+Art/Source/
+
 # Visual Studio
 .vs/
 *.sln
@@ -21,3 +25,7 @@ Content/Collections/
 *.sdf
 *.opendb
 *.ipch
+
+# Python bytecode
+__pycache__/
+*.pyc
