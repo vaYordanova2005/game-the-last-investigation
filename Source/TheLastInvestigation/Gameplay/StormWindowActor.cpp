@@ -295,12 +295,22 @@ void AStormWindowActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	Random.Initialize(20260918);
+	// A follower gets its own seed, or both windows come out with the same panes broken.
+	Random.Initialize(Lead ? 20260923 : 20260918);
 
 	BuildWindow();
-	BuildOutsideWorld();
-	BuildRain();
-	BuildLightningBolts();
+	if (Lead)
+	{
+		// The lead's directional light already lights the whole world; a second one is the thing
+		// SetLead exists to avoid. Hidden rather than destroyed, so nothing else needs a case for it.
+		LightningLight->SetVisibility(false);
+	}
+	else
+	{
+		BuildOutsideWorld();
+		BuildRain();
+		BuildLightningBolts();
+	}
 
 	const float WindowCenterZ = (Setup.SillHeight + Setup.TopHeight) * 0.5f;
 
@@ -860,6 +870,7 @@ void AStormWindowActor::BeginStrike()
 	// Each strike is a short burst of two to five sub-flashes (RandRange is inclusive at both
 	// ends). The first is the brightest; the rest are the flickering afterbeats that make
 	// lightning feel like a discharge rather than a light switch.
+	++StrikeCount;
 	SubFlashesRemaining = Random.RandRange(2, 5);
 	StrikeIntensity = Random.FRandRange(StrikeLux.X, StrikeLux.Y);
 	bSubFlashOn = true;
@@ -896,6 +907,16 @@ void AStormWindowActor::BeginStrike()
 
 void AStormWindowActor::TickLightning(float DeltaTime)
 {
+	if (Lead)
+	{
+		// Same sky, same instant: the flash is read from the lead, not rolled.
+		FlashAlpha = Lead->GetFlashAlpha();
+		StrikeIntensity = Lead->GetStrikeIntensity();
+		LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * 260.f);
+		SkyPortal->SetIntensity(SkyPortalCandelas * (1.f + FlashAlpha * 9.f));
+		return;
+	}
+
 	if (SubFlashesRemaining > 0)
 	{
 		SubFlashTimer -= DeltaTime;

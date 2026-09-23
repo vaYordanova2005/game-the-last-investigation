@@ -52,6 +52,24 @@ public:
 	/** 0..1 how bright the current lightning flash is, for anything that needs to react to it. */
 	float GetFlashAlpha() const { return FlashAlpha; }
 
+	/** Lux of the strike currently in progress, before FlashAlpha scales it. */
+	float GetStrikeIntensity() const { return StrikeIntensity; }
+
+	/** Counts strikes since BeginPlay, so a listener can tell one flash from the next. */
+	int32 GetStrikeCount() const { return StrikeCount; }
+
+	/**
+	 * Makes this a second window onto another storm rather than a storm of its own. Must be called
+	 * before BeginPlay.
+	 *
+	 * There is one sky over the house. A second window has to flash when the first one does, and it
+	 * must not bring a second directional light with it — two of them make the renderer pick one
+	 * arbitrarily for the fog and the translucency. So a follower builds only its window, its
+	 * curtains and its own sky portal, looks out at the lead's trees, rain and bolts, and takes its
+	 * flash from the lead every frame.
+	 */
+	void SetLead(AStormWindowActor* InLead) { Lead = InLead; }
+
 private:
 	void BuildWindow();
 	void BuildOutsideWorld();
@@ -108,6 +126,11 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> SkyMaterial;
 
 	int32 ActiveBolt = INDEX_NONE;
+	int32 StrikeCount = 0;
+
+	/** Set on a follower window; see SetLead. */
+	UPROPERTY(Transient)
+	TObjectPtr<AStormWindowActor> Lead;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UInstancedStaticMeshComponent> RainInstances;
