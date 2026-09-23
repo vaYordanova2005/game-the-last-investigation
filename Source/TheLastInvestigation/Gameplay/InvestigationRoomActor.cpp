@@ -169,8 +169,9 @@ void AInvestigationRoomActor::ApplySurfaceMaterial()
 	// gaps, not the boards themselves.
 	//
 	// What the gaps show now is a second course of real boards, laid by ARoomDressingActor (see
-	// the subfloor in BuildFloor), so this slab should never be on screen at all. It stays dark
-	// anyway, because the one thing it must not do again is be paler than the floor above it.
+	// the subfloor in BuildFloor), so this slab should never be on screen at all — which it was,
+	// until it was lowered out from over the subfloor (see BuildRoom). It stays dark anyway,
+	// because the one thing it must not do again is be paler than the floor above it.
 	if (FloorSlab)
 	{
 		UMaterialInstanceDynamic* Underfloor = UMaterialInstanceDynamic::Create(BaseMaterial, this);
@@ -188,7 +189,12 @@ void AInvestigationRoomActor::BuildRoom()
 	const float WidthHalf = RoomWidth * 0.5f;
 	const float DepthHalf = RoomDepth * 0.5f;
 
-	FloorSlab = AddSlab(TEXT("Floor"), FVector(0.f, 0.f, -5.f), FVector(RoomWidth, RoomDepth, 10.f));
+	// Well below the floor, not flush with it. At a top of 0 this slab swallowed everything the
+	// dressing lays under the boards — the subfloor (-7..-1) and the collapse's void and joists
+	// (down to -38) — so every gap and the hole under the hook showed this flat plate instead. It
+	// is only a backstop now: the boards, the subfloor and the bottom of the collapse carry the
+	// player.
+	FloorSlab = AddSlab(TEXT("Floor"), FVector(0.f, 0.f, -45.f), FVector(RoomWidth, RoomDepth, 10.f));
 	AddSlab(TEXT("Ceiling"), FVector(0.f, 0.f, RoomHeight + 5.f), FVector(RoomWidth, RoomDepth, 10.f));
 
 	// North wall: solid. It is the wall the detective wakes up against, so it is only ever seen
