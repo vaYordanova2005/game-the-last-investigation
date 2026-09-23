@@ -6,6 +6,8 @@
 AHallDoorActor::AHallDoorActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	// Only while rattling: Interact switches it on, Tick switches it off when the knock dies.
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	HingeRoot = CreateDefaultSubobject<USceneComponent>(TEXT("HingeRoot"));
 	SetRootComponent(HingeRoot);
@@ -170,12 +172,14 @@ void AHallDoorActor::Tick(float DeltaTime)
 	if (RattleTime >= Duration)
 	{
 		RattleTime = -1.f;
+		SetActorTickEnabled(false);
 	}
 }
 
 void AHallDoorActor::Interact(AActor* /*Interactor*/)
 {
 	RattleTime = 0.f;
+	SetActorTickEnabled(true);
 }
 
 FText AHallDoorActor::GetInteractPrompt(const AActor* /*Interactor*/) const

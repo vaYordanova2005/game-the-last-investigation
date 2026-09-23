@@ -105,6 +105,12 @@ struct FRoomShapes
 
 	/** An imported prop mesh by name, or null if the art pipeline has not been run. */
 	static UStaticMesh* Prop(const TCHAR* Name);
+
+	/**
+	 * Re-instances a placed prop's materials with the master's Tint: how a prop that ships clean
+	 * and pale is aged to the house. One slot, or every slot when Slot is INDEX_NONE.
+	 */
+	static void TintSlots(UStaticMeshComponent* Mesh, const FLinearColor& Tint, int32 Slot = INDEX_NONE);
 };
 
 /**

@@ -35,6 +35,8 @@ namespace
 	};
 	/** The turned portrait (a clue) and the mirror, which a peel must not cover either. */
 	constexpr float TurnedPortraitU = -520.f;
+	/** The long-case clock on the south wall: a clue, and a peel must not hang through its case. */
+	constexpr float ClockU = -260.f;
 
 	/**
 	 * hanging_picture_frame_01's artwork is a pale print, and at the height of a lantern held at
@@ -43,14 +45,7 @@ namespace
 	 */
 	void DarkenArtwork(UStaticMeshComponent* Frame)
 	{
-		if (UMaterialInterface* Art = Frame ? Frame->GetMaterial(1) : nullptr)
-		{
-			if (UMaterialInstanceDynamic* Aged = UMaterialInstanceDynamic::Create(Art, Frame))
-			{
-				Aged->SetVectorParameterValue(TEXT("Tint"), FLinearColor(0.30f, 0.24f, 0.17f));
-				Frame->SetMaterial(1, Aged);
-			}
-		}
+		FRoomShapes::TintSlots(Frame, FLinearColor(0.30f, 0.24f, 0.17f), 1);
 	}
 }
 
@@ -369,9 +364,19 @@ void ACorridorActor::BuildShell(FRoomBuilder& Build)
 		Build.Box(FVector(JoistX, HoleC.Y, -20.f), FRotator(0.f, 0.f, JoistX < HoleC.X ? 0.f : 3.f), FVector(10.f, HoleS.Y + 4.f, 18.f), MatRoughWood, false);
 	}
 
-	// The bedroom threshold, bridging its floor and this one.
+	// A threshold in every doorway, bridging this floor and the one behind it. Without one the wall's
+	// thickness is a bare trough in the shell, which the ajar doors look straight down into.
 	Build.Box(FVector(Setup.StartDoorCenterX, NorthFace() - T * 0.5f, 0.f), FRotator::ZeroRotator,
 		FVector(Setup.StartDoorWidth, T + 4.f, 6.f), MatRoughWood);
+	for (const FOpening& Opening : Openings)
+	{
+		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || Opening.CenterU == Setup.StartDoorCenterX || Opening.BottomV > 0.f)
+		{
+			continue;
+		}
+		const float Line = Opening.Side == ESide::North ? NorthFace() - T * 0.5f : SouthFace() + T * 0.5f;
+		Build.Box(FVector(Opening.CenterU, Line, 0.f), FRotator::ZeroRotator, FVector(Opening.HalfU * 2.f, T + 4.f, 6.f), MatRoughWood);
+	}
 }
 
 void ACorridorActor::BuildBackRooms(FRoomBuilder& Build)
@@ -619,7 +624,7 @@ void ACorridorActor::BuildRunner(FRoomBuilder& Build)
 	// through with the boards.
 	const float Width = 88.f;
 	const float Z = 5.f;
-	const FVector2D Pieces[] = { { -1190.f, -905.f }, { -884.f, -575.f }, { -552.f, -236.f }, { -214.f, 86.f }, { 104.f, 336.f } };
+	const FVector2D Pieces[] = { { -1190.f, -905.f }, { -884.f, -575.f }, { -552.f, -362.f }, { -214.f, 86.f }, { 104.f, 336.f } };
 	int32 Seed = 311;
 	for (const FVector2D& Piece : Pieces)
 	{
@@ -695,6 +700,7 @@ void ACorridorActor::BuildWallFinish(FRoomBuilder& Build)
 			const float PeelU = U0 + (Run.X + Run.Y) * StripWidth + StripWidth * 0.5f;
 			// Never over anything hung on the wall: the mirror, the turned portrait, the family.
 			bool bOverSomething = (Side == ESide::South && FMath::Abs(PeelU - Setup.StartDoorCenterX) < 80.f)
+				|| (Side == ESide::South && FMath::Abs(PeelU - ClockU) < 80.f)
 				|| (Side == ESide::North && FMath::Abs(PeelU - TurnedPortraitU) < 80.f);
 			for (const FPortrait& P : Portraits)
 			{
@@ -937,7 +943,6 @@ void ACorridorActor::BuildDamage(FRoomBuilder& Build)
 	{
 		float U0, U1;
 		SideRange(Side, U0, U1);
-		const float Length = U1 - U0;
 		const bool bLong = Side == ESide::North || Side == ESide::South;
 		const int32 Scale = bLong ? 1 : 0;
 
@@ -982,8 +987,6 @@ void ACorridorActor::BuildDamage(FRoomBuilder& Build)
 			Stain(Side, U, 30.f, Random.FRandRange(50.f, 110.f), Random.FRandRange(70.f, 130.f), RoomSurfaces::Damp, MouldTint, 0.7f, 0.f, 1.1f);
 			Stain(Side, U, H - 30.f, Random.FRandRange(60.f, 120.f), Random.FRandRange(50.f, 100.f), RoomSurfaces::Damp, MouldTint, 0.6f, 0.f, 1.1f);
 		}
-
-		(void)Length;
 	}
 
 	// The mould round the window, where the rain has been coming in round the frame for years.
@@ -1056,17 +1059,7 @@ void ACorridorActor::BuildFurniture(FRoomBuilder& Build)
 	const FVector TableSeat(-150.f, NorthFace() + 22.f, 0.f);
 	// Its paint is a clean pale grey as shipped, and out here it was the brightest thing in the
 	// corridor; the same Tint trick the portraits use takes it back to sixty years of dust.
-	if (UStaticMeshComponent* Table = Build.PropSeated(RoomProps::Nightstand, TableSeat, FRotator(0.f, 0.f, 0.f), 0.f))
-	{
-		for (int32 Slot = 0; Slot < Table->GetNumMaterials(); ++Slot)
-		{
-			if (UMaterialInstanceDynamic* Aged = UMaterialInstanceDynamic::Create(Table->GetMaterial(Slot), Table))
-			{
-				Aged->SetVectorParameterValue(TEXT("Tint"), FLinearColor(0.34f, 0.30f, 0.26f));
-				Table->SetMaterial(Slot, Aged);
-			}
-		}
-	}
+	FRoomShapes::TintSlots(Build.PropSeated(RoomProps::Nightstand, TableSeat, FRotator(0.f, 0.f, 0.f), 0.f), FLinearColor(0.34f, 0.30f, 0.26f));
 	const float TableTop = 70.f;
 
 	// A brass candlestick on it, the candle burnt to a stub, and its wax run down the stem.
@@ -1193,8 +1186,15 @@ void ACorridorActor::BuildDebris(FRoomBuilder& Build)
 	}
 	for (int32 i = 0; i < 7; ++i)
 	{
-		Build.Box(Fallen + FVector(Random.FRandRange(-40.f, 40.f), Random.FRandRange(-20.f, 30.f), 2.2f),
-			FRotator(0.f, Random.FRandRange(0.f, 360.f), 0.f), FVector(Random.FRandRange(4.f, 12.f), Random.FRandRange(3.f, 9.f), 0.6f), MatGlass, false);
+		// Every draw is taken before the test, so dropping a shard does not relay the ones after it.
+		const FVector Spot = Fallen + FVector(Random.FRandRange(-40.f, 40.f), Random.FRandRange(-20.f, 30.f), 2.2f);
+		const float Yaw = Random.FRandRange(0.f, 360.f);
+		const FVector Size(Random.FRandRange(4.f, 12.f), Random.FRandRange(3.f, 9.f), 0.6f);
+		if (FloorHole.ExpandBy(6.f).IsInside(FVector2D(Spot.X, Spot.Y)))
+		{
+			continue; // went through with the boards
+		}
+		Build.Box(Spot, FRotator(0.f, Yaw, 0.f), Size, MatGlass, false);
 	}
 }
 
@@ -1357,7 +1357,6 @@ AClueActor* ACorridorActor::SpawnClue(const FVector& LocalLocation, const FRotat
 
 void ACorridorActor::BuildClues()
 {
-	const float H = Setup.Height;
 
 	// Flowers at the bedroom door, on the corridor side: somebody left them for whoever was in
 	// there, and nobody came to the door. A dozen stems gone to straw, tied with a ribbon.
@@ -1422,7 +1421,7 @@ void ACorridorActor::BuildClues()
 
 	// The long-case clock, broken: pendulum on the floor, trunk door hanging open, the hood glass
 	// gone. The hands at four minutes past eleven, the time the whole house is stopped at.
-	if (AClueActor* Clock = SpawnClue(FVector(-260.f, SouthFace(), 0.f), FRotator::ZeroRotator,
+	if (AClueActor* Clock = SpawnClue(FVector(ClockU, SouthFace(), 0.f), FRotator::ZeroRotator,
 		TEXT("Examine the clock"),
 		TEXT("The pendulum has been torn off and dropped. The hands say four minutes past eleven — the same as the clock in the bedroom.")))
 	{
@@ -1507,7 +1506,9 @@ void ACorridorActor::BuildClues()
 		for (int32 Seg = 0; Seg < 10; ++Seg)
 		{
 			const float A = Seg / 10.f * 2.f * PI;
-			B.Box(FVector(FMath::Sin(A) * 3.2f, -3.2f, -3.4f + FMath::Cos(A) * 3.2f), FRotator(-Seg * 36.f, 0.f, 0.f), FVector(0.5f, 0.5f, 2.2f), MatIron, false);
+			// Along the circle, not out from it: a box stands along +Z and pitch P turns +Z to
+			// (-sin P, 0, cos P), so the tangent (cos A, 0, -sin A) at this point is pitch -(A + 90).
+			B.Box(FVector(FMath::Sin(A) * 3.2f, -3.2f, -3.4f + FMath::Cos(A) * 3.2f), FRotator(-Seg * 36.f - 90.f, 0.f, 0.f), FVector(0.5f, 0.5f, 2.2f), MatIron, false);
 		}
 		for (int32 KeyIndex = 0; KeyIndex < 5; ++KeyIndex)
 		{
@@ -1557,6 +1558,4 @@ void ACorridorActor::BuildClues()
 			Hit->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 		}
 	}
-
-	(void)H;
 }

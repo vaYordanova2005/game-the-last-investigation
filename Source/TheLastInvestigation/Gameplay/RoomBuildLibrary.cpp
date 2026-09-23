@@ -188,6 +188,27 @@ UStaticMesh* FRoomShapes::Plane()
 	return Mesh;
 }
 
+void FRoomShapes::TintSlots(UStaticMeshComponent* Mesh, const FLinearColor& Tint, int32 Slot)
+{
+	if (!Mesh)
+	{
+		return;
+	}
+	const int32 First = Slot == INDEX_NONE ? 0 : Slot;
+	const int32 Last = Slot == INDEX_NONE ? Mesh->GetNumMaterials() - 1 : Slot;
+	for (int32 Index = First; Index <= Last; ++Index)
+	{
+		if (UMaterialInterface* Source = Mesh->GetMaterial(Index))
+		{
+			if (UMaterialInstanceDynamic* Aged = UMaterialInstanceDynamic::Create(Source, Mesh))
+			{
+				Aged->SetVectorParameterValue(TEXT("Tint"), Tint);
+				Mesh->SetMaterial(Index, Aged);
+			}
+		}
+	}
+}
+
 UStaticMesh* FRoomShapes::Prop(const TCHAR* Name)
 {
 	if (!Name)

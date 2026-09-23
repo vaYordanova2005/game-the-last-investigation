@@ -68,7 +68,15 @@ public:
 	 * curtains and its own sky portal, looks out at the lead's trees, rain and bolts, and takes its
 	 * flash from the lead every frame.
 	 */
-	void SetLead(AStormWindowActor* InLead) { Lead = InLead; }
+	void SetLead(AStormWindowActor* InLead)
+	{
+		Lead = InLead;
+		if (InLead)
+		{
+			// The lead's flash has to be this frame's before the follower reads it.
+			AddTickPrerequisiteActor(InLead);
+		}
+	}
 
 private:
 	void BuildWindow();

@@ -295,7 +295,8 @@ void AStormWindowActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// A follower gets its own seed, or both windows come out with the same panes broken.
+	// A follower gets its own seed, so its holes are not the lead's shapes (which panes are
+	// broken is chosen in BuildWindow).
 	Random.Initialize(Lead ? 20260923 : 20260918);
 
 	BuildWindow();
@@ -470,8 +471,10 @@ void AStormWindowActor::BuildWindow()
 	// Every pane is generated, because a hole in a pane has to be an *outline*: any arrangement of
 	// boxes around an opening leaves the opening with straight inner edges, and a straight edge is
 	// the one thing a pane that has been hit does not have.
-	const FIntPoint BlownPanes[2] = { FIntPoint(0, 2), FIntPoint(2, 3) };
-	const FIntPoint CrackedPane(1, 1);
+	// Which panes, not only the shape of the holes, has to differ on a follower: the seed alone
+	// only reshapes the holes, and two windows broken in the same two places read as one prop.
+	const FIntPoint BlownPanes[2] = { Lead ? FIntPoint(3, 1) : FIntPoint(0, 2), Lead ? FIntPoint(1, 0) : FIntPoint(2, 3) };
+	const FIntPoint CrackedPane = Lead ? FIntPoint(2, 2) : FIntPoint(1, 1);
 
 	for (int32 Col = 0; Col < Cols; ++Col)
 	{
