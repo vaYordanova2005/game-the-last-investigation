@@ -1517,7 +1517,17 @@ void ARoomDressingActor::BuildClues()
 		TEXT("The frame is face down in its own glass. Turning it over takes nothing: the picture inside has been removed. The backing pins are bent outward — it was opened in a hurry.")))
 	{
 		FRoomBuilder FrameBuild(Frame, Frame->GetRootScene());
-		FrameBuild.Prop(RoomProps::PictureFrame, FVector(0.f, 0.f, 2.f), FRotator(88.f, 22.f, 0.f), 38.f);
+		// Face down is ROLL, not pitch. hanging_picture_frame_01 is 59 x 1.6 x 84 and faces its
+		// local +Y; pitch turns it about that same axis, which only stood it on its side — upright
+		// out of the floor. Roll 90 sends +Y to -Z, which is glass-side down. Seated from its box,
+		// since the pivot is not on the back face.
+		if (UStaticMeshComponent* Fallen = FrameBuild.PropSeated(RoomProps::PictureFrame, FVector::ZeroVector, FRotator(0.f, 22.f, 90.f), 38.f))
+		{
+			// Slots 0 and 2 ship as WorldGridMaterial — the checkerboard — the same as on the
+			// bookcase and over the bed.
+			Fallen->SetMaterial(0, MatGlass);
+			Fallen->SetMaterial(2, MatRoughWood);
+		}
 		for (int32 i = 0; i < 6; ++i)
 		{
 			FrameBuild.Box(
