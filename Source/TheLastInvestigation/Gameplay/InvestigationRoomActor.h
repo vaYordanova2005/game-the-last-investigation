@@ -12,6 +12,7 @@ class ADoorActor;
 class AKeyPickupActor;
 class AStormWindowActor;
 class ARoomDressingActor;
+class ACorridorActor;
 
 /**
  * The room's shell and its mood: floor, ceiling, four walls (one broken for the door, one for the
@@ -127,4 +128,8 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ARoomDressingActor> Dressing;
+
+	/** The upstairs corridor on the far side of the door. */
+	UPROPERTY(Transient)
+	TObjectPtr<ACorridorActor> Corridor;
 };

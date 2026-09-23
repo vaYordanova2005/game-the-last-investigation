@@ -295,12 +295,23 @@ void AStormWindowActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	Random.Initialize(20260918);
+	// A follower gets its own seed, so its holes are not the lead's shapes (which panes are
+	// broken is chosen in BuildWindow).
+	Random.Initialize(Lead ? 20260923 : 20260918);
 
 	BuildWindow();
-	BuildOutsideWorld();
-	BuildRain();
-	BuildLightningBolts();
+	if (Lead)
+	{
+		// The lead's directional light already lights the whole world; a second one is the thing
+		// SetLead exists to avoid. Hidden rather than destroyed, so nothing else needs a case for it.
+		LightningLight->SetVisibility(false);
+	}
+	else
+	{
+		BuildOutsideWorld();
+		BuildRain();
+		BuildLightningBolts();
+	}
 
 	const float WindowCenterZ = (Setup.SillHeight + Setup.TopHeight) * 0.5f;
 
@@ -460,8 +471,10 @@ void AStormWindowActor::BuildWindow()
 	// Every pane is generated, because a hole in a pane has to be an *outline*: any arrangement of
 	// boxes around an opening leaves the opening with straight inner edges, and a straight edge is
 	// the one thing a pane that has been hit does not have.
-	const FIntPoint BlownPanes[2] = { FIntPoint(0, 2), FIntPoint(2, 3) };
-	const FIntPoint CrackedPane(1, 1);
+	// Which panes, not only the shape of the holes, has to differ on a follower: the seed alone
+	// only reshapes the holes, and two windows broken in the same two places read as one prop.
+	const FIntPoint BlownPanes[2] = { Lead ? FIntPoint(3, 1) : FIntPoint(0, 2), Lead ? FIntPoint(1, 0) : FIntPoint(2, 3) };
+	const FIntPoint CrackedPane = Lead ? FIntPoint(2, 2) : FIntPoint(1, 1);
 
 	for (int32 Col = 0; Col < Cols; ++Col)
 	{
@@ -504,13 +517,18 @@ void AStormWindowActor::BuildWindow()
 				// across only: the sheet is as tall as the pane, so moving it up or down would
 				// hang it over the muntin.
 				//
+				// Square on the pane's SHORTER side, and the offset held so the sheet never
+				// crosses the muntin: the corridor's panes stand upright (~35 x 47), and a
+				// sheet as tall as one of those is wider than it.
+				//
 				// A plane rather than a thin box, because a box has four rims the alpha never
 				// touches — that is what left a rectangle of pale sticks hanging in every ceiling
 				// corner when the cobwebs were slabs.
-				const float ImpactY = Center.X - CellW * 0.13f;
+				const float Sheet = FMath::Min(CellW, CellH);
+				const float ImpactY = Center.X - FMath::Min(CellW * 0.13f, (CellW - Sheet) * 0.5f);
 				if (UStaticMeshComponent* Fracture = Build.Add(FRoomShapes::Plane(),
 					FVector(SashX - 1.f, ImpactY, Center.Y), FRotator(90.f, 0.f, 0.f),
-					FVector(CellH, CellH, 1.f), CrackMat, /*bBlockingCollision*/ false))
+					FVector(Sheet, Sheet, 1.f), CrackMat, /*bBlockingCollision*/ false))
 				{
 					// What should print on the far wall is the muntin grid, as with the panes.
 					Fracture->SetCastShadow(false);
@@ -860,6 +878,7 @@ void AStormWindowActor::BeginStrike()
 	// Each strike is a short burst of two to five sub-flashes (RandRange is inclusive at both
 	// ends). The first is the brightest; the rest are the flickering afterbeats that make
 	// lightning feel like a discharge rather than a light switch.
+	++StrikeCount;
 	SubFlashesRemaining = Random.RandRange(2, 5);
 	StrikeIntensity = Random.FRandRange(StrikeLux.X, StrikeLux.Y);
 	bSubFlashOn = true;
@@ -896,6 +915,16 @@ void AStormWindowActor::BeginStrike()
 
 void AStormWindowActor::TickLightning(float DeltaTime)
 {
+	if (Lead)
+	{
+		// Same sky, same instant: the flash is read from the lead, not rolled.
+		FlashAlpha = Lead->GetFlashAlpha();
+		StrikeIntensity = Lead->GetStrikeIntensity();
+		LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * 260.f);
+		SkyPortal->SetIntensity(SkyPortalCandelas * (1.f + FlashAlpha * 9.f));
+		return;
+	}
+
 	if (SubFlashesRemaining > 0)
 	{
 		SubFlashTimer -= DeltaTime;

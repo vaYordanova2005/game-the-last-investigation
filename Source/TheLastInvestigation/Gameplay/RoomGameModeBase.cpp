@@ -96,18 +96,27 @@ void ARoomGameModeBase::ScheduleHeadlessScreenshot()
 			PC->SetControlRotation(Pose);
 		}
 
-		// FScreenshotRequest, not GEngine->Exec("HighResShot"): that console command is handled by
-		// the game viewport client, and an Exec routed through GEngine never reaches it — it is
-		// swallowed silently, which looks exactly like a screenshot that was taken and lost.
-		FScreenshotRequest::RequestScreenshot(/*bShowUI*/ false);
-
-		// A screenshot is written at the end of the frame after the one that requested it, so the
-		// quit has to wait a beat or the file is truncated or never written at all.
-		FTimerHandle QuitTimer;
-		GetWorldTimerManager().SetTimer(QuitTimer, FTimerDelegate::CreateWeakLambda(this, []()
+		// Not in the same frame as the move. Occlusion culling decides what to draw from the
+		// previous frames' depth, and the previous frames were the waking view from inside the
+		// bedroom: a camera teleported out into the corridor and shot at once found every wall in
+		// front of it culled as hidden behind the bedroom's, and came back as a black frame with
+		// only the dust in it. Half a second lets the queries catch up with where the camera is.
+		FTimerHandle CaptureTimer;
+		GetWorldTimerManager().SetTimer(CaptureTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
 		{
-			FPlatformMisc::RequestExit(/*Force*/ false);
-		}), 3.f, false);
+			// FScreenshotRequest, not GEngine->Exec("HighResShot"): that console command is handled
+			// by the game viewport client, and an Exec routed through GEngine never reaches it — it
+			// is swallowed silently, which looks exactly like a screenshot that was taken and lost.
+			FScreenshotRequest::RequestScreenshot(/*bShowUI*/ false);
+
+			// A screenshot is written at the end of the frame after the one that requested it, so
+			// the quit has to wait a beat or the file is truncated or never written at all.
+			FTimerHandle QuitTimer;
+			GetWorldTimerManager().SetTimer(QuitTimer, FTimerDelegate::CreateWeakLambda(this, []()
+			{
+				FPlatformMisc::RequestExit(/*Force*/ false);
+			}), 3.f, false);
+		}), 0.5f, false);
 	}), ShotDelay, false);
 }
 

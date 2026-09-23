@@ -3,6 +3,7 @@
 #include "KeyPickupActor.h"
 #include "StormWindowActor.h"
 #include "RoomDressingActor.h"
+#include "CorridorActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/PostProcessComponent.h"
@@ -278,6 +279,24 @@ void AInvestigationRoomActor::SpawnOccupants()
 		Dressing->Configure(DressingSetup);
 		Dressing->SetStorm(Storm);
 		Dressing->FinishSpawning(DressingTransform);
+	}
+
+	// The corridor outside the door, in the room's own frame, looking out through its own window
+	// at this room's storm.
+	const FTransform CorridorTransform(FRotator::ZeroRotator, GetActorLocation());
+	Corridor = GetWorld()->SpawnActorDeferred<ACorridorActor>(ACorridorActor::StaticClass(), CorridorTransform, this);
+	if (Corridor)
+	{
+		FCorridorSetup CorridorSetup;
+		CorridorSetup.RoomHalfWidth = WidthHalf;
+		CorridorSetup.RoomHalfDepth = DepthHalf;
+		CorridorSetup.WallThickness = WallThickness;
+		CorridorSetup.Height = RoomHeight;
+		CorridorSetup.StartDoorCenterX = DoorOpeningCenterX;
+		CorridorSetup.StartDoorWidth = DoorOpeningWidth;
+		CorridorSetup.StartDoorHeight = DoorOpeningHeight;
+		Corridor->Configure(CorridorSetup, Storm);
+		Corridor->FinishSpawning(CorridorTransform);
 	}
 }
 

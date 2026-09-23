@@ -1039,17 +1039,7 @@ void ARoomDressingActor::BuildBedroom(FRoomBuilder& Build)
 		// in a house where nothing has been oiled since the war. Against pale plaster a darker bed
 		// separates; a lighter one competes with it. It is also stood a little further off the
 		// wall now, so there is a line of its own shadow behind the headboard.
-		for (int32 Slot = 0; Slot < Frame->GetNumMaterials(); ++Slot)
-		{
-			if (UMaterialInterface* Source = Frame->GetMaterial(Slot))
-			{
-				if (UMaterialInstanceDynamic* Aged = UMaterialInstanceDynamic::Create(Source, this))
-				{
-					Aged->SetVectorParameterValue(TEXT("Tint"), FLinearColor(0.52f, 0.39f, 0.30f));
-					Frame->SetMaterial(Slot, Aged);
-				}
-			}
-		}
+		FRoomShapes::TintSlots(Frame, FLinearColor(0.52f, 0.39f, 0.30f));
 	}
 
 	// Everything that lies on the bed is placed in the bed's own frame: Across runs from one side
