@@ -896,7 +896,7 @@ void ACorridorActor::BuildCeiling(FRoomBuilder& Build)
 	const FVector2D Corners[4] = { { X0, NorthFace() }, { X1, NorthFace() }, { X0, SouthFace() }, { X1, SouthFace() } };
 	for (const FVector2D& Corner : Corners)
 	{
-		const float SignX = Corner.X < 0.f && Corner.X < X0 + 1.f ? 1.f : -1.f;
+		const float SignX = Corner.X == X0 ? 1.f : -1.f;
 		const float SignY = Corner.Y < CenterY() ? 1.f : -1.f;
 		for (int32 i = 0; i < 3; ++i)
 		{
@@ -1037,19 +1037,11 @@ void ACorridorActor::BuildPortraits(FRoomBuilder& Build)
 		}
 	}
 
-	// Where two more hung: the clean rectangle of wall the dirt never reached. The one place a
+	// Where one more hung: the clean rectangle of wall the dirt never reached. The one place a
 	// hard edge is right. Plus the nail.
-	const FVector2D Ghosts[] = { { -520.f, 0.f }, { -1000.f, 1.f } };
-	for (const FVector2D& Ghost : Ghosts)
-	{
-		const bool bNorth = Ghost.Y < 0.5f;
-		if (bNorth)
-		{
-			continue; // the north one is the portrait that was turned round, not taken down
-		}
-		Build.Mark(FVector(Ghost.X, SouthFace() - 0.2f, 170.f), FRotator(0.f, 0.f, -90.f), FVector2D(50.f, 66.f), MatWallpaper);
-		Build.Sph(FVector(Ghost.X, SouthFace() - 1.f, 216.f), 1.6f, MatIron);
-	}
+	const float GhostU = -1000.f;
+	Build.Mark(FVector(GhostU, SouthFace() - 0.2f, 170.f), FRotator(0.f, 0.f, -90.f), FVector2D(50.f, 66.f), MatWallpaper);
+	Build.Sph(FVector(GhostU, SouthFace() - 1.f, 216.f), 1.6f, MatIron);
 }
 
 void ACorridorActor::BuildFurniture(FRoomBuilder& Build)
@@ -1357,7 +1349,6 @@ AClueActor* ACorridorActor::SpawnClue(const FVector& LocalLocation, const FRotat
 
 void ACorridorActor::BuildClues()
 {
-
 	// Flowers at the bedroom door, on the corridor side: somebody left them for whoever was in
 	// there, and nobody came to the door. A dozen stems gone to straw, tied with a ribbon.
 	if (AClueActor* Flowers = SpawnClue(FVector(Setup.StartDoorCenterX - 20.f, NorthFace() + 26.f, 4.f), FRotator(0.f, 14.f, 0.f),

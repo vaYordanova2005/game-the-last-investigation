@@ -517,13 +517,18 @@ void AStormWindowActor::BuildWindow()
 				// across only: the sheet is as tall as the pane, so moving it up or down would
 				// hang it over the muntin.
 				//
+				// Square on the pane's SHORTER side, and the offset held so the sheet never
+				// crosses the muntin: the corridor's panes stand upright (~35 x 47), and a
+				// sheet as tall as one of those is wider than it.
+				//
 				// A plane rather than a thin box, because a box has four rims the alpha never
 				// touches — that is what left a rectangle of pale sticks hanging in every ceiling
 				// corner when the cobwebs were slabs.
-				const float ImpactY = Center.X - CellW * 0.13f;
+				const float Sheet = FMath::Min(CellW, CellH);
+				const float ImpactY = Center.X - FMath::Min(CellW * 0.13f, (CellW - Sheet) * 0.5f);
 				if (UStaticMeshComponent* Fracture = Build.Add(FRoomShapes::Plane(),
 					FVector(SashX - 1.f, ImpactY, Center.Y), FRotator(90.f, 0.f, 0.f),
-					FVector(CellH, CellH, 1.f), CrackMat, /*bBlockingCollision*/ false))
+					FVector(Sheet, Sheet, 1.f), CrackMat, /*bBlockingCollision*/ false))
 				{
 					// What should print on the far wall is the muntin grid, as with the panes.
 					Fracture->SetCastShadow(false);
