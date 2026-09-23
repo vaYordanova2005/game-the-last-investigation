@@ -581,7 +581,10 @@ void ARoomDressingActor::BuildFloor(FRoomBuilder& Build)
 	const FVector2D CollapseCenter(60.f, 90.f);
 	const float CollapseRadius = 88.f;
 
-	Build.Box(FVector(CollapseCenter.X, CollapseCenter.Y, -26.f), FRotator::ZeroRotator, FVector(CollapseRadius * 2.2f, CollapseRadius * 2.2f, 24.f), MatVoid, /*bBlockingCollision*/ false);
+	// Solid: the detective can step down into the hole, about fourteen centimetres below the
+	// boards, and step back out (well inside the character's step height). Without it he would
+	// drop through the black onto the shell slab.
+	Build.Box(FVector(CollapseCenter.X, CollapseCenter.Y, -26.f), FRotator::ZeroRotator, FVector(CollapseRadius * 2.2f, CollapseRadius * 2.2f, 24.f), MatVoid, /*bBlockingCollision*/ true);
 	Build.Box(FVector(CollapseCenter.X - 30.f, CollapseCenter.Y, -12.f), FRotator::ZeroRotator, FVector(CollapseRadius * 2.4f, 14.f, 12.f), MatRoughWood);
 	Build.Box(FVector(CollapseCenter.X + 46.f, CollapseCenter.Y, -10.f), FRotator(0.f, 6.f, 0.f), FVector(CollapseRadius * 2.4f, 12.f, 10.f), MatRoughWood);
 
@@ -636,7 +639,9 @@ void ARoomDressingActor::BuildFloor(FRoomBuilder& Build)
 				FRotator::ZeroRotator,
 				FVector(End - Start, SubBoardWidth - 1.f, 6.f),
 				MatFloorboardsWorn,
-				/*bBlockingCollision*/ false);
+				// Walked on: boards are dropped whole-span around the collapse, not just inside
+				// it, so there are runs of floor with only this course left in them.
+				/*bBlockingCollision*/ true);
 		}
 	}
 
