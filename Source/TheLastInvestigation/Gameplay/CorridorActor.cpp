@@ -158,11 +158,12 @@ void ACorridorActor::CacheMaterials(FRoomBuilder& Build)
 	MatShell = Build.Flat(FLinearColor(0.012f, 0.008f, 0.005f), 1.f);
 	MatWax = Build.Flat(FLinearColor(0.34f, 0.30f, 0.22f), 0.55f);
 	MatDial = Build.Flat(FLinearColor(0.15f, 0.14f, 0.12f), 0.7f);
-	// A mirror is the one surface up here that should be *smooth*: metallic and nearly polished,
-	// so Lumen hands back the corridor in it. The dust is projected over it, not baked into it.
-	// Old silvering, not new: at 0.6 the glass handed the lantern straight back and the mirror
-	// was the brightest thing on the landing.
-	MatMirror = Build.Flat(FLinearColor(0.28f, 0.27f, 0.25f), 0.1f, 1.f);
+	// The mirror is dark polished glass, not metal: Flat's base (BasicShapeMaterial) has no
+	// Metallic input, so the metal it was given was ignored and the glass came out a glossy pale
+	// panel lit by the lantern like the plaster beside it. Near-black and nearly polished, what it
+	// gives back is the specular — the lantern's flame, and faintly the lit wall behind the
+	// player. The dust is projected over it, not baked into it.
+	MatMirror = Build.Flat(FLinearColor(0.03f, 0.03f, 0.028f), 0.04f, 1.f);
 	MatStem = Build.Flat(FLinearColor(0.045f, 0.036f, 0.020f), 0.95f);
 	MatPetal = Build.Flat(FLinearColor(0.090f, 0.030f, 0.026f), 0.9f);
 	// The figures at the end of the corridor are not lit things. They are where the light is not.
@@ -1416,7 +1417,7 @@ void ACorridorActor::BuildClues()
 		// One projection, not two: a second, heavier one over the lower half drew a hard line
 		// across the glass where the two met.
 		B.Stain(RoomSurfaces::Damp, FVector(0.f, -10.f, 0.f), FRotator(0.f, 90.f, 0.f), FVector2D(W - 6.f, Hh - 6.f),
-			FLinearColor(0.30f, 0.28f, 0.25f), 0.38f, 0.8f, 3.f);
+			FLinearColor(0.16f, 0.15f, 0.13f), 0.16f, 1.2f, 1.4f);
 	}
 
 	// The long-case clock, broken: pendulum on the floor, trunk door hanging open, the hood glass
