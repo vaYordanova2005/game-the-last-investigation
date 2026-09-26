@@ -335,6 +335,17 @@ public:
 
 	UInstancedStaticMeshComponent* Instances(UStaticMesh* Mesh, UMaterialInterface* Mat);
 
+	/**
+	 * A wall sconce with a candle in it. WallPoint is on the wall's face at the height of the
+	 * backplate's middle; Yaw turns local +X out of the wall.
+	 *
+	 * Built as one piece because the house has several and every one of them was coming out as a
+	 * plate, a stick and a disc with a candle floating over it: nothing joined anything. A sconce
+	 * is a cast backplate, an arm that leaves it horizontally and curves up into the drip pan, a
+	 * socket the candle actually stands in, and the wax that ran down it and pooled.
+	 */
+	void Sconce(const FVector& WallPoint, float Yaw, float CandleLength, UMaterialInterface* Brass, UMaterialInterface* Wax, UMaterialInterface* Wick);
+
 	USceneComponent* Parent() const { return ParentComponent; }
 
 private:

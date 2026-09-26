@@ -20,7 +20,7 @@ namespace
 	/** Height of the invisible walls behind every banister. Over a man's hip, under his eyes. */
 	constexpr float BlockerHeight = 118.f;
 	/** The picture rail and the dado on the gallery walls, above the gallery floor. */
-	constexpr float PictureRail = 262.f;
+	constexpr float GalleryPictureRail = 262.f;
 
 	/** Collision that only a walking man meets: the interaction trace and the camera pass through. */
 	void PawnOnly(UStaticMeshComponent* Part)
@@ -31,14 +31,6 @@ namespace
 			Part->SetCollisionResponseToAllChannels(ECR_Ignore);
 			Part->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 			Part->SetHiddenInGame(true);
-			Part->SetCastShadow(false);
-		}
-	}
-
-	void NoShadow(UStaticMeshComponent* Part)
-	{
-		if (Part)
-		{
 			Part->SetCastShadow(false);
 		}
 	}
@@ -54,7 +46,7 @@ namespace
 	 * covers it, one over another if need be.
 	 */
 	template <typename TOpening, typename TWall>
-	TArray<FBox2D> CutAround(const TArray<TOpening>& Openings, TWall Wall, float U0, float U1, float Z0, float Z1)
+	TArray<FBox2D> CutAroundAll(const TArray<TOpening>& Openings, TWall Wall, float U0, float U1, float Z0, float Z1)
 	{
 		TArray<const TOpening*> Hits;
 		TArray<float> Cuts = { U0, U1 };
@@ -157,6 +149,56 @@ namespace
 	}
 }
 
+namespace
+{
+	/**
+	 * A flat panel of any convex outline, standing in a vertical plane: Origin is the outline's
+	 * (0, 0), Along is its first axis, world Z its second, Face which way its front looks. UVs are
+	 * centimetres over TexelCm, so a photographed surface on it runs on without a seam however the
+	 * outline is cut. Two sheets a few millimetres apart, each with both windings and its normal
+	 * forced — the Pane rule, which is right for an opaque single-sided surface like this one.
+	 */
+	UProceduralMeshComponent* PanelMesh(AActor* Owner, USceneComponent* Parent, const TArray<FVector2D>& Outline, const FVector& Origin,
+		const FVector& Along, const FVector& Face, float TexelCm, UMaterialInterface* Mat)
+	{
+		if (Outline.Num() < 3 || !Mat)
+		{
+			return nullptr;
+		}
+		TArray<FVector> Verts;
+		TArray<FVector> Normals;
+		TArray<FVector2D> UVs;
+		TArray<FProcMeshTangent> Tangents;
+		TArray<int32> Tris;
+		for (int32 Sheet = 0; Sheet < 2; ++Sheet)
+		{
+			const int32 First = Verts.Num();
+			const FVector Normal = Sheet == 0 ? Face : -Face;
+			for (const FVector2D& P : Outline)
+			{
+				Verts.Add(Origin + Along * P.X + FVector(0.f, 0.f, P.Y) - Face * (Sheet * 0.4f));
+				Normals.Add(Normal);
+				UVs.Add(FVector2D(P.X / TexelCm, -P.Y / TexelCm));
+				Tangents.Add(FProcMeshTangent(Along, false));
+			}
+			for (int32 i = 1; i + 1 < Outline.Num(); ++i)
+			{
+				Tris.Append({ First, First + i, First + i + 1, First, First + i + 1, First + i });
+			}
+		}
+		UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(Owner, MakeUniqueObjectName(Owner, UProceduralMeshComponent::StaticClass(), TEXT("Panel")));
+		Mesh->SetMobility(EComponentMobility::Movable);
+		Mesh->AttachToComponent(Parent, FAttachmentTransformRules::KeepRelativeTransform);
+		Mesh->bUseAsyncCooking = false;
+		Mesh->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, UVs, TArray<FLinearColor>(), Tangents, /*bCreateCollision*/ false);
+		Mesh->SetMaterial(0, Mat);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Mesh->RegisterComponent();
+		Owner->AddInstanceComponent(Mesh);
+		return Mesh;
+	}
+}
+
 AGrandStaircaseActor::AGrandStaircaseActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -237,6 +279,15 @@ void AGrandStaircaseActor::CacheMaterials(FRoomBuilder& Build)
 	// pulled towards brown, so the panelling is dark oak rather than a mahogany that glows red in
 	// the lantern.
 	MatWainscot = Build.Surface(RoomSurfaces::Wainscot, FLinearColor(2.1f, 3.3f, 3.5f));
+	// The same panelling for the generated spandrels, which carry their own UVs in repeats: an
+	// instance of its own with the tiling at one (the curtains' rule). A hair off the tint, so the
+	// builder's cache hands back a separate instance rather than the one Add() tiles from.
+	MatWainscotSheet = Build.Surface(RoomSurfaces::Wainscot, FLinearColor(2.1f, 3.3f, 3.51f));
+	if (MatWainscotSheet)
+	{
+		MatWainscotSheet->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(1.f, 1.f, 0.f, 1.f));
+		MatWainscotSheet->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(0.f, 0.f, 0.f, 1.f));
+	}
 	// The staircase is oak and darker than the corridor's joinery: it is the one piece of carpentry
 	// in the house that was waxed every week for sixty years, and then not for sixty more.
 	MatOak = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.290f, 0.272f, 0.250f));
@@ -270,9 +321,6 @@ void AGrandStaircaseActor::CacheMaterials(FRoomBuilder& Build)
 	MatStem = Build.Flat(FLinearColor(0.045f, 0.036f, 0.020f), 0.95f);
 	MatPetal = Build.Flat(FLinearColor(0.090f, 0.030f, 0.026f), 0.9f);
 	MatShadow = Build.Flat(FLinearColor(0.002f, 0.002f, 0.002f), 1.f);
-	MatUmbrella = Build.Flat(FLinearColor(0.012f, 0.012f, 0.014f), 0.55f);
-	// A child's yellow, sixty years on: still the only yellow in the house.
-	MatYellow = Build.Flat(FLinearColor(0.26f, 0.17f, 0.025f), 0.8f);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -327,7 +375,7 @@ void AGrandStaircaseActor::WallFill(FRoomBuilder& Build, EWall Wall, float U0, f
 {
 	// A Mark stands proud along its own +Z; the rotation per wall is the corridor's (FacePanel),
 	// which was worked out the hard way.
-	for (const FBox2D& Piece : CutAround(Openings, Wall, U0, U1, Z0, Z1))
+	for (const FBox2D& Piece : CutAroundAll(Openings, Wall, U0, U1, Z0, Z1))
 	{
 		const FVector2D C = Piece.GetCenter();
 		const FVector2D S = Piece.GetSize();
@@ -340,8 +388,13 @@ void AGrandStaircaseActor::WallFill(FRoomBuilder& Build, EWall Wall, float U0, f
 		{
 		case EWall::North: Build.Mark(At, FRotator(0.f, 0.f, 90.f), FVector2D(S.X, S.Y), Mat); break;
 		case EWall::South: Build.Mark(At, FRotator(0.f, 0.f, -90.f), FVector2D(S.X, S.Y), Mat); break;
-		case EWall::East:  Build.Mark(At, FRotator(90.f, 0.f, 0.f), FVector2D(S.Y, S.X), Mat); break;
-		default:           Build.Mark(At, FRotator(-90.f, 0.f, 0.f), FVector2D(S.Y, S.X), Mat); break;
+		// On the east and west walls local X runs *along* the wall and local Z out of it. The
+		// corridor's rotation for these (pitch +-90) stands local X upright instead, and the tiling —
+		// which gives its larger repeat count to the part's longer side and lays it along local X —
+		// then squeezed ten metres of panelling into the height of the wainscot: the panels came
+		// out as fine horizontal stripes. Plaster hides it; nothing with a grid in it does.
+		case EWall::East:  Build.Mark(At, FRotator(0.f, 90.f, 90.f), FVector2D(S.X, S.Y), Mat); break;
+		default:           Build.Mark(At, FRotator(0.f, 90.f, -90.f), FVector2D(S.X, S.Y), Mat); break;
 		}
 	}
 }
@@ -379,7 +432,7 @@ void AGrandStaircaseActor::BuildShell(FRoomBuilder& Build)
 	// and is simply built again through it; two black boxes in one place draw nothing new.
 	auto Run = [&](EWall Wall, float U0, float U1, float Line)
 	{
-		for (const FBox2D& Piece : CutAround(Openings, Wall, U0, U1, Z0, Z1))
+		for (const FBox2D& Piece : CutAroundAll(Openings, Wall, U0, U1, Z0, Z1))
 		{
 			const FVector2D C = Piece.GetCenter();
 			const FVector2D S = Piece.GetSize();
@@ -644,27 +697,45 @@ void AGrandStaircaseActor::BuildFlights(FRoomBuilder& Build)
 	BuildFlight(Build, FVector(LandingEdgeX(), NorthY() + SideWidth * 0.5f, LandingZ), FVector(1.f, 0.f, 0.f), SideWidth, 3202, true);
 	BuildFlight(Build, FVector(LandingEdgeX(), SouthY() - SideWidth * 0.5f, LandingZ), FVector(1.f, 0.f, 0.f), SideWidth, 3303, true);
 
-	// Spandrels: what closes the space under each flight, panelled, stepping up under the string.
-	// A panel cannot be a triangle, so it is a run of narrow strips whose tops step up under the
-	// string, and the string — which stands proud of them — hides the steps.
+	// Spandrels: what closes the space under each flight, panelled, its top edge running up under
+	// the string. One generated panel per side with its UVs in centimetres, so the panelling runs
+	// on unbroken from one end to the other. It was a run of narrow boxes stepping up under the
+	// string, each tiled and cropped on its own, and the panelling came out as vertical stripes.
+	// The boxes are still there, hidden, as the collision.
 	auto Spandrel = [&](float Y, float FootX, float Dir, float FootZ, float TopZ, float Face)
 	{
-		const int32 Strips = 18;
 		const float Run = Going * (RisersPerFlight - 1);
+		const float Slope = Rise / Going;
+		const float StartZ = FootZ + Rise - 14.f;
+		const float EndZ = StartZ + Run * Slope;
+		TArray<FVector2D> Outline = { FVector2D(0.f, GroundZ), FVector2D(Run, GroundZ) };
+		if (EndZ > TopZ)
+		{
+			Outline.Add(FVector2D(Run, TopZ));
+			Outline.Add(FVector2D((TopZ - StartZ) / Slope, TopZ));
+		}
+		else
+		{
+			Outline.Add(FVector2D(Run, EndZ));
+		}
+		if (StartZ > GroundZ)
+		{
+			Outline.Add(FVector2D(0.f, StartZ));
+		}
+		PanelMesh(this, HallRoot, Outline, FVector(FootX, Y + Face * 4.f, 0.f), FVector(Dir, 0.f, 0.f), FVector(0.f, Face, 0.f),
+			RoomSurfaces::Wainscot.TexelSizeCm, MatWainscotSheet);
+
+		const int32 Strips = 18;
 		for (int32 i = 0; i < Strips; ++i)
 		{
 			const float A0 = Run * i / Strips;
 			const float A1 = Run * (i + 1) / Strips;
-			// The strip's top is the pitch line at its low end, less the depth of the string.
-			const float Pitch = FootZ + Rise + A0 * (Rise / Going) - 14.f;
-			const float Bottom = GroundZ;
-			const float Height = FMath::Min(Pitch, TopZ) - Bottom;
-			if (Height <= 1.f)
+			const float Height = FMath::Min(StartZ + A0 * Slope, TopZ) - GroundZ;
+			if (Height > 1.f)
 			{
-				continue;
+				PawnOnly(Build.Box(FVector(FootX + Dir * (A0 + A1) * 0.5f, Y + Face * 2.f, GroundZ + Height * 0.5f), FRotator::ZeroRotator,
+					FVector(A1 - A0 + 0.2f, 4.f, Height), MatVoid));
 			}
-			Build.Box(FVector(FootX + Dir * (A0 + A1) * 0.5f, Y + Face * 2.f, Bottom + Height * 0.5f), FRotator::ZeroRotator,
-				FVector(A1 - A0 + 0.2f, 4.f, Height), MatWainscot);
 		}
 	};
 	Spandrel(CentralNorthY(), FlightEastX(), -1.f, GroundZ, LandingZ, 1.f);
@@ -921,7 +992,7 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 	for (const FRun& R : HallWalls)
 	{
 		WallFill(Build, R.Wall, R.U0, R.U1, Z0, Dado, MatWainscot, 0.3f);
-		for (const FBox2D& Piece : CutAround(Openings, R.Wall, R.U0, R.U1, Z0, Dado + 4.f))
+		for (const FBox2D& Piece : CutAroundAll(Openings, R.Wall, R.U0, R.U1, Z0, Dado + 4.f))
 		{
 			const FVector2D C = Piece.GetCenter();
 			const FVector2D S = Piece.GetSize();
@@ -960,7 +1031,7 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 		const float U1 = bAlongX ? EastX() : SouthY();
 		auto Band = [&](float ZA, float ZB, float Depth)
 		{
-			for (const FBox2D& Piece : CutAround(Openings, Wall, U0, U1, ZA, ZB))
+			for (const FBox2D& Piece : CutAroundAll(Openings, Wall, U0, U1, ZA, ZB))
 			{
 				const FVector2D C = Piece.GetCenter();
 				const FVector2D S = Piece.GetSize();
@@ -971,7 +1042,7 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 			}
 		};
 		Band(-FloorDepth - 4.f, 0.f, 3.f);
-		Band(PictureRail - 2.f, PictureRail + 2.f, 2.5f);
+		Band(GalleryPictureRail - 2.f, GalleryPictureRail + 2.f, 2.5f);
 		Band(CeilingZ - 16.f, CeilingZ, 14.f);
 		Band(CeilingZ - 26.f, CeilingZ - 16.f, 7.f);
 	}
@@ -994,11 +1065,11 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 	{
 		const bool bNorth = Wall == EWall::North;
 		// Over the gallery and the return flight.
-		Panel(Wall, GalleryEdgeX() - 150.f, GalleryEdgeX() + 20.f, 40.f, PictureRail - 20.f, bNorth);
-		Panel(Wall, FlightEastX() + 10.f, GalleryEdgeX() - 170.f, 40.f, PictureRail - 20.f, !bNorth);
-		Panel(Wall, LandingEdgeX() + 20.f, FlightEastX() - 20.f, 20.f, PictureRail - 20.f, bNorth);
+		Panel(Wall, GalleryEdgeX() - 150.f, GalleryEdgeX() + 20.f, 40.f, GalleryPictureRail - 20.f, bNorth);
+		Panel(Wall, FlightEastX() + 10.f, GalleryEdgeX() - 170.f, 40.f, GalleryPictureRail - 20.f, !bNorth);
+		Panel(Wall, LandingEdgeX() + 20.f, FlightEastX() - 20.f, 20.f, GalleryPictureRail - 20.f, bNorth);
 		// Over the landing, running down to it.
-		Panel(Wall, WestX() + 20.f, LandingEdgeX() - 10.f, LandingZ + 110.f, PictureRail - 20.f, false);
+		Panel(Wall, WestX() + 20.f, LandingEdgeX() - 10.f, LandingZ + 110.f, GalleryPictureRail - 20.f, false);
 	}
 	// Either side of the window on the landing.
 	Panel(EWall::West, NorthY() + 20.f, Setup.CenterY - WindowWidth * 0.5f - 40.f, LandingZ + 40.f, LandingZ + 330.f, false);
@@ -1007,12 +1078,12 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 	// The gallery walls get the wainscot's dado, and paper from it to the picture rail in runs.
 	for (const FRun& R : { FRun{ EWall::East, NorthY(), SouthY() } })
 	{
-		for (const FBox2D& Piece : CutAround(Openings, R.Wall, R.U0, R.U1, 88.f, 96.f))
+		for (const FBox2D& Piece : CutAroundAll(Openings, R.Wall, R.U0, R.U1, 88.f, 96.f))
 		{
 			WallBox(Build, R.Wall, Piece.GetCenter().X, 92.f, Piece.GetSize().X, 7.f, 3.2f, 0.f, MatOak);
 		}
-		WallFill(Build, R.Wall, NorthY() + 40.f, Setup.CenterY - Setup.OpeningWidth * 0.5f - 40.f, 98.f, PictureRail - 4.f, MatWallpaper, 0.4f);
-		WallFill(Build, R.Wall, Setup.CenterY + Setup.OpeningWidth * 0.5f + 90.f, SouthY() - 60.f, 98.f, PictureRail - 4.f, MatWallpaperDark, 0.4f);
+		WallFill(Build, R.Wall, NorthY() + 40.f, Setup.CenterY - Setup.OpeningWidth * 0.5f - 40.f, 98.f, GalleryPictureRail - 4.f, MatWallpaper, 0.4f);
+		WallFill(Build, R.Wall, Setup.CenterY + Setup.OpeningWidth * 0.5f + 90.f, SouthY() - 60.f, 98.f, GalleryPictureRail - 4.f, MatWallpaperDark, 0.4f);
 	}
 
 	// The archway from the corridor, cased on this side, and lined through the wall.
@@ -1190,14 +1261,11 @@ void AGrandStaircaseActor::BuildStainedGlass(FRoomBuilder& Build)
 	WallBox(Build, EWall::West, Setup.CenterY, Sill + WindowHeight + 8.f, WindowWidth + 32.f, 16.f, 3.5f, 0.f, MatOak);
 	WallBox(Build, EWall::West, Setup.CenterY, Sill + WindowHeight + 19.f, WindowWidth + 46.f, 6.f, 6.f, 0.f, MatOak);
 
-	// A pair of sconces either side, candles long burnt down.
+	// A pair of sconces either side, candles long burnt down. Out of the west wall is +X, yaw 0.
 	for (const float S : { -1.f, 1.f })
 	{
-		const FVector Plate = WallPoint(EWall::West, Setup.CenterY + S * (WindowWidth * 0.5f + 70.f), LandingZ + 170.f, 0.8f);
-		Build.Box(Plate, FRotator::ZeroRotator, FVector(1.6f, 10.f, 22.f), MatBrass, false);
-		Build.Cyl(Plate + FVector(7.f, 0.f, -2.f), FRotator(70.f, 0.f, 0.f), FVector(1.8f, 1.8f, 15.f), MatBrass, false);
-		Build.Cyl(Plate + FVector(13.f, 0.f, 3.f), FRotator::ZeroRotator, FVector(9.f, 9.f, 1.2f), MatBrass, false);
-		Build.Cyl(Plate + FVector(13.f, 0.f, 3.f + (S < 0.f ? 3.f : 5.5f)), FRotator::ZeroRotator, FVector(2.4f, 2.4f, S < 0.f ? 6.f : 11.f), MatWax, false);
+		Build.Sconce(WallPoint(EWall::West, Setup.CenterY + S * (WindowWidth * 0.5f + 55.f), LandingZ + 170.f, 0.f), 0.f,
+			S < 0.f ? 6.f : 10.f, MatBrass, MatWax, MatShadow);
 	}
 }
 
@@ -1460,7 +1528,7 @@ void AGrandStaircaseActor::BuildFurniture(FRoomBuilder& Build)
 	// black, and the one thing down here the height of a man that is not one.
 	const FVector Alcove((FlightEastX() + LandingEdgeX()) * 0.5f - 20.f, (NorthInnerY() + CentralNorthY()) * 0.5f, GroundZ);
 	Build.Box(Alcove + FVector(0.f, 0.f, 9.f), FRotator::ZeroRotator, FVector(90.f, 90.f, 18.f), MatMarble);
-	if (UStaticMeshComponent* Statue = Build.PropSeated(RoomProps::Statue, Alcove + FVector(0.f, 0.f, 18.f), FRotator(0.f, 90.f, 0.f), 176.f))
+	if (UStaticMeshComponent* Statue = Build.PropSeated(RoomProps::Statue, Alcove + FVector(0.f, 0.f, 18.f), FRotator(0.f, -90.f, 0.f), 176.f))
 	{
 		FRoomShapes::TintSlots(Statue, FLinearColor(0.42f, 0.40f, 0.36f));
 	}
@@ -1476,11 +1544,11 @@ void AGrandStaircaseActor::BuildFurniture(FRoomBuilder& Build)
 	{
 		FRoomShapes::TintSlots(Vase, FLinearColor(0.40f, 0.34f, 0.26f));
 	}
-	if (UStaticMeshComponent* Table = Build.PropSeated(RoomProps::SideTable, FVector(WestX() + 30.f, Setup.CenterY - WindowWidth * 0.5f - 110.f, LandingZ), FRotator(0.f, -8.f, 0.f), 0.f))
+	if (UStaticMeshComponent* Table = Build.PropSeated(RoomProps::SideTable, FVector(WestX() + 30.f, PortraitCenterY(), LandingZ), FRotator(0.f, -8.f, 0.f), 0.f))
 	{
 		FRoomShapes::TintSlots(Table, FLinearColor(0.50f, 0.47f, 0.43f));
 	}
-	if (UStaticMeshComponent* Vase = Build.PropSeated(RoomProps::CeramicVase, FVector(WestX() + 30.f, Setup.CenterY - WindowWidth * 0.5f - 110.f, LandingZ + 76.f), FRotator(0.f, 130.f, 0.f), 34.f, false))
+	if (UStaticMeshComponent* Vase = Build.PropSeated(RoomProps::CeramicVase, FVector(WestX() + 30.f, PortraitCenterY(), LandingZ + 76.f), FRotator(0.f, 130.f, 0.f), 34.f, false))
 	{
 		FRoomShapes::TintSlots(Vase, FLinearColor(0.44f, 0.42f, 0.40f));
 	}
@@ -1817,34 +1885,99 @@ void AGrandStaircaseActor::BuildClues()
 		TEXT("Three black umbrellas, and a small yellow one with a duck's head for a handle. All of them bone dry, on a night like this.")))
 	{
 		FRoomBuilder B(Stand, Stand->GetRootScene());
+		// The stand: a drip tray on the floor, six uprights, and two open hoops — hoops, not discs,
+		// or the umbrellas stand on a lid instead of in a stand.
 		B.Cyl(FVector(0.f, 0.f, 1.5f), FRotator::ZeroRotator, FVector(34.f, 34.f, 3.f), MatIron, false);
-		B.Cyl(FVector(0.f, 0.f, 30.f), FRotator::ZeroRotator, FVector(28.f, 28.f, 1.5f), MatIron, false);
-		B.Cyl(FVector(0.f, 0.f, 58.f), FRotator::ZeroRotator, FVector(30.f, 30.f, 2.f), MatIron, false);
+		auto Hoop = [&](float Z, float Radius, float Thick)
+		{
+			const int32 Segments = 18;
+			for (int32 i = 0; i < Segments; ++i)
+			{
+				const float A0 = 2.f * PI * i / Segments;
+				const float A1 = 2.f * PI * (i + 1) / Segments;
+				const FVector P0(FMath::Cos(A0) * Radius, FMath::Sin(A0) * Radius, Z);
+				const FVector P1(FMath::Cos(A1) * Radius, FMath::Sin(A1) * Radius, Z);
+				B.Cyl((P0 + P1) * 0.5f, FRotationMatrix::MakeFromZ((P1 - P0).GetSafeNormal()).Rotator(), FVector(Thick, Thick, (P1 - P0).Size() + 0.3f), MatIron, false);
+			}
+		};
+		Hoop(3.4f, 16.6f, 1.2f);
+		Hoop(30.f, 14.f, 1.3f);
+		Hoop(58.f, 14.f, 1.6f);
 		for (int32 i = 0; i < 6; ++i)
 		{
 			const float A = i * PI / 3.f;
 			B.Cyl(FVector(FMath::Cos(A) * 14.f, FMath::Sin(A) * 14.f, 30.f), FRotator::ZeroRotator, FVector(1.4f, 1.4f, 58.f), MatIron, false);
+			B.Sph(FVector(FMath::Cos(A) * 14.f, FMath::Sin(A) * 14.f, 59.5f), 2.4f, MatIron);
 		}
-		struct FBrolly { float A; float Lean; float Length; bool bChild; };
-		const FBrolly Brollies[] = { { 0.3f, 6.f, 92.f, false }, { 2.2f, 9.f, 88.f, false }, { 4.1f, 4.f, 95.f, false }, { 5.3f, 12.f, 62.f, true } };
+
+		// The umbrellas, furled, each standing on its ferrule in the tray and leaning out against the
+		// top hoop. A furled umbrella is a spindle: thin at the tip, swelling where the folds of the
+		// cloth are bunched a third of the way up, tapering into the shaft, strapped round the
+		// middle; then the bare shaft and a bent handle.
+		UMaterialInterface* Black = B.Surface(RoomSurfaces::Drapery, FLinearColor(0.034f, 0.030f, 0.032f), 0.7f);
+		UMaterialInterface* Yellow = B.Surface(RoomSurfaces::Drapery, FLinearColor(0.86f, 0.40f, 0.05f));
+		UMaterialInterface* DuckYellow = B.Flat(FLinearColor(0.30f, 0.20f, 0.03f), 0.5f);
+		struct FBrolly { float Azimuth; float Length; bool bChild; };
+		const FBrolly Brollies[] = { { 0.4f, 92.f, false }, { 2.3f, 88.f, false }, { 4.2f, 95.f, false }, { 5.4f, 64.f, true } };
 		for (const FBrolly& U : Brollies)
 		{
-			const FRotator Tilt(U.Lean * FMath::Cos(U.A), 0.f, U.Lean * FMath::Sin(U.A));
-			const FVector Base(FMath::Cos(U.A) * 6.f, FMath::Sin(U.A) * 6.f, 3.f);
-			UMaterialInterface* Canopy = U.bChild ? MatYellow.Get() : MatUmbrella.Get();
-			B.Add(FRoomShapes::Cone(), Base + Tilt.RotateVector(FVector(0.f, 0.f, U.Length * 0.42f)), Tilt + FRotator(180.f, 0.f, 0.f),
-				FVector(U.bChild ? 7.f : 9.f, U.bChild ? 7.f : 9.f, U.Length * 0.62f), Canopy, false);
-			B.Cyl(Base + Tilt.RotateVector(FVector(0.f, 0.f, U.Length * 0.85f)), Tilt, FVector(1.4f, 1.4f, U.Length * 0.3f), U.bChild ? MatYellow.Get() : MatOakDark.Get(), false);
-			const FVector Handle = Base + Tilt.RotateVector(FVector(0.f, 0.f, U.Length));
+			const FVector Out(FMath::Cos(U.Azimuth), FMath::Sin(U.Azimuth), 0.f);
+			const FVector Tip = Out * 4.f + FVector(0.f, 0.f, 3.4f);
+			// Leaning so the shaft rests against the inside of the top hoop.
+			const FVector Axis = (Out * 13.f + FVector(0.f, 0.f, 58.f) - Tip).GetSafeNormal();
+			const FRotator AlongAxis = FRotationMatrix::MakeFromZ(Axis).Rotator();
+			auto P = [&](float S) { return Tip + Axis * S; };
+			const float L = U.Length;
+			const float Scale = U.bChild ? 0.72f : 1.f;
+			UMaterialInterface* Canopy = U.bChild ? Yellow : Black;
+
+			// Ferrule.
+			B.Cyl(P(2.f), AlongAxis, FVector(1.f, 1.f, 4.f), MatIron, false);
+			// The canopy, in stacked sections of changing girth, each sleeved a little into the next.
+			const float Radii[] = { 0.9f, 1.8f, 2.6f, 3.0f, 2.9f, 2.4f, 1.7f, 1.1f };
+			const int32 Sections = UE_ARRAY_COUNT(Radii);
+			const float CanopyStart = 4.f;
+			const float CanopyEnd = L * 0.7f;
+			const float Section = (CanopyEnd - CanopyStart) / Sections;
+			for (int32 i = 0; i < Sections; ++i)
+			{
+				const float R = Radii[i] * Scale;
+				B.Cyl(P(CanopyStart + Section * (i + 0.5f)), AlongAxis, FVector(R * 2.f, R * 1.8f, Section + 1.2f), Canopy, false);
+			}
+			// The strap and its button, round the fattest part.
+			const float StrapAt = CanopyStart + Section * 3.4f;
+			B.Cyl(P(StrapAt), AlongAxis, FVector(3.2f * Scale * 2.f, 3.2f * Scale * 2.f, 1.6f), Canopy, false);
+			B.Sph(P(StrapAt) + Out * 3.2f * Scale, 1.1f, MatBrass);
+			// The bare shaft above the canopy.
+			const float ShaftTop = L - 3.f;
+			B.Cyl(P((CanopyEnd + ShaftTop) * 0.5f), AlongAxis, FVector(1.1f, 1.1f, ShaftTop - CanopyEnd + 1.f), MatIron, false);
+
 			if (U.bChild)
 			{
-				// The duck: a head and a bill, which is all a duck is at this size.
-				B.Sph(Handle + FVector(0.f, 0.f, 2.f), 5.f, MatYellow);
-				B.Add(FRoomShapes::Cone(), Handle + FVector(3.5f, 0.f, 2.f), FRotator(-90.f, 0.f, 0.f), FVector(2.4f, 1.6f, 3.4f), MatBrass, false);
+				// The duck: a round head on the end of the shaft and a bill, which at this size is all
+				// a duck is, and a pair of black eyes.
+				const FVector Head = P(ShaftTop + 2.4f);
+				B.Sph(Head, 5.f, DuckYellow);
+				B.Add(FRoomShapes::Cone(), Head + Out * 3.6f, FRotationMatrix::MakeFromZ(Out).Rotator(), FVector(2.2f, 1.4f, 3.2f), MatBrass, false);
+				const FVector Side(-Out.Y, Out.X, 0.f);
+				for (const float E : { -1.f, 1.f })
+				{
+					B.Sph(Head + Out * 1.8f + Side * E * 1.7f + FVector(0.f, 0.f, 1.2f), 0.8f, MatShadow);
+				}
+				continue;
 			}
-			else
+			// A crook: the shaft carried up and bent over outwards in a half circle.
+			const float Radius = 4.2f;
+			const FVector OutPerp = (Out - Axis * FVector::DotProduct(Out, Axis)).GetSafeNormal();
+			const FVector Centre = P(ShaftTop) + OutPerp * Radius;
+			FVector Previous = P(ShaftTop);
+			for (int32 i = 1; i <= 9; ++i)
 			{
-				B.Cyl(Handle + FVector(3.f, 0.f, 0.f), FRotator(90.f, 0.f, 0.f), FVector(2.2f, 2.2f, 8.f), MatOakDark, false);
+				const float Theta = PI * i / 9.f;
+				const FVector Next = Centre + (-OutPerp * FMath::Cos(Theta) + Axis * FMath::Sin(Theta)) * Radius;
+				B.Cyl((Previous + Next) * 0.5f, FRotationMatrix::MakeFromZ((Next - Previous).GetSafeNormal()).Rotator(), FVector(2.f, 2.f, (Next - Previous).Size() + 0.3f), MatOakDark, false);
+				B.Sph(Next, 2.1f, MatOakDark);
+				Previous = Next;
 			}
 		}
 		HitVolume(B, FVector(0.f, 0.f, 55.f), FVector(36.f, 36.f, 110.f));
@@ -1852,10 +1985,10 @@ void AGrandStaircaseActor::BuildClues()
 
 	// The family, on the landing wall beside the window: gone brown under its varnish, and the
 	// man's face scraped off it. The frame is the gilt one; its canvas is darkened past reading.
-	const float PortraitY = (NorthInnerY() + Setup.CenterY - WindowWidth * 0.5f) * 0.5f;
+	const float PortraitY = PortraitCenterY();
 	if (AClueActor* Portrait = SpawnClue(FVector(WestX() + 2.f, PortraitY, LandingZ + 190.f), FRotator::ZeroRotator,
 		TEXT("Examine the portrait"),
-		TEXT("A family, gone brown under the varnish: a man, a woman, a little girl. Where the man's face was, the paint has been scraped away to the canvas.")))
+		TEXT("A street by a canal, gone brown under the varnish. Three small figures at the water's edge — a man, a woman, a little girl. The man's face has been scraped away to the canvas.")))
 	{
 		FRoomBuilder B(Portrait, Portrait->GetRootScene());
 		// fancy_picture_frame_02 is 66 x 9 x 77 with its back at local Y = 0 and its face towards
@@ -1865,9 +1998,9 @@ void AGrandStaircaseActor::BuildClues()
 			FRoomShapes::TintSlots(Frame, FLinearColor(0.45f, 0.38f, 0.28f), 0);
 			FRoomShapes::TintSlots(Frame, FLinearColor(0.16f, 0.12f, 0.08f), 1);
 		}
-		// The scraped place: pale ground and gouges, projected onto the canvas.
-		B.Stain(RoomSurfaces::Substrate, FVector(12.f, 16.f, 26.f), FRotator(0.f, 180.f, 0.f), FVector2D(16.f, 20.f), FLinearColor(0.34f, 0.30f, 0.24f), 0.95f, 0.8f);
-		B.Crack(FVector(12.f, 16.f, 26.f), FRotator(0.f, 180.f, 0.f), FVector2D(18.f, 24.f), 1.f, 46.f);
+		// The scraped place, down among the figures by the water: small, pale and gouged.
+		B.Stain(RoomSurfaces::Substrate, FVector(12.f, 4.f, -18.f), FRotator(0.f, 180.f, 0.f), FVector2D(6.f, 8.f), FLinearColor(0.34f, 0.30f, 0.24f), 0.95f, 0.8f);
+		B.Crack(FVector(12.f, 4.f, -18.f), FRotator(0.f, 180.f, 0.f), FVector2D(9.f, 11.f), 1.f, 46.f);
 		B.Sph(FVector(1.f, 0.f, 72.f), 1.8f, MatIron);
 		HitVolume(B, FVector(6.f, 0.f, 0.f), FVector(4.f, 100.f, 118.f));
 	}

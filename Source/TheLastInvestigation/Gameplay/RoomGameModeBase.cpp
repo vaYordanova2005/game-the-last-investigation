@@ -148,10 +148,22 @@ void ARoomGameModeBase::HandleStartingNewPlayer_Implementation(APlayerController
 	// owns the spot and the facing, because the whole layout is composed around that one view.
 	if (APawn* Pawn = NewPlayer ? NewPlayer->GetPawn() : nullptr)
 	{
-		Pawn->SetActorLocationAndRotation(AInvestigationRoomActor::GetWakeLocation(), FRotator::ZeroRotator);
+		// -StartX/-StartY/-StartZ/-StartYaw start the detective somewhere else, for walking round the
+		// rest of the house without solving the bedroom first. One axis each, as with -RoomShotX.
+		FVector Start = AInvestigationRoomActor::GetWakeLocation();
+		FRotator Facing = AInvestigationRoomActor::GetWakeRotation();
+		bool bMoved = FParse::Value(FCommandLine::Get(), TEXT("-StartX="), Start.X);
+		bMoved |= FParse::Value(FCommandLine::Get(), TEXT("-StartY="), Start.Y);
+		bMoved |= FParse::Value(FCommandLine::Get(), TEXT("-StartZ="), Start.Z);
+		if (FParse::Value(FCommandLine::Get(), TEXT("-StartYaw="), Facing.Yaw) || bMoved)
+		{
+			Facing.Pitch = 0.f;
+		}
+
+		Pawn->SetActorLocationAndRotation(Start, FRotator::ZeroRotator);
 		// bUseControllerRotationYaw drives facing from this, not the actor's own rotation. The
 		// slight downward pitch is a man opening his eyes on the floor, not a camera on a tripod.
-		NewPlayer->SetControlRotation(AInvestigationRoomActor::GetWakeRotation());
+		NewPlayer->SetControlRotation(Facing);
 		UE_LOG(LogTemp, Log, TEXT("Room01: player placed at %s"), *Pawn->GetActorLocation().ToString());
 	}
 }

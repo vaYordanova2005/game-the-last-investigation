@@ -771,16 +771,10 @@ void ACorridorActor::BuildDoorCasings(FRoomBuilder& Build)
 		}
 	}
 
-	// A pair of candle sconces either side of the bedroom door: brass backplate, a curved arm, a
-	// drip pan and a stub of candle that went out a very long time ago.
+	// A pair of candle sconces either side of the bedroom door, candles long burnt down.
 	for (const float Side : { -1.f, 1.f })
 	{
-		const float U = Setup.StartDoorCenterX + Side * 96.f;
-		const FVector Plate(U, NorthFace() + 0.8f, 168.f);
-		Build.Box(Plate, FRotator::ZeroRotator, FVector(9.f, 1.6f, 20.f), MatBrass, false);
-		Build.Cyl(Plate + FVector(0.f, 6.f, -2.f), FRotator(0.f, 0.f, -70.f), FVector(1.8f, 1.8f, 14.f), MatBrass, false);
-		Build.Cyl(Plate + FVector(0.f, 12.f, 3.f), FRotator::ZeroRotator, FVector(8.f, 8.f, 1.2f), MatBrass, false);
-		Build.Cyl(Plate + FVector(0.f, 12.f, 3.f + (Side < 0.f ? 3.5f : 6.f)), FRotator::ZeroRotator, FVector(2.4f, 2.4f, Side < 0.f ? 7.f : 12.f), MatWax, false);
+		Build.Sconce(FVector(Setup.StartDoorCenterX + Side * 96.f, NorthFace(), 168.f), 90.f, Side < 0.f ? 6.f : 11.f, MatBrass, MatWax, MatShadow);
 	}
 }
 
@@ -1024,9 +1018,6 @@ void ACorridorActor::BuildFurniture(FRoomBuilder& Build)
 	// Open, face up, pages swollen.
 	Build.Box(CrateSeat + FVector(-38.f, 30.f, 1.6f), FRotator(0.f, -20.f, 3.f), FVector(17.f, 22.f, 1.4f), MatPaper, false);
 	Build.Box(CrateSeat + FVector(-38.f, 30.f, 1.6f) + FVector(-14.f, -4.f, 0.f), FRotator(0.f, -20.f, -3.f), FVector(17.f, 22.f, 1.4f), MatPaper, false);
-
-	// A kitchen chair on its side by the archway.
-	Build.Prop(RoomProps::Chair, FVector(-990.f, SouthFace() - 50.f, 24.f), FRotator(0.f, 70.f, 88.f), 92.f);
 
 	// A floor candelabrum, over on its side on the runner at the far end: three arms, the stem
 	// across the boards, candles rolled out of their cups.

@@ -2,6 +2,8 @@
 #include "RoomBuildLibrary.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SceneComponent.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 AHallDoorActor::AHallDoorActor()
 {
@@ -28,6 +30,11 @@ void AHallDoorActor::BeginPlay()
 
 	Random.Initialize(Setup.Seed);
 	BuildLeaf();
+	// -OpenDoors (see ADoorActor): swung wide into its room, so the room behind can be walked into.
+	if (FParse::Param(FCommandLine::Get(), TEXT("OpenDoors")))
+	{
+		Setup.AjarYaw = 95.f;
+	}
 	Swing->SetRelativeRotation(FRotator(0.f, Setup.AjarYaw, 0.f));
 }
 

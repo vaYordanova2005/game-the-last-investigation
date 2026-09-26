@@ -4,6 +4,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 ADoorActor::ADoorActor()
 {
@@ -65,6 +67,15 @@ void ADoorActor::BeginPlay()
 	Random.Initialize(19551104 + 7);
 
 	BuildDoorDetail();
+
+	// -OpenDoors: every door in the house starts open, for walking round it without playing it.
+	// A development switch; without it the bedroom is locked until the key is found.
+	if (FParse::Param(FCommandLine::Get(), TEXT("OpenDoors")))
+	{
+		bIsLocked = false;
+		bIsOpen = true;
+		TargetYaw = 100.f;
+	}
 }
 
 void ADoorActor::BuildDoorDetail()

@@ -125,6 +125,8 @@ private:
 	float CentralNorthY() const { return Setup.CenterY - CentralWidth * 0.5f; }
 	float CentralSouthY() const { return Setup.CenterY + CentralWidth * 0.5f; }
 	float ChandelierX() const { return (GalleryEdgeX() + FlightEastX()) * 0.5f; }
+	/** The portrait on the landing: north of the window, clear of the sconce beside it. */
+	float PortraitCenterY() const { return NorthInnerY() + 60.f; }
 
 	void CacheMaterials(FRoomBuilder& Build);
 	void BuildShell(FRoomBuilder& Build);
@@ -208,6 +210,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWallpaper;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWallpaperDark;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWainscot;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWainscotSheet;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatOak;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatOakDark;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatTread;
@@ -235,6 +238,4 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatStem;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPetal;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatShadow;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatUmbrella;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatYellow;
 };
