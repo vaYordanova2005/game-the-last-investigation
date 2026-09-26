@@ -305,6 +305,12 @@ void AStormWindowActor::BeginPlay()
 		// The lead's directional light already lights the whole world; a second one is the thing
 		// SetLead exists to avoid. Hidden rather than destroyed, so nothing else needs a case for it.
 		LightningLight->SetVisibility(false);
+		if (Setup.bOwnView)
+		{
+			BuildOutsideWorld();
+			BuildRain();
+			BuildLightningBolts();
+		}
 	}
 	else
 	{
@@ -330,7 +336,19 @@ void AStormWindowActor::BeginPlay()
 	SkyPortal->SetSourceWidth(Setup.OpeningWidth);
 	SkyPortal->SetSourceHeight(Setup.TopHeight - Setup.SillHeight);
 	SkyPortal->SetAttenuationRadius(2000.f);
-	SkyPortal->SetIntensity(SkyPortalCandelas);
+	SkyPortal->SetIntensity(SkyPortalCandelas * Setup.PortalScale);
+
+	if (Lead && Setup.bOwnView)
+	{
+		// The lead's directional light is on the far side of the house and cannot come in through
+		// this window, so the long shadows a strike throws have to come from here. A point light
+		// twenty metres out and well up is near enough to parallel over the width of a room that
+		// the shadows read as the sky's, and far enough that they are long. Moved every strike
+		// (FollowOwnView), so no two flashes lay the window across the stairs the same way.
+		LightningGlow->SetCastShadows(true);
+		LightningGlow->SetAttenuationRadius(6000.f);
+		LightningGlow->SetRelativeLocation(FVector(2000.f, 0.f, WindowCenterZ + 700.f));
+	}
 
 	TimeUntilNextStrike = Random.FRandRange(1.2f, 2.4f); // one early strike, while the player is still getting oriented
 }
@@ -413,125 +431,130 @@ void AStormWindowActor::BuildWindow()
 	const float InnerX = -Setup.WallThickness * 0.5f; // the room-side face of the wall
 	const float SashX = 1.f;                          // the sash sits mid-reveal, glass roughly in the wall plane
 
-	// The reveal. The wall is twenty centimetres thick, so the opening is a short tunnel, and
-	// lining it is what gives the window depth instead of the look of a rectangle cut in card.
-	Build.Box(FVector(0.f, -HalfWidth - 3.f, CenterZ), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, 6.f, Height + 12.f), PaintMat);
-	Build.Box(FVector(0.f, HalfWidth + 3.f, CenterZ), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, 6.f, Height + 12.f), PaintMat);
-	Build.Box(FVector(0.f, 0.f, Setup.TopHeight + 3.f), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, Setup.OpeningWidth + 12.f, 6.f), PaintMat);
-
-	// The inner sill, projecting into the room and tilted a degree to shed water it has not had
-	// to shed in years. Deep enough to stand things on: it is where the key sits.
-	Build.Box(FVector(InnerX - 10.f, 0.f, Setup.SillHeight - 3.f), FRotator(-1.5f, 0.f, 0.f), FVector(Setup.WallThickness + 26.f, Setup.OpeningWidth + 24.f, 6.f), PaintMat);
-	Build.Box(FVector(InnerX - 20.f, 0.f, Setup.SillHeight - 9.f), FRotator::ZeroRotator, FVector(4.f, Setup.OpeningWidth + 18.f, 7.f), PaintWornMat, /*bBlockingCollision*/ false);
-
-	// Sash: the perimeter, then the muntin grid that divides it into small panes. The grid is the
-	// point of the whole assembly — it is the pattern the storm prints across the far wall.
-	const int32 Cols = 4;
-	const int32 Rows = 4;
-	const float SashW = 7.f;
-	const float MuntinW = 2.6f;
-	const float SashDepth = 5.f;
-
-	Build.Box(FVector(SashX, 0.f, Setup.SillHeight + SashW * 0.5f), FRotator::ZeroRotator, FVector(SashDepth, Setup.OpeningWidth, SashW), PaintMat);
-	Build.Box(FVector(SashX, 0.f, Setup.TopHeight - SashW * 0.5f), FRotator::ZeroRotator, FVector(SashDepth, Setup.OpeningWidth, SashW), PaintMat);
-	Build.Box(FVector(SashX, -HalfWidth + SashW * 0.5f, CenterZ), FRotator::ZeroRotator, FVector(SashDepth, SashW, Height), PaintMat);
-	Build.Box(FVector(SashX, HalfWidth - SashW * 0.5f, CenterZ), FRotator::ZeroRotator, FVector(SashDepth, SashW, Height), PaintMat);
-
-	const float InnerWidth = Setup.OpeningWidth - SashW * 2.f;
-	const float InnerHeight = Height - SashW * 2.f;
-	const float CellW = (InnerWidth - MuntinW * (Cols - 1)) / Cols;
-	const float CellH = (InnerHeight - MuntinW * (Rows - 1)) / Rows;
-	const float FirstY = -InnerWidth * 0.5f + CellW * 0.5f;
-	const float FirstZ = Setup.SillHeight + SashW + CellH * 0.5f;
-
-	auto CellCenter = [&](int32 Col, int32 Row)
+	// Everything that is the window itself. Skipped for an opening glazed by whoever spawned
+	// this (see FStormWindowSetup::bGlazed) — only the curtains and the world outside are left.
+	if (Setup.bGlazed)
 	{
-		return FVector2D(FirstY + Col * (CellW + MuntinW), FirstZ + Row * (CellH + MuntinW));
-	};
+		// The reveal. The wall is twenty centimetres thick, so the opening is a short tunnel, and
+		// lining it is what gives the window depth instead of the look of a rectangle cut in card.
+		Build.Box(FVector(0.f, -HalfWidth - 3.f, CenterZ), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, 6.f, Height + 12.f), PaintMat);
+		Build.Box(FVector(0.f, HalfWidth + 3.f, CenterZ), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, 6.f, Height + 12.f), PaintMat);
+		Build.Box(FVector(0.f, 0.f, Setup.TopHeight + 3.f), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, Setup.OpeningWidth + 12.f, 6.f), PaintMat);
 
-	for (int32 Col = 1; Col < Cols; ++Col)
-	{
-		const float Y = FirstY + (Col - 0.5f) * (CellW + MuntinW);
-		Build.Box(FVector(SashX, Y, CenterZ), FRotator::ZeroRotator, FVector(SashDepth - 1.f, MuntinW, InnerHeight), PaintMat, /*bBlockingCollision*/ false);
-	}
-	for (int32 Row = 1; Row < Rows; ++Row)
-	{
-		const float Z = FirstZ + (Row - 0.5f) * (CellH + MuntinW);
-		// The middle one is the meeting rail where the two sashes overlap, so it is heavier than
-		// the muntins above and below it.
-		const bool bMeetingRail = (Row == Rows / 2);
-		Build.Box(FVector(SashX, 0.f, Z), FRotator::ZeroRotator,
-			FVector(SashDepth - (bMeetingRail ? 0.f : 1.f), InnerWidth, bMeetingRail ? MuntinW * 2.4f : MuntinW),
-			PaintMat, /*bBlockingCollision*/ false);
-	}
+		// The inner sill, projecting into the room and tilted a degree to shed water it has not had
+		// to shed in years. Deep enough to stand things on: it is where the key sits.
+		Build.Box(FVector(InnerX - 10.f, 0.f, Setup.SillHeight - 3.f), FRotator(-1.5f, 0.f, 0.f), FVector(Setup.WallThickness + 26.f, Setup.OpeningWidth + 24.f, 6.f), PaintMat);
+		Build.Box(FVector(InnerX - 20.f, 0.f, Setup.SillHeight - 9.f), FRotator::ZeroRotator, FVector(4.f, Setup.OpeningWidth + 18.f, 7.f), PaintWornMat, /*bBlockingCollision*/ false);
 
-	// Glass. Two panes are gone — that is where the wind and the rain get in, and where the glass
-	// lying on the boards below came from — and one has taken a knock without letting go.
-	//
-	// Every pane is generated, because a hole in a pane has to be an *outline*: any arrangement of
-	// boxes around an opening leaves the opening with straight inner edges, and a straight edge is
-	// the one thing a pane that has been hit does not have.
-	// Which panes, not only the shape of the holes, has to differ on a follower: the seed alone
-	// only reshapes the holes, and two windows broken in the same two places read as one prop.
-	const FIntPoint BlownPanes[2] = { Lead ? FIntPoint(3, 1) : FIntPoint(0, 2), Lead ? FIntPoint(1, 0) : FIntPoint(2, 3) };
-	const FIntPoint CrackedPane = Lead ? FIntPoint(2, 2) : FIntPoint(1, 1);
+		// Sash: the perimeter, then the muntin grid that divides it into small panes. The grid is the
+		// point of the whole assembly — it is the pattern the storm prints across the far wall.
+		const int32 Cols = 4;
+		const int32 Rows = 4;
+		const float SashW = 7.f;
+		const float MuntinW = 2.6f;
+		const float SashDepth = 5.f;
 
-	for (int32 Col = 0; Col < Cols; ++Col)
-	{
-		for (int32 Row = 0; Row < Rows; ++Row)
+		Build.Box(FVector(SashX, 0.f, Setup.SillHeight + SashW * 0.5f), FRotator::ZeroRotator, FVector(SashDepth, Setup.OpeningWidth, SashW), PaintMat);
+		Build.Box(FVector(SashX, 0.f, Setup.TopHeight - SashW * 0.5f), FRotator::ZeroRotator, FVector(SashDepth, Setup.OpeningWidth, SashW), PaintMat);
+		Build.Box(FVector(SashX, -HalfWidth + SashW * 0.5f, CenterZ), FRotator::ZeroRotator, FVector(SashDepth, SashW, Height), PaintMat);
+		Build.Box(FVector(SashX, HalfWidth - SashW * 0.5f, CenterZ), FRotator::ZeroRotator, FVector(SashDepth, SashW, Height), PaintMat);
+
+		const float InnerWidth = Setup.OpeningWidth - SashW * 2.f;
+		const float InnerHeight = Height - SashW * 2.f;
+		const float CellW = (InnerWidth - MuntinW * (Cols - 1)) / Cols;
+		const float CellH = (InnerHeight - MuntinW * (Rows - 1)) / Rows;
+		const float FirstY = -InnerWidth * 0.5f + CellW * 0.5f;
+		const float FirstZ = Setup.SillHeight + SashW + CellH * 0.5f;
+
+		auto CellCenter = [&](int32 Col, int32 Row)
 		{
-			const FVector2D Center = CellCenter(Col, Row);
-			const FIntPoint Cell(Col, Row);
-			const bool bBlown = (BlownPanes[0] == Cell) || (BlownPanes[1] == Cell);
-			const bool bCracked = (Cell == CrackedPane);
+			return FVector2D(FirstY + Col * (CellW + MuntinW), FirstZ + Row * (CellH + MuntinW));
+		};
 
-			// Only the blown panes are damaged in the mesh, and only by losing glass. Splits were
-			// cut into every pane for a while, and sixteen cracked panes is not a broken window,
-			// it is a texture — it takes the two holes and the one starred pane down with it.
-			// Damage is worth what it is worth by being somewhere and not everywhere.
-			FPaneDamage Damage;
-			if (bBlown)
+		for (int32 Col = 1; Col < Cols; ++Col)
+		{
+			const float Y = FirstY + (Col - 0.5f) * (CellW + MuntinW);
+			Build.Box(FVector(SashX, Y, CenterZ), FRotator::ZeroRotator, FVector(SashDepth - 1.f, MuntinW, InnerHeight), PaintMat, /*bBlockingCollision*/ false);
+		}
+		for (int32 Row = 1; Row < Rows; ++Row)
+		{
+			const float Z = FirstZ + (Row - 0.5f) * (CellH + MuntinW);
+			// The middle one is the meeting rail where the two sashes overlap, so it is heavier than
+			// the muntins above and below it.
+			const bool bMeetingRail = (Row == Rows / 2);
+			Build.Box(FVector(SashX, 0.f, Z), FRotator::ZeroRotator,
+				FVector(SashDepth - (bMeetingRail ? 0.f : 1.f), InnerWidth, bMeetingRail ? MuntinW * 2.4f : MuntinW),
+				PaintMat, /*bBlockingCollision*/ false);
+		}
+
+		// Glass. Two panes are gone — that is where the wind and the rain get in, and where the glass
+		// lying on the boards below came from — and one has taken a knock without letting go.
+		//
+		// Every pane is generated, because a hole in a pane has to be an *outline*: any arrangement of
+		// boxes around an opening leaves the opening with straight inner edges, and a straight edge is
+		// the one thing a pane that has been hit does not have.
+		// Which panes, not only the shape of the holes, has to differ on a follower: the seed alone
+		// only reshapes the holes, and two windows broken in the same two places read as one prop.
+		const FIntPoint BlownPanes[2] = { Lead ? FIntPoint(3, 1) : FIntPoint(0, 2), Lead ? FIntPoint(1, 0) : FIntPoint(2, 3) };
+		const FIntPoint CrackedPane = Lead ? FIntPoint(2, 2) : FIntPoint(1, 1);
+
+		for (int32 Col = 0; Col < Cols; ++Col)
+		{
+			for (int32 Row = 0; Row < Rows; ++Row)
 			{
-				Damage.BreakAt = FVector2D(Random.FRandRange(0.34f, 0.66f), Random.FRandRange(0.32f, 0.68f));
-				Damage.HoleRadiusCm = FMath::Min(CellW, CellH) * Random.FRandRange(0.34f, 0.46f);
-			}
+				const FVector2D Center = CellCenter(Col, Row);
+				const FIntPoint Cell(Col, Row);
+				const bool bBlown = (BlownPanes[0] == Cell) || (BlownPanes[1] == Cell);
+				const bool bCracked = (Cell == CrackedPane);
 
-			// Local X runs up the pane and local Y across it, which is what the pitch is for.
-			Build.Pane(
-				FVector(SashX, Center.X, Center.Y), FRotator(90.f, 0.f, 0.f),
-				FVector2D(CellH + 1.f, CellW + 1.f),
-				Damage, Random.RandRange(1, 90000), GlassMat);
-
-			if (bCracked)
-			{
-				// One sheet, laid a centimetre in front of the glass, SQUARE and centred on the
-				// impact. The crack map covers a square patch of glass so that the star lands on
-				// a pane of any proportion without coming out elliptical — stretch this sheet to
-				// the pane's own 5:3 and the network turns into an oval, which nothing that has
-				// ever been hit looks like. Square on the pane's height means the splits running
-				// up and down leave the glass at the muntin, the way a crack does when it reaches
-				// the frame, and the ones running across have room to die out in open glass.
-				//
-				// The impact is a hand's width off the middle of the pane, because a break in the
-				// exact centre of a rectangle is the one place it reads as decoration. Off-centre
-				// across only: the sheet is as tall as the pane, so moving it up or down would
-				// hang it over the muntin.
-				//
-				// Square on the pane's SHORTER side, and the offset held so the sheet never
-				// crosses the muntin: the corridor's panes stand upright (~35 x 47), and a
-				// sheet as tall as one of those is wider than it.
-				//
-				// A plane rather than a thin box, because a box has four rims the alpha never
-				// touches — that is what left a rectangle of pale sticks hanging in every ceiling
-				// corner when the cobwebs were slabs.
-				const float Sheet = FMath::Min(CellW, CellH);
-				const float ImpactY = Center.X - FMath::Min(CellW * 0.13f, (CellW - Sheet) * 0.5f);
-				if (UStaticMeshComponent* Fracture = Build.Add(FRoomShapes::Plane(),
-					FVector(SashX - 1.f, ImpactY, Center.Y), FRotator(90.f, 0.f, 0.f),
-					FVector(Sheet, Sheet, 1.f), CrackMat, /*bBlockingCollision*/ false))
+				// Only the blown panes are damaged in the mesh, and only by losing glass. Splits were
+				// cut into every pane for a while, and sixteen cracked panes is not a broken window,
+				// it is a texture — it takes the two holes and the one starred pane down with it.
+				// Damage is worth what it is worth by being somewhere and not everywhere.
+				FPaneDamage Damage;
+				if (bBlown)
 				{
-					// What should print on the far wall is the muntin grid, as with the panes.
-					Fracture->SetCastShadow(false);
+					Damage.BreakAt = FVector2D(Random.FRandRange(0.34f, 0.66f), Random.FRandRange(0.32f, 0.68f));
+					Damage.HoleRadiusCm = FMath::Min(CellW, CellH) * Random.FRandRange(0.34f, 0.46f);
+				}
+
+				// Local X runs up the pane and local Y across it, which is what the pitch is for.
+				Build.Pane(
+					FVector(SashX, Center.X, Center.Y), FRotator(90.f, 0.f, 0.f),
+					FVector2D(CellH + 1.f, CellW + 1.f),
+					Damage, Random.RandRange(1, 90000), GlassMat);
+
+				if (bCracked)
+				{
+					// One sheet, laid a centimetre in front of the glass, SQUARE and centred on the
+					// impact. The crack map covers a square patch of glass so that the star lands on
+					// a pane of any proportion without coming out elliptical — stretch this sheet to
+					// the pane's own 5:3 and the network turns into an oval, which nothing that has
+					// ever been hit looks like. Square on the pane's height means the splits running
+					// up and down leave the glass at the muntin, the way a crack does when it reaches
+					// the frame, and the ones running across have room to die out in open glass.
+					//
+					// The impact is a hand's width off the middle of the pane, because a break in the
+					// exact centre of a rectangle is the one place it reads as decoration. Off-centre
+					// across only: the sheet is as tall as the pane, so moving it up or down would
+					// hang it over the muntin.
+					//
+					// Square on the pane's SHORTER side, and the offset held so the sheet never
+					// crosses the muntin: the corridor's panes stand upright (~35 x 47), and a
+					// sheet as tall as one of those is wider than it.
+					//
+					// A plane rather than a thin box, because a box has four rims the alpha never
+					// touches — that is what left a rectangle of pale sticks hanging in every ceiling
+					// corner when the cobwebs were slabs.
+					const float Sheet = FMath::Min(CellW, CellH);
+					const float ImpactY = Center.X - FMath::Min(CellW * 0.13f, (CellW - Sheet) * 0.5f);
+					if (UStaticMeshComponent* Fracture = Build.Add(FRoomShapes::Plane(),
+						FVector(SashX - 1.f, ImpactY, Center.Y), FRotator(90.f, 0.f, 0.f),
+						FVector(Sheet, Sheet, 1.f), CrackMat, /*bBlockingCollision*/ false))
+					{
+						// What should print on the far wall is the muntin grid, as with the panes.
+						Fracture->SetCastShadow(false);
+					}
 				}
 			}
 		}
@@ -920,8 +943,12 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 		// Same sky, same instant: the flash is read from the lead, not rolled.
 		FlashAlpha = Lead->GetFlashAlpha();
 		StrikeIntensity = Lead->GetStrikeIntensity();
-		LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * 260.f);
-		SkyPortal->SetIntensity(SkyPortalCandelas * (1.f + FlashAlpha * 9.f));
+		LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * (Setup.bOwnView ? 900.f : 260.f));
+		SkyPortal->SetIntensity(SkyPortalCandelas * Setup.PortalScale * (1.f + FlashAlpha * 9.f));
+		if (Setup.bOwnView)
+		{
+			FollowOwnView();
+		}
 		return;
 	}
 
@@ -988,6 +1015,48 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 
 	// The whole sky lights up with the discharge, not just the channel — from inside the room that
 	// is most of what a distant strike looks like.
+	if (SkyMaterial)
+	{
+		SkyMaterial->SetScalarParameterValue(TEXT("Intensity"), SkyGlowFloor + FlashAlpha * 5.f);
+	}
+}
+
+void AStormWindowActor::FollowOwnView()
+{
+	// Same strike as the lead, seen out of a different side of the house: a new bolt somewhere in
+	// this window's own sky, and the flash thrown from a new place, once per strike.
+	const int32 LeadStrike = Lead->GetStrikeCount();
+	if (LeadStrike != FollowedStrike)
+	{
+		FollowedStrike = LeadStrike;
+		LightningGlow->SetRelativeLocation(FVector(Random.FRandRange(1600.f, 2400.f), Random.FRandRange(-900.f, 900.f),
+			(Setup.SillHeight + Setup.TopHeight) * 0.5f + Random.FRandRange(450.f, 1000.f)));
+		if (Bolts.Num() > 0)
+		{
+			ActiveBolt = Random.RandRange(0, Bolts.Num() - 1);
+			if (USceneComponent* Bolt = Bolts[ActiveBolt])
+			{
+				Bolt->SetRelativeLocation(FVector(Random.FRandRange(1500.f, 2900.f), Random.FRandRange(-700.f, 700.f), 0.f));
+				Bolt->SetRelativeRotation(FRotator(0.f, Random.FRandRange(-25.f, 25.f), 0.f));
+			}
+		}
+	}
+
+	// The lead does not say whether a sub-flash is on, only how bright the sky is; near the top of
+	// a flash is close enough, and it still snaps off between afterbeats.
+	const bool bDischarging = FlashAlpha > 0.6f;
+	for (int32 i = 0; i < Bolts.Num(); ++i)
+	{
+		const bool bShow = bDischarging && i == ActiveBolt;
+		if (Bolts[i] && Bolts[i]->IsVisible() != bShow)
+		{
+			Bolts[i]->SetVisibility(bShow, /*bPropagateToChildren*/ true);
+		}
+		if (BoltMaterials.IsValidIndex(i) && BoltMaterials[i])
+		{
+			BoltMaterials[i]->SetScalarParameterValue(TEXT("Intensity"), bShow ? 14.f : 0.f);
+		}
+	}
 	if (SkyMaterial)
 	{
 		SkyMaterial->SetScalarParameterValue(TEXT("Intensity"), SkyGlowFloor + FlashAlpha * 5.f);

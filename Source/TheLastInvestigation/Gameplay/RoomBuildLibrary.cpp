@@ -40,6 +40,10 @@ namespace RoomSurfaces
 	const FRoomSurface Linen{ TEXT("rough_linen"), 90.f };
 	const FRoomSurface Drapery{ TEXT("rough_linen"), 34.f };
 	const FRoomSurface RustedIron{ TEXT("green_metal_rust"), 110.f };
+	// Shot at two metres; ten tiles across it, so a tile is twenty centimetres, as they were.
+	const FRoomSurface HallTiles{ TEXT("checkered_pavement_tiles"), 200.f };
+	const FRoomSurface Wainscot{ TEXT("dark_paneled_wood"), 140.f };
+	const FRoomSurface Marble{ TEXT("marble_01"), 150.f };
 }
 
 namespace RoomProps
@@ -58,6 +62,17 @@ namespace RoomProps
 	const TCHAR* Armchair = TEXT("ArmChair_01");
 	const TCHAR* Nightstand = TEXT("ClassicNightstand_01");
 	const TCHAR* Press = TEXT("GothicCabinet_01");
+	const TCHAR* Chandelier = TEXT("Chandelier_03");
+	const TCHAR* Bust = TEXT("marble_bust_01");
+	const TCHAR* Statue = TEXT("gothic_statue");
+	const TCHAR* LongcaseClock = TEXT("vintage_grandfather_clock_01");
+	const TCHAR* Suitcases = TEXT("vintage_suitcase");
+	const TCHAR* CeramicVase = TEXT("antique_ceramic_vase_01");
+	const TCHAR* BrassVase = TEXT("brass_vase_01");
+	const TCHAR* Candelabra = TEXT("brass_candleholders");
+	const TCHAR* SideTable = TEXT("side_table_tall_01");
+	const TCHAR* Console = TEXT("ClassicConsole_01");
+	const TCHAR* GiltFrame = TEXT("fancy_picture_frame_02");
 }
 
 namespace RoomPalette

@@ -50,6 +50,10 @@ namespace RoomSurfaces
 	 */
 	extern const FRoomSurface Drapery;
 	extern const FRoomSurface RustedIron;  // lock, hinges, tools
+	/** The stair hall: a chequered entrance floor, panelled wainscot, and marble for the pedestal. */
+	extern const FRoomSurface HallTiles;
+	extern const FRoomSurface Wainscot;
+	extern const FRoomSurface Marble;
 }
 
 /** Imported prop meshes, /Game/Meshes/<name>. Names match Tools/fetch_assets.py's manifest. */
@@ -71,6 +75,18 @@ namespace RoomProps
 	extern const TCHAR* Nightstand;
 	/** A press: the tall cupboard in the corner past the head of the bed. */
 	extern const TCHAR* Press;
+	/** The stair hall. */
+	extern const TCHAR* Chandelier;
+	extern const TCHAR* Bust;
+	extern const TCHAR* Statue;
+	extern const TCHAR* LongcaseClock;
+	extern const TCHAR* Suitcases;
+	extern const TCHAR* CeramicVase;
+	extern const TCHAR* BrassVase;
+	extern const TCHAR* Candelabra;
+	extern const TCHAR* SideTable;
+	extern const TCHAR* Console;
+	extern const TCHAR* GiltFrame;
 }
 
 /**

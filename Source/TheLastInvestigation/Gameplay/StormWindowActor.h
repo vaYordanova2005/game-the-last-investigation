@@ -19,6 +19,25 @@ struct FStormWindowSetup
 	float SillHeight = 85.f;
 	float TopHeight = 250.f;
 	float WallThickness = 20.f;
+
+	/**
+	 * Whether this actor glazes the opening itself: reveal, sill, sash and panes. False leaves the
+	 * opening to whoever spawned it — the stair hall's window is leaded glass, which is its own
+	 * construction — and builds only the curtains and everything outside.
+	 */
+	bool bGlazed = true;
+
+	/**
+	 * For a follower (see SetLead) on another side of the house: builds its own sky, treeline,
+	 * rain and bolts rather than borrowing the lead's, which are all on the lead's side. The lead's
+	 * directional light cannot come in through a window facing away from it, so an own-view
+	 * follower also carries the strike's shadows itself — its glow is moved far out, made to cast,
+	 * and thrown somewhere new on every strike.
+	 */
+	bool bOwnView = false;
+
+	/** Multiplies the sky portal, for an opening whose glass lets through less than a clear pane. */
+	float PortalScale = 1.f;
 };
 
 /**
@@ -135,6 +154,12 @@ private:
 
 	int32 ActiveBolt = INDEX_NONE;
 	int32 StrikeCount = 0;
+
+	/** An own-view follower's copy of the lead's strike count, so each strike is placed once. */
+	int32 FollowedStrike = 0;
+
+	/** Follower side of TickLightning: bolts, sky and the far flash for an own-view window. */
+	void FollowOwnView();
 
 	/** Set on a follower window; see SetLead. */
 	UPROPERTY(Transient)

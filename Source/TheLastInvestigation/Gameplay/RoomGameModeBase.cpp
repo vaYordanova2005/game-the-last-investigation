@@ -94,6 +94,10 @@ void ARoomGameModeBase::ScheduleHeadlessScreenshot()
 				Pose.Pitch += PitchOffset;
 			}
 			PC->SetControlRotation(Pose);
+			// And keep it there. The capture is half a second later, and a mouse nudged on the
+			// desk in between turned one stair-hall shot a full quarter turn off its mark.
+			PC->SetIgnoreLookInput(true);
+			PC->SetIgnoreMoveInput(true);
 		}
 
 		// Not in the same frame as the move. Occlusion culling decides what to draw from the

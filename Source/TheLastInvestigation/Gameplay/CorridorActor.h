@@ -12,6 +12,7 @@ class UDustMotesComponent;
 class AStormWindowActor;
 class AHallDoorActor;
 class AClueActor;
+class AGrandStaircaseActor;
 
 /** The bedroom this corridor runs past, handed over by the room that spawns it. */
 struct FCorridorSetup
@@ -31,8 +32,8 @@ struct FCorridorSetup
  * The upstairs corridor, outside the bedroom the detective wakes in.
  *
  * It runs along the bedroom's door wall, east to west: a window at the east end on the same
- * façade as the bedroom's, five more bedroom doors down both sides, and the stairs at the far
- * west end, boarded over. It is the same floor the story ends on, so it is built as a place the
+ * façade as the bedroom's, five more bedroom doors down both sides, and at the far west end an
+ * archway onto the gallery of the stair hall (AGrandStaircaseActor), which it spawns. It is the same floor the story ends on, so it is built as a place the
  * player is meant to remember rather than a route between rooms — the bedroom door faces a dusty
  * mirror, somebody has laid flowers at its threshold, and the runner is worn through in front of
  * it.
@@ -64,8 +65,9 @@ public:
 	static constexpr float WindowTop = 272.f;
 	static constexpr float HallDoorWidth = 100.f;
 	static constexpr float HallDoorHeight = 212.f;
-	static constexpr float StairOpeningWidth = 150.f;
-	static constexpr float StairOpeningHeight = 236.f;
+	/** The archway onto the stair hall's gallery. Wider than a door: it is the way to the stairs. */
+	static constexpr float StairOpeningWidth = 180.f;
+	static constexpr float StairOpeningHeight = 246.f;
 
 private:
 	enum class ESide : uint8 { North, South, East, West };
@@ -103,6 +105,7 @@ private:
 	void BuildClues();
 	void SpawnDoors();
 	void SpawnWindow();
+	void SpawnStairHall();
 
 	/** Places a thin panel on a wall's corridor face. */
 	void FacePanel(FRoomBuilder& Build, ESide Side, float U, float V, float SizeU, float SizeV, UMaterialInterface* Mat) const;
@@ -133,6 +136,9 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AClueActor>> Clues;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AGrandStaircaseActor> StairHall;
 
 	/** The two shapes at the far end of the corridor that are only there while the sky is lit. */
 	UPROPERTY(Transient)
