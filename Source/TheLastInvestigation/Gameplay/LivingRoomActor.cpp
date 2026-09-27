@@ -30,176 +30,6 @@ namespace
 	}
 
 	/**
-	 * Ear clipping, for the caps of a prism whose outline is not convex. A grand piano is the one
-	 * shape in the house that is neither a box nor a turned thing: its bentside curves in and out
-	 * again, and a fan from any one point either misses part of it or covers ground it should not.
-	 */
-	TArray<int32> LivingTriangulate(const TArray<FVector2D>& Points)
-	{
-		TArray<int32> Out;
-		const int32 Count = Points.Num();
-		if (Count < 3)
-		{
-			return Out;
-		}
-		float Area = 0.f;
-		for (int32 i = 0; i < Count; ++i)
-		{
-			Area += FVector2D::CrossProduct(Points[i], Points[(i + 1) % Count]);
-		}
-		const float Sign = Area >= 0.f ? 1.f : -1.f;
-
-		auto Inside = [&](const FVector2D& P, const FVector2D& A, const FVector2D& B, const FVector2D& C)
-		{
-			return FVector2D::CrossProduct(B - A, P - A) * Sign > 0.f
-				&& FVector2D::CrossProduct(C - B, P - B) * Sign > 0.f
-				&& FVector2D::CrossProduct(A - C, P - C) * Sign > 0.f;
-		};
-
-		TArray<int32> Ring;
-		for (int32 i = 0; i < Count; ++i)
-		{
-			Ring.Add(i);
-		}
-		while (Ring.Num() > 3)
-		{
-			bool bClipped = false;
-			for (int32 i = 0; i < Ring.Num(); ++i)
-			{
-				const int32 IA = Ring[(i + Ring.Num() - 1) % Ring.Num()];
-				const int32 IB = Ring[i];
-				const int32 IC = Ring[(i + 1) % Ring.Num()];
-				const FVector2D& A = Points[IA];
-				const FVector2D& B = Points[IB];
-				const FVector2D& C = Points[IC];
-				if (FVector2D::CrossProduct(B - A, C - B) * Sign <= 0.f)
-				{
-					continue; // reflex, or flat
-				}
-				bool bEar = true;
-				for (const int32 J : Ring)
-				{
-					if (J != IA && J != IB && J != IC && Inside(Points[J], A, B, C))
-					{
-						bEar = false;
-						break;
-					}
-				}
-				if (bEar)
-				{
-					Out.Append({ IA, IB, IC });
-					Ring.RemoveAt(i);
-					bClipped = true;
-					break;
-				}
-			}
-			if (!bClipped)
-			{
-				break; // degenerate outline: better a hole in the lid than a hang at BeginPlay
-			}
-		}
-		if (Ring.Num() == 3)
-		{
-			Out.Append({ Ring[0], Ring[1], Ring[2] });
-		}
-		return Out;
-	}
-
-	/**
-	 * An outline stood up between Z0 and Z1 in the parent's own XY: walls round it and a cap on
-	 * each end. Neighbouring walls that meet at a shallow angle share a normal, so a curve built
-	 * from short straight runs shades as a curve — on black lacquer the facets are the first thing
-	 * the lantern would find. Every face is emitted both ways round with its normal forced (the
-	 * Pane rule); the inside of a solid is never seen, so nothing is lit wrongly by it.
-	 */
-	UProceduralMeshComponent* LivingPrism(AActor* Owner, USceneComponent* Parent, const TArray<FVector2D>& Outline,
-		float Z0, float Z1, float TexelCm, UMaterialInterface* Mat)
-	{
-		const int32 Count = Outline.Num();
-		if (Count < 3 || !Mat)
-		{
-			return nullptr;
-		}
-		float Area = 0.f;
-		for (int32 i = 0; i < Count; ++i)
-		{
-			Area += FVector2D::CrossProduct(Outline[i], Outline[(i + 1) % Count]);
-		}
-		const float Sign = Area >= 0.f ? 1.f : -1.f;
-		auto EdgeNormal = [&](int32 i)
-		{
-			const FVector2D D = (Outline[(i + 1) % Count] - Outline[i]).GetSafeNormal();
-			return FVector(D.Y * Sign, -D.X * Sign, 0.f);
-		};
-		const float Smooth = FMath::Cos(FMath::DegreesToRadians(32.f));
-
-		TArray<FVector> Verts;
-		TArray<FVector> Normals;
-		TArray<FVector2D> UVs;
-		TArray<FProcMeshTangent> Tangents;
-		TArray<int32> Tris;
-		auto Both = [&](int32 A, int32 B, int32 C)
-		{
-			Tris.Append({ A, B, C, A, C, B });
-		};
-
-		float Run = 0.f;
-		for (int32 i = 0; i < Count; ++i)
-		{
-			const int32 j = (i + 1) % Count;
-			const FVector N = EdgeNormal(i);
-			const FVector NPrev = EdgeNormal((i + Count - 1) % Count);
-			const FVector NNext = EdgeNormal(j);
-			const FVector NA = FVector::DotProduct(N, NPrev) > Smooth ? (N + NPrev).GetSafeNormal() : N;
-			const FVector NB = FVector::DotProduct(N, NNext) > Smooth ? (N + NNext).GetSafeNormal() : N;
-			const float Length = FVector2D::Distance(Outline[i], Outline[j]);
-			const FVector Along = FVector(Outline[j] - Outline[i], 0.f).GetSafeNormal();
-
-			const int32 First = Verts.Num();
-			Verts.Append({ FVector(Outline[i], Z0), FVector(Outline[j], Z0), FVector(Outline[j], Z1), FVector(Outline[i], Z1) });
-			Normals.Append({ NA, NB, NB, NA });
-			UVs.Append({ FVector2D(Run / TexelCm, -Z0 / TexelCm), FVector2D((Run + Length) / TexelCm, -Z0 / TexelCm),
-				FVector2D((Run + Length) / TexelCm, -Z1 / TexelCm), FVector2D(Run / TexelCm, -Z1 / TexelCm) });
-			for (int32 k = 0; k < 4; ++k)
-			{
-				Tangents.Add(FProcMeshTangent(Along, false));
-			}
-			Both(First, First + 1, First + 2);
-			Both(First, First + 2, First + 3);
-			Run += Length;
-		}
-
-		const TArray<int32> Cap = LivingTriangulate(Outline);
-		for (const float Z : { Z0, Z1 })
-		{
-			const int32 First = Verts.Num();
-			const FVector N(0.f, 0.f, Z == Z1 ? 1.f : -1.f);
-			for (const FVector2D& P : Outline)
-			{
-				Verts.Add(FVector(P, Z));
-				Normals.Add(N);
-				UVs.Add(P / TexelCm);
-				Tangents.Add(FProcMeshTangent(FVector(1.f, 0.f, 0.f), false));
-			}
-			for (int32 t = 0; t + 2 < Cap.Num(); t += 3)
-			{
-				Both(First + Cap[t], First + Cap[t + 1], First + Cap[t + 2]);
-			}
-		}
-
-		UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(Owner, MakeUniqueObjectName(Owner, UProceduralMeshComponent::StaticClass(), TEXT("Prism")));
-		Mesh->SetMobility(EComponentMobility::Movable);
-		Mesh->AttachToComponent(Parent, FAttachmentTransformRules::KeepRelativeTransform);
-		Mesh->bUseAsyncCooking = false;
-		Mesh->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, UVs, TArray<FLinearColor>(), Tangents, /*bCreateCollision*/ false);
-		Mesh->SetMaterial(0, Mat);
-		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Mesh->RegisterComponent();
-		Owner->AddInstanceComponent(Mesh);
-		return Mesh;
-	}
-
-	/**
 	 * Rectangles laid in one vertical plane with one continuous set of UVs, in centimetres over
 	 * TexelCm: Origin is where U and Z are both zero, Along the direction of U, Face the way the
 	 * front looks. For stonework, whose courses have to run on unbroken across the pieces a wall
@@ -387,7 +217,6 @@ void ALivingRoomActor::CacheMaterials(FRoomBuilder& Build)
 	MatPaperDamp = Build.Surface(RoomSurfaces::Linen, FLinearColor(0.260f, 0.142f, 0.065f));
 	// Newsprint yellows further and goes greyer than writing paper.
 	MatNewsprint = Build.Surface(RoomSurfaces::Linen, FLinearColor(0.40f, 0.25f, 0.13f));
-	MatDustSheet = Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.30f, 0.21f, 0.14f));
 	MatIron = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(0.847f, 0.448f, 0.703f));
 	MatBrass = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(1.0f, 0.36f, 0.24f), 0.7f);
 	MatGlass = Build.Glass(RoomPalette::GlassShard, 0.28f, 0.06f);
@@ -398,14 +227,28 @@ void ALivingRoomActor::CacheMaterials(FRoomBuilder& Build)
 	MatShadow = Build.Flat(FLinearColor(0.002f, 0.002f, 0.002f), 1.f);
 	MatCharred = Build.Flat(FLinearColor(0.011f, 0.009f, 0.008f), 1.f);
 	MatAsh = Build.Flat(FLinearColor(0.090f, 0.088f, 0.085f), 1.f);
-	// Black lacquer, polished once and dusted since: glossy enough to throw the lantern back as a
-	// long highlight along the case, which is what makes a black piano visible in the dark at all.
-	MatLacquer = Build.Flat(FLinearColor(0.010f, 0.0095f, 0.009f), 0.24f);
+	// Lacquered cherry taken down to nearly black: glossy enough to throw the lantern back as a long
+	// highlight along the case, which is what makes a black piano visible in the dark at all, and
+	// with the grain and sixty years of scratches in it that a flat colour never had. The photograph
+	// is at linear (0.029, 0.012, 0.005) and roughness 0.25; the dust takes the shine down a little.
+	// The model (Tools/make_piano.py) carries its UVs in repeats of the photograph, so the instance
+	// has its tiling at one — the stone facade's rule.
+	MatLacquerSheet = Build.Surface(RoomSurfaces::PianoWood, FLinearColor(0.55f, 0.85f, 1.4f), 1.3f);
 	// Ivory goes yellow, and the keys that lost their tops show the wood under them.
 	MatIvory = Build.Flat(FLinearColor(0.27f, 0.235f, 0.17f), 0.42f);
 	MatIvoryDark = Build.Flat(FLinearColor(0.11f, 0.08f, 0.05f), 0.8f);
 	MatEbony = Build.Flat(FLinearColor(0.007f, 0.0065f, 0.0065f), 0.35f);
-	MatFelt = Build.Flat(FLinearColor(0.020f, 0.034f, 0.022f), 0.95f);
+	// The bench's seat: a tapestry cushion in the room's green, a shade darker than the carpet, on
+	// the model's own UVs like the lacquer.
+	MatCushion = Build.Surface(RoomSurfaces::Carpet, FLinearColor(0.50f, 0.85f, 0.47f), 1.4f);
+	for (UMaterialInstanceDynamic* Sheet : { MatLacquerSheet.Get(), MatCushion.Get() })
+	{
+		if (Sheet)
+		{
+			Sheet->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(1.f, 1.f, 0.f, 1.f));
+			Sheet->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(0.f, 0.f, 0.f, 1.f));
+		}
+	}
 	// The television: a screen that is a black mirror, and a bezel of the matt black plastic every
 	// set of the last twenty years is made of. Nothing else in the house is this black or this new.
 	MatScreen = Build.Flat(FLinearColor(0.003f, 0.003f, 0.0035f), 0.05f);
@@ -698,7 +541,7 @@ void ALivingRoomActor::BuildWallFinish(FRoomBuilder& Build)
 
 	// Moulded panels between the dado and the picture rail on the two walls with nothing in front of
 	// them: the thin applied frames a room like this was divided up with. The oval portrait over
-	// the commode hangs in the middle of one; the covered portrait on the east wall in another.
+	// the commode hangs in the middle of one; the one on the east wall stands empty over the console.
 	auto Panel = [&](EWall Wall, float U0, float U1, float ZA, float ZB)
 	{
 		const float Frame = 5.f;
@@ -708,8 +551,8 @@ void ALivingRoomActor::BuildWallFinish(FRoomBuilder& Build)
 		WallBox(Build, Wall, U1 - Frame * 0.5f, (ZA + ZB) * 0.5f, Frame, ZB - ZA, 2.4f, 0.f, MatOak);
 	};
 	Panel(EWall::North, WestX() + 80.f, WestX() + 420.f, Dado + 40.f, Rail - 30.f);
-	Panel(EWall::East, CoveredPortraitY() - 180.f, CoveredPortraitY() + 180.f, Dado + 40.f, Rail - 30.f);
-	Panel(EWall::East, CoveredPortraitY() + 230.f, SouthY() - 90.f, Dado + 40.f, Rail - 30.f);
+	Panel(EWall::East, EastPanelY() - 180.f, EastPanelY() + 180.f, Dado + 40.f, Rail - 30.f);
+	Panel(EWall::East, EastPanelY() + 230.f, SouthY() - 90.f, Dado + 40.f, Rail - 30.f);
 
 	// The door from the hall, cased on this side too.
 	{
@@ -1032,10 +875,11 @@ void ALivingRoomActor::BuildSeating(FRoomBuilder& Build)
 	const float H = HearthY();
 	const float LX = LoungeX();
 
-	// The carpet: a woven field on a darker border, faded, worn through here and there to the
-	// backing, and flat — the one thing in the room the damp has not lifted.
-	Build.Cloth(FVector(LX, H, F + 0.8f), FRotator(0.f, 0.6f, 0.f), FVector2D(470.f, 410.f), 0.25f, 0.f, 6101, MatCarpetBorder, 40.f);
-	Build.Cloth(FVector(LX, H, F + 2.f), FRotator(0.f, 0.6f, 0.f), FVector2D(426.f, 366.f), 0.25f, 0.f, 6102, MatCarpet, RoomSurfaces::Carpet.TexelSizeCm);
+	// The carpet: a woven field on a darker border, faded and flat — the one thing in the room the
+	// damp has not lifted. Whole: a carpet's edge is bound, and holes cut on a grid this coarse
+	// came out as square notches.
+	Build.Cloth(FVector(LX, H, F + 0.8f), FRotator(0.f, 0.6f, 0.f), FVector2D(470.f, 410.f), 0.25f, 0.f, 6101, MatCarpetBorder, 40.f, /*bWorn*/ false);
+	Build.Cloth(FVector(LX, H, F + 2.f), FRotator(0.f, 0.6f, 0.f), FVector2D(426.f, 366.f), 0.25f, 0.f, 6102, MatCarpet, RoomSurfaces::Carpet.TexelSizeCm, /*bWorn*/ false);
 	Footprints.Add(FBox2D(FVector2D(LX - 235.f, H - 205.f), FVector2D(LX + 235.f, H + 205.f)));
 
 	// The sofa, facing the fire. sofa_03 is a carved Victorian settee in a gold brocade; a green
@@ -1077,12 +921,21 @@ void ALivingRoomActor::BuildSeating(FRoomBuilder& Build)
 		FRoomShapes::TintSlots(Table, FLinearColor(1.1f, 1.05f, 1.f));
 	}
 	const float TableTop = F + 46.f;
-	UMaterialInterface* China = Build.Flat(FLinearColor(0.20f, 0.19f, 0.17f), 0.35f);
+	// Old china, not new: a flat pale grey at 0.2 was the whitest, cleanest thing in the room. The
+	// cracked-plaster photograph taken down to a yellowed grey (linear 0.517, 0.448, 0.351 → about
+	// 0.075, 0.066, 0.050) reads at this size as crazed glaze under grime, and the saucer is a shade
+	// darker for the dust that settled in it. The cup sits off the middle of the saucer, handle
+	// turned away, and a tea stain has run down one side and dried there.
+	UMaterialInterface* China = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.145f, 0.147f, 0.142f), 0.9f);
+	UMaterialInterface* ChinaDusty = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.115f, 0.112f, 0.104f), 1.1f);
 	const FVector Cup(LX - 24.f, H + 28.f, TableTop);
-	Build.Cyl(Cup + FVector(0.f, 0.f, 0.5f), FRotator::ZeroRotator, FVector(14.f, 14.f, 1.f), China, false);
-	Build.Cyl(Cup + FVector(0.f, 0.f, 4.5f), FRotator::ZeroRotator, FVector(8.f, 8.f, 7.f), China, false);
-	Build.Cyl(Cup + FVector(0.f, 0.f, 8.05f), FRotator::ZeroRotator, FVector(7.f, 7.f, 0.1f), MatCharred, false);
-	Build.Box(Cup + FVector(5.f, 0.f, 5.f), FRotator::ZeroRotator, FVector(2.f, 0.8f, 4.f), China, false);
+	const FVector InCup = Cup + FVector(1.6f, -1.2f, 0.f);
+	Build.Cyl(Cup + FVector(0.f, 0.f, 0.45f), FRotator(0.f, 0.f, 0.6f), FVector(14.f, 14.f, 0.9f), ChinaDusty, false);
+	Build.Cyl(InCup + FVector(0.f, 0.f, 4.5f), FRotator::ZeroRotator, FVector(8.f, 8.f, 7.f), China, false);
+	Build.Cyl(InCup + FVector(0.f, 0.f, 8.05f), FRotator::ZeroRotator, FVector(7.f, 7.f, 0.1f), MatCharred, false);
+	Build.Box(InCup + FVector(-2.8f, 4.1f, 5.f), FRotator(0.f, 124.f, 0.f), FVector(2.f, 0.8f, 4.f), China, false);
+	Build.Stain(RoomSurfaces::Damp, InCup + FVector(4.5f, 0.f, 4.f), FRotator(0.f, 180.f, 0.f), FVector2D(3.f, 6.f), FLinearColor(0.10f, 0.055f, 0.025f), 0.8f, 1.1f);
+	Build.Stain(RoomSurfaces::Damp, Cup + FVector(0.f, 0.f, 6.f), FRotator(-90.f, 0.f, 0.f), FVector2D(34.f, 34.f), FLinearColor(0.40f, 0.38f, 0.35f), 0.5f, 1.3f);
 	for (int32 i = 0; i < 3; ++i)
 	{
 		Build.Add(FRoomShapes::Cone(), FVector(LX + 10.f + i * 17.f, H - 20.f + i * 9.f, TableTop + 1.2f), FRotator(90.f, 40.f + i * 70.f, 0.f), FVector(2.4f, 2.4f, 6.f), MatGlass, false);
@@ -1114,143 +967,64 @@ void ALivingRoomActor::BuildPiano(FRoomBuilder& Build)
 	// has found it. The lid is down and furred with dust; the front flap is folded back over it and
 	// the music desk is up, because the last thing anybody did at it was play.
 	//
-	// Nothing on Poly Haven is a piano, and primitives cannot be one — the case is the one curve in
-	// the house that is neither a circle nor a straight line — so the case and the lid are extruded
-	// from an outline (LivingPrism) and everything else is the usual boxes.
+	// The piano and its bench are modelled in Blender by Tools/make_piano.py — bevelled edges that
+	// catch the lantern, turned legs on brass castors, a lyre, a pierced music desk, keys shaped like
+	// keys, two of them missing, three stuck down and four worn to the wood. Assembled from boxes and
+	// extrusions here, every edge was a knife edge and every leg a pipe, and it read as exactly that.
 	//
-	// Local frame: +X from the keyboard towards the tail, +Y to the right of whoever is sitting at
-	// it, so the long straight bass side is on -Y. The origin is on the floor under the front edge.
+	// Local frame, the model's too: +X from the keyboard towards the tail, +Y to the right of whoever
+	// is sitting at it, so the long straight bass side is on -Y. The origin is on the floor under the
+	// front edge of the case.
 	USceneComponent* Root = LivingPivot(this, RoomRoot, PianoOrigin(), FRotator(0.f, PianoYaw, 0.f), TEXT("Piano"));
 	FRoomBuilder P(this, Root);
 
-	// The outline: bass side, round the tail, the bentside's S back to the treble cheek, across the
-	// front. Written out rather than sampled, because the proportions are the whole of the shape.
-	TArray<FVector2D> Outline;
-	Outline.Add(FVector2D(0.f, -75.f));
-	Outline.Add(FVector2D(175.f, -75.f));
-	for (int32 i = 1; i <= 10; ++i)
+	UMaterialInterface* KeyFelt = P.Flat(FLinearColor(0.060f, 0.009f, 0.008f), 1.f);
+	const TPair<const TCHAR*, UMaterialInterface*> Slots[] = {
+		{ TEXT("Lacquer"), MatLacquerSheet }, { TEXT("Ivory"), MatIvory }, { TEXT("IvoryWorn"), MatIvoryDark },
+		{ TEXT("Ebony"), MatEbony }, { TEXT("Brass"), MatBrass }, { TEXT("Felt"), KeyFelt },
+		{ TEXT("Cushion"), MatCushion }, { TEXT("Shadow"), MatShadow },
+	};
+	auto Dress = [&](UStaticMeshComponent* Mesh)
 	{
-		const float A = FMath::DegreesToRadians(-90.f + 180.f * i / 10.f);
-		Outline.Add(FVector2D(175.f + 28.f * FMath::Cos(A), -47.f + 28.f * FMath::Sin(A)));
-	}
-	const FVector2D B0(175.f, -19.f);
-	const FVector2D B1(132.f, -19.f);
-	const FVector2D B2(92.f, 75.f);
-	const FVector2D B3(50.f, 75.f);
-	for (int32 i = 1; i <= 16; ++i)
-	{
-		const float T = i / 16.f;
-		const float U = 1.f - T;
-		Outline.Add(B0 * (U * U * U) + B1 * (3.f * U * U * T) + B2 * (3.f * U * T * T) + B3 * (T * T * T));
-	}
-	Outline.Add(FVector2D(0.f, 75.f));
-
-	const float CaseBottom = 62.f;
-	const float LidTop = PianoCaseTop + 2.5f;
-	LivingPrism(this, Root, Outline, CaseBottom, PianoCaseTop, 60.f, MatLacquer);
-
-	// The lid over everything behind the front flap, and the flap folded back on top of it.
-	TArray<FVector2D> Lid;
-	for (const FVector2D& Point : Outline)
-	{
-		if (Point.X >= 30.f)
+		if (!Mesh)
 		{
-			Lid.Add(Point);
+			return;
 		}
-	}
-	Lid.Insert(FVector2D(30.f, -75.f), 0);
-	Lid.Add(FVector2D(30.f, 75.f));
-	LivingPrism(this, Root, Lid, PianoCaseTop, LidTop, 60.f, MatLacquer);
-	P.Box(FVector(45.f, 0.f, LidTop + 1.25f), FRotator::ZeroRotator, FVector(30.f, 148.f, 2.5f), MatLacquer, false);
-	for (const float Y : { -52.f, 0.f, 52.f })
-	{
-		P.Box(FVector(30.f, Y, LidTop + 0.4f), FRotator::ZeroRotator, FVector(2.f, 9.f, 1.f), MatBrass, false);
-	}
-	for (const float X : { 80.f, 150.f })
-	{
-		P.Box(FVector(X, -75.5f, PianoCaseTop + 0.5f), FRotator::ZeroRotator, FVector(10.f, 1.2f, 3.f), MatBrass, false);
-	}
+		for (const TPair<const TCHAR*, UMaterialInterface*>& Slot : Slots)
+		{
+			if (Mesh->GetMaterialIndex(FName(Slot.Key)) != INDEX_NONE)
+			{
+				Mesh->SetMaterialByName(FName(Slot.Key), Slot.Value);
+			}
+		}
+	};
+	Dress(P.Prop(RoomProps::GrandPiano, FVector::ZeroVector, FRotator::ZeroRotator, 0.f, false));
 
-	// The dust on it, and the rings where two things stood and were taken away.
+	// The bench, a little askew, close in under the keys: further out, its far end closed the way
+	// between the piano and the big sofa.
+	const FVector Bench(-46.f, 3.f, 0.f);
+	const FRotator BenchTurn(0.f, 3.f, 0.f);
+	Dress(P.Prop(RoomProps::PianoBench, Bench, BenchTurn, 0.f, false));
+	LivingPawnOnly(P.Box(Bench + FVector(0.f, 0.f, 27.f), BenchTurn, FVector(38.f, 88.f, 54.f), MatVoid));
+
+	// The dust on the lid, and the rings where two things stood and were taken away.
+	const float LidTop = PianoCaseTop + 2.5f;
 	P.Stain(RoomSurfaces::Damp, FVector(120.f, -28.f, LidTop + 6.f), FRotator(-90.f, 0.f, 0.f), FVector2D(160.f, 110.f), FLinearColor(0.40f, 0.38f, 0.35f), 0.42f, 1.3f);
 	P.Stain(RoomSurfaces::Damp, FVector(46.f, 0.f, LidTop + 8.f), FRotator(-90.f, 0.f, 90.f), FVector2D(140.f, 26.f), FLinearColor(0.40f, 0.38f, 0.35f), 0.35f, 1.2f);
 
-	// The keyboard: a key bed standing out in front of the case between two cheek blocks, fifty-two
-	// naturals and thirty-six sharps. Two naturals are gone and show the dark of the key bed, three
-	// have gone down and not come back up, and a few have lost their ivory.
-	const int32 Naturals = 52;
-	const float KeyPitch = 2.3f;
-	const float KeyLeft = -Naturals * KeyPitch * 0.5f;
-	P.Box(FVector(-9.f, 0.f, 66.f), FRotator::ZeroRotator, FVector(18.f, Naturals * KeyPitch + 2.f, 8.f), MatLacquer, false);
-	for (const float S : { -1.f, 1.f })
+	// Webs from each leg up into the angle under the case, and across the lyre.
+	for (const FVector2D& Leg : { FVector2D(20.f, -62.f), FVector2D(20.f, 62.f), FVector2D(176.f, -44.f) })
 	{
-		P.Box(FVector(-8.f, S * (Naturals * KeyPitch * 0.5f + 5.5f), 71.f), FRotator::ZeroRotator, FVector(20.f, 11.f, 18.f), MatLacquer, false);
-	}
-	P.Box(FVector(0.8f, 0.f, 77.f), FRotator::ZeroRotator, FVector(1.6f, Naturals * KeyPitch, 8.f), MatLacquer, false);
-	P.Box(FVector(0.3f, 0.f, 73.2f), FRotator::ZeroRotator, FVector(0.6f, Naturals * KeyPitch, 1.4f), MatShadow, false);
-	// Counting naturals from the bottom A, which of them have a sharp above: A, C, D, F and G.
-	static const bool HasSharp[7] = { true, false, true, true, false, true, true };
-	for (int32 i = 0; i < Naturals; ++i)
-	{
-		const float Y = KeyLeft + KeyPitch * (i + 0.5f);
-		if (HasSharp[i % 7] && i + 1 < Naturals && i != 25)
-		{
-			P.Box(FVector(-4.75f, Y + KeyPitch * 0.5f, 73.3f), FRotator::ZeroRotator, FVector(9.5f, 1.25f, 1.7f), MatEbony, false);
-		}
-		if (i == 17 || i == 18)
-		{
-			continue;
-		}
-		const bool bDown = i == 9 || i == 33 || i == 34;
-		const bool bChipped = i == 5 || i == 22 || i == 40 || i == 47;
-		P.Box(FVector(-7.5f, Y, 71.35f - (bDown ? 0.8f : 0.f)), FRotator(bDown ? -1.5f : 0.f, 0.f, 0.f), FVector(15.f, KeyPitch - 0.14f, 2.3f),
-			bChipped ? MatIvoryDark.Get() : MatIvory.Get(), false);
-	}
-
-	// The music desk, up, on its ledge, leaning back. The sheet music on it is a clue (BuildClues).
-	P.Box(FVector(PianoDeskX - 2.5f, 0.f, PianoCaseTop + 1.2f), FRotator::ZeroRotator, FVector(6.f, 82.f, 2.4f), MatLacquer, false);
-	P.Box(PianoDeskCentre(), FRotator(-PianoDeskLean, 0.f, 0.f), FVector(1.5f, 78.f, 32.f), MatLacquer, false);
-
-	// Legs: three, each a block under the case, a turned shaft and a brass castor, and a web from
-	// each up into the angle under the case.
-	for (const FVector2D& Leg : { FVector2D(24.f, -62.f), FVector2D(24.f, 62.f), FVector2D(172.f, -52.f) })
-	{
-		P.Box(FVector(Leg.X, Leg.Y, CaseBottom - 3.f), FRotator::ZeroRotator, FVector(15.f, 15.f, 6.f), MatLacquer, false);
-		P.Cyl(FVector(Leg.X, Leg.Y, 31.f), FRotator::ZeroRotator, FVector(10.f, 10.f, 52.f), MatLacquer, false);
-		P.Cyl(FVector(Leg.X, Leg.Y, 50.f), FRotator::ZeroRotator, FVector(12.5f, 12.5f, 3.f), MatLacquer, false);
-		P.Cyl(FVector(Leg.X, Leg.Y, 5.5f), FRotator::ZeroRotator, FVector(7.f, 7.f, 2.f), MatBrass, false);
-		P.Sph(FVector(Leg.X, Leg.Y, 2.5f), 5.f, MatBrass);
 		P.Add(FRoomShapes::Plane(), FVector(Leg.X + 12.f, Leg.Y, 44.f), FRotator(0.f, 0.f, 90.f), FVector(24.f, 34.f, 1.f), MatWeb, false);
 	}
-
-	// The pedal lyre: two rods down from the case to a box, and three brass pedals out of it.
-	for (const float S : { -1.f, 1.f })
-	{
-		P.Cyl(FVector(18.f, S * 9.f, 37.f), FRotator::ZeroRotator, FVector(2.4f, 2.4f, 50.f), MatLacquer, false);
-	}
-	P.Box(FVector(18.f, 0.f, 8.f), FRotator::ZeroRotator, FVector(10.f, 26.f, 8.f), MatLacquer, false);
-	for (const float Y : { -6.f, 0.f, 6.f })
-	{
-		P.Box(FVector(9.f, Y, 6.f), FRotator(Y == 0.f ? -3.f : 0.f, 0.f, 0.f), FVector(11.f, 2.6f, 1.2f), MatBrass, false);
-	}
-	P.Add(FRoomShapes::Plane(), FVector(18.f, 0.f, 30.f), FRotator(0.f, 0.f, 90.f), FVector(16.f, 30.f, 1.f), MatWeb, false);
-
-	// The stool, pushed back a little and askew, its top in the same green as the room.
-	const FVector Stool(-48.f, 5.f, 0.f);
-	const FRotator StoolTurn(0.f, 4.f, 0.f);
-	P.Box(Stool + FVector(0.f, 0.f, 48.f), StoolTurn, FVector(36.f, 88.f, 8.f), MatLacquer);
-	P.Box(Stool + FVector(0.f, 0.f, 53.5f), StoolTurn, FVector(33.f, 84.f, 3.f), MatFelt, false);
-	for (const FVector2D& Leg : { FVector2D(-14.f, -38.f), FVector2D(14.f, -38.f), FVector2D(-14.f, 38.f), FVector2D(14.f, 38.f) })
-	{
-		P.Cyl(Stool + StoolTurn.RotateVector(FVector(Leg.X, Leg.Y, 0.f)) + FVector(0.f, 0.f, 22.f), FRotator::ZeroRotator, FVector(4.5f, 4.5f, 44.f), MatLacquer, false);
-	}
+	P.Add(FRoomShapes::Plane(), FVector(18.5f, 0.f, 30.f), FRotator(0.f, 0.f, 90.f), FVector(16.f, 30.f, 1.f), MatWeb, false);
 
 	// What stops a man walking into it: the case as two boxes, since the bentside cuts a corner out
 	// of the rectangle it would otherwise be.
 	LivingPawnOnly(P.Box(FVector(48.f, 0.f, 47.f), FRotator::ZeroRotator, FVector(114.f, 152.f, 94.f), MatVoid));
 	LivingPawnOnly(P.Box(FVector(150.f, -45.f, 47.f), FRotator::ZeroRotator, FVector(112.f, 62.f, 94.f), MatVoid));
 
-	// A plan footprint for the debris, generous enough to cover the turned case and the stool.
+	// A plan footprint for the debris, generous enough to cover the turned case and the bench.
 	const FVector O = PianoOrigin();
 	Footprints.Add(FBox2D(FVector2D(O.X - 110.f, O.Y - 90.f), FVector2D(O.X + 200.f, O.Y + 150.f)));
 }
@@ -1303,21 +1077,58 @@ void ALivingRoomActor::BuildWallFurniture(FRoomBuilder& Build)
 		Build.Sph(WallPoint(EWall::West, H + S * 285.f, F + 262.f, 1.f), 1.8f, MatIron);
 	}
 
-	// Under the covered portrait on the east wall (BuildClues), a tall side table and a brass vase.
-	const FVector SideTable(EastX() - 32.f, CoveredPortraitY(), F);
-	if (UStaticMeshComponent* Table = Build.PropSeated(RoomProps::SideTable, SideTable, FRotator(0.f, 90.f, 0.f), 0.f))
+	// Against the east wall under the empty moulded panel: the carved console, with a candelabrum on
+	// it and a vase of roses long dead. Built in its own frame, where it faces +Y as it did against
+	// the hall's north wall; the pivot's yaw turns that out of the east wall.
 	{
-		FRoomShapes::TintSlots(Table, FLinearColor(0.52f, 0.49f, 0.45f));
+		const float Depth = 30.f;
+		USceneComponent* ConsoleRoot = LivingPivot(this, RoomRoot, FVector(EastX() - Depth, EastPanelY(), F), FRotator(0.f, FacingYaw(EWall::East), 0.f), TEXT("Console"));
+		FRoomBuilder K(this, ConsoleRoot);
+		if (UStaticMeshComponent* Console = K.PropSeated(RoomProps::Console, FVector::ZeroVector, FRotator::ZeroRotator, 0.f))
+		{
+			FRoomShapes::TintSlots(Console, FLinearColor(0.60f, 0.56f, 0.50f));
+		}
+		const float Top = 95.f;
+		if (UStaticMeshComponent* Candles = K.PropSeated(RoomProps::Candelabra, FVector(-20.f, 4.f, Top), FRotator::ZeroRotator, 0.f, false))
+		{
+			// Its candles are modelled lit. These went out a very long time ago: the flames go black,
+			// which is a wick, and the rest is dulled.
+			Candles->SetMaterial(1, MatShadow);
+			FRoomShapes::TintSlots(Candles, FLinearColor(0.45f, 0.40f, 0.34f), 0);
+			FRoomShapes::TintSlots(Candles, FLinearColor(0.45f, 0.40f, 0.34f), 2);
+			FRoomShapes::TintSlots(Candles, FLinearColor(0.50f, 0.46f, 0.38f), 3);
+			FRoomShapes::TintSlots(Candles, FLinearColor(0.45f, 0.40f, 0.34f), 4);
+		}
+		const FVector VaseSeat(56.f, 2.f, Top);
+		if (UStaticMeshComponent* Vase = K.PropSeated(RoomProps::CeramicVase, VaseSeat, FRotator(0.f, 40.f, 0.f), 30.f, false))
+		{
+			FRoomShapes::TintSlots(Vase, FLinearColor(0.50f, 0.48f, 0.44f));
+		}
+		// Roses dried on the stem, heads bowed over the rim, and petals on the marble round it.
+		UMaterialInterface* Stem = K.Flat(FLinearColor(0.045f, 0.036f, 0.020f), 0.95f);
+		UMaterialInterface* Petal = K.Flat(FLinearColor(0.090f, 0.030f, 0.026f), 0.9f);
+		FRandomStream Stems(88);
+		for (int32 i = 0; i < 9; ++i)
+		{
+			const float A = Stems.FRandRange(0.f, 2.f * PI);
+			const float Lean = Stems.FRandRange(8.f, 30.f);
+			const float Length = Stems.FRandRange(34.f, 48.f);
+			const FRotator Bend(Lean * FMath::Cos(A), 0.f, Lean * FMath::Sin(A));
+			const FVector Base = VaseSeat + FVector(0.f, 0.f, 24.f);
+			K.Cyl(Base + Bend.RotateVector(FVector(0.f, 0.f, Length * 0.5f)), Bend, FVector(0.6f, 0.6f, Length), Stem, false);
+			const FVector Head = Base + Bend.RotateVector(FVector(0.f, 0.f, Length)) - FVector(0.f, 0.f, Stems.FRandRange(0.f, 6.f));
+			K.Sph(Head, Stems.FRandRange(3.2f, 4.4f), Petal);
+		}
+		for (int32 i = 0; i < 7; ++i)
+		{
+			K.Sph(FVector(VaseSeat.X + Stems.FRandRange(-26.f, 20.f), VaseSeat.Y + Stems.FRandRange(-10.f, 12.f), Top + 0.6f), 1.6f, Petal);
+		}
+		Footprints.Add(FBox2D(FVector2D(EastX() - Depth * 2.f - 10.f, EastPanelY() - 90.f), FVector2D(EastX(), EastPanelY() + 90.f)));
 	}
-	if (UStaticMeshComponent* Vase = Build.PropSeated(RoomProps::BrassVase, SideTable + FVector(0.f, 4.f, 76.f), FRotator::ZeroRotator, 44.f, false))
-	{
-		FRoomShapes::TintSlots(Vase, FLinearColor(0.40f, 0.34f, 0.26f));
-	}
-	Footprints.Add(FBox2D(FVector2D(SideTable.X - 30.f, SideTable.Y - 30.f), FVector2D(EastX(), SideTable.Y + 30.f)));
 
-	// A bentwood coat stand inside the door, with a man's hat still on one of its hooks and a scarf
-	// on another: whoever came in last took his things off here and did not go out again.
-	const FVector Stand(Setup.DoorX + 105.f, NorthY() + 42.f, F);
+	// A bentwood coat stand inside the way in, with a man's hat still on one of its hooks: whoever
+	// came in last took his things off here and did not go out again.
+	const FVector Stand(Setup.DoorX + Setup.DoorHalf + 60.f, NorthY() + 42.f, F);
 	USceneComponent* StandRoot = LivingPivot(this, RoomRoot, Stand, FRotator(0.f, 20.f, 0.f), TEXT("CoatStand"));
 	FRoomBuilder C(this, StandRoot);
 	for (int32 i = 0; i < 3; ++i)
@@ -1338,22 +1149,36 @@ void ALivingRoomActor::BuildWallFurniture(FRoomBuilder& Build)
 		C.Cyl(Base + Out * 7.f, FRotationMatrix::MakeFromZ(Out).Rotator(), FVector(2.f, 2.f, 14.f), MatOakDark, false);
 		C.Sph(Base + Out * 14.f, 3.f, MatOakDark);
 	}
-	UMaterialInterface* HatFelt = C.Flat(FLinearColor(0.012f, 0.011f, 0.011f), 0.95f);
-	const FVector HatAt = FVector(0.f, 0.f, 172.f) + FRotator(35.f, 0.f, 0.f).Vector() * 14.f + FVector(3.f, 0.f, -2.f);
-	C.Cyl(HatAt, FRotator(-14.f, 0.f, 0.f), FVector(30.f, 27.f, 1.2f), HatFelt, false);
-	C.Cyl(HatAt + FVector(-1.f, 0.f, 6.f), FRotator(-14.f, 0.f, 0.f), FVector(18.f, 16.f, 11.f), HatFelt, false);
-	C.Cyl(HatAt + FVector(-0.6f, 0.f, 2.f), FRotator(-14.f, 0.f, 0.f), FVector(18.5f, 16.5f, 2.2f), MatShadow, false);
-	UMaterialInterface* Wool = C.Surface(RoomSurfaces::Drapery, FLinearColor(0.20f, 0.05f, 0.04f));
-	const FVector Scarf = FVector(0.f, 0.f, 158.f) + FRotator(35.f, 180.f, 0.f).Vector() * 14.f;
-	for (const float S : { -1.f, 1.f })
-	{
-		C.Box(Scarf + FVector(S * 3.5f, 0.f, -36.f - S * 6.f), FRotator(0.f, 0.f, S * 3.f), FVector(1.f, 17.f, 72.f + S * 12.f), Wool, false);
-	}
+	// The hat in felt, from the cloth photograph rather than a flat colour. It sits at eye height a
+	// metre from the lantern, where even the dark oak of the stand reads pale, so a black hat has to
+	// be very black: rough_linen is blue (linear 0.28, 0.41, 0.61), solved backwards to a warm
+	// (0.0045, 0.0037, 0.0031). At 0.014 it still came out as a pale grey disc.
+	UMaterialInterface* HatFelt = C.Surface(RoomSurfaces::Drapery, FLinearColor(0.016f, 0.009f, 0.005f), 1.5f);
+	// Hung on a lower hook by the inside of its crown on the hook's knob, so it does not sit level:
+	// the crown tips out along the hook and the brim rests against the pole. At -14 degrees it read
+	// as a flat disc standing square off the wall. Every part is laid out in the hat's own tilted
+	// frame, or the crown slides off the brim as the tilt grows. The brim's edge nearest the pole
+	// stops at the pole's face; the knob ends up inside the crown, not through it.
+	//
+	// The hook is the one pointing along the wall (world -X, with the stand's yaw of 20): the player
+	// sees this corner looking north or south, and a hat tipped towards or away from the eye is
+	// foreshortened back to level. Tipped across the view, the lean is the first thing seen.
+	const float HookYaw = 180.f;
+	const FRotator HatTilt(-45.f, HookYaw, 8.f);
+	const FVector HatAt = FRotator(0.f, HookYaw, 0.f).RotateVector(FVector(9.2f, 0.f, 0.f)) + FVector(0.f, 0.f, 157.6f);
+	auto OnHat = [&](const FVector& Local) { return HatAt + HatTilt.RotateVector(Local); };
+	C.Cyl(OnHat(FVector(0.f, 0.f, 0.f)), HatTilt, FVector(30.f, 27.f, 1.2f), HatFelt, false);
+	C.Cyl(OnHat(FVector(-1.f, 0.f, 6.f)), HatTilt, FVector(18.f, 16.f, 11.f), HatFelt, false);
+	C.Cyl(OnHat(FVector(-0.6f, 0.f, 2.f)), HatTilt, FVector(18.5f, 16.5f, 2.2f), MatShadow, false);
+	// The dent along the top of the crown every trilby has, as a darker crease.
+	C.Box(OnHat(FVector(-1.f, 0.f, 11.2f)), HatTilt, FVector(11.f, 1.2f, 0.6f), MatShadow, false);
+	// No scarf: two flat slabs of wool hanging off a hook were two pink rectangles, and nothing built
+	// from boxes hangs like cloth. The hat says the same thing on its own.
 	LivingPawnOnly(C.Cyl(FVector(0.f, 0.f, 90.f), FRotator::ZeroRotator, FVector(34.f, 34.f, 180.f), MatVoid));
 	Footprints.Add(FBox2D(FVector2D(Stand.X - 34.f, Stand.Y - 34.f), FVector2D(Stand.X + 34.f, Stand.Y + 34.f)));
 
-	// The doorway, and the swing of the door, stay clear of debris.
-	Footprints.Add(FBox2D(FVector2D(Setup.DoorX - Setup.DoorHalf - 10.f, NorthY()), FVector2D(Setup.DoorX + Setup.DoorHalf + 10.f, NorthY() + Setup.DoorHalf * 2.f + 20.f)));
+	// The way in from the hall stays clear of debris.
+	Footprints.Add(FBox2D(FVector2D(Setup.DoorX - Setup.DoorHalf - 10.f, NorthY()), FVector2D(Setup.DoorX + Setup.DoorHalf + 10.f, NorthY() + 130.f)));
 }
 
 void ALivingRoomActor::BuildChandelier(FRoomBuilder& Build)
@@ -1697,48 +1522,38 @@ void ALivingRoomActor::BuildClues()
 		TEXT("A wedding. A baby asleep on a rug. A little girl on a man's shoulders at the seaside, both of them laughing. Every one of them is a happy day.")))
 	{
 		FRoomBuilder B(Photos, Photos->GetRootScene());
-		// Both frames face their local +Y, which from the north wall is the room.
+		// Both frames face their local +Y, which from the north wall is the room. Slots, read off
+		// the imported meshes: standing_picture_frame_01 is glass, artwork, frame;
+		// standing_picture_frame_02 is artwork, frame, glass.
+		//
+		// Up close both photographs were white rectangles, for two reasons. The prints are mostly
+		// sky — 02's upper half is nearly paper white — and they were tinted as if they were dark,
+		// at 0.62. And the glass over them was the window's (0.28 opacity), which under a lantern
+		// at arm's length is a milky sheet, as the clock's crystal was (09-21): a picture glass is
+		// nearly nothing. The prints are held at an old photograph gone brown, the glass at the
+		// crystal's value.
+		UMaterialInterface* PhotoGlass = B.Glass(RoomPalette::GlassShard, 0.035f, 0.06f);
+		const FLinearColor Print(0.15f, 0.12f, 0.085f);
 		if (UStaticMeshComponent* Frame = B.PropSeated(RoomProps::PhotoFrame, FVector(-14.f, 4.f, 0.f), FRotator(0.f, -10.f, 0.f), 26.f, false))
 		{
-			Frame->SetMaterial(0, MatGlass);
-			FRoomShapes::TintSlots(Frame, FLinearColor(0.62f, 0.50f, 0.38f), 1);
+			Frame->SetMaterial(0, PhotoGlass);
+			FRoomShapes::TintSlots(Frame, Print, 1);
 			FRoomShapes::TintSlots(Frame, FLinearColor(0.35f, 0.32f, 0.30f), 2);
 		}
 		if (UStaticMeshComponent* Frame = B.PropSeated(RoomProps::PhotoFrameWhite, FVector(16.f, -2.f, 0.f), FRotator(0.f, 12.f, 0.f), 29.f, false))
 		{
-			FRoomShapes::TintSlots(Frame, FLinearColor(0.62f, 0.50f, 0.38f), 0);
+			// 02's print is the paler of the two by a long way.
+			FRoomShapes::TintSlots(Frame, Print * 0.7f, 0);
 			FRoomShapes::TintSlots(Frame, FLinearColor(0.42f, 0.40f, 0.37f), 1);
-			Frame->SetMaterial(2, MatGlass);
+			Frame->SetMaterial(2, PhotoGlass);
 		}
 		// And a small one gone over on its face: roll 90 turns its face, +Y, to the commode's top.
 		if (UStaticMeshComponent* Frame = B.PropSeated(RoomProps::PhotoFrame, FVector(-2.f, -8.f, 0.f), FRotator(0.f, 70.f, 90.f), 18.f, false))
 		{
-			Frame->SetMaterial(0, MatGlass);
+			Frame->SetMaterial(0, PhotoGlass);
 			FRoomShapes::TintSlots(Frame, FLinearColor(0.35f, 0.32f, 0.30f), 2);
 		}
 		HitVolume(B, FVector(0.f, 0.f, 14.f), FVector(60.f, 30.f, 30.f));
-	}
-
-	// The covered portrait on the east wall.
-	if (AClueActor* Portrait = SpawnClue(WallPoint(EWall::East, CoveredPortraitY(), F + 205.f, 0.f), FRotator::ZeroRotator,
-		TEXT("Examine the portrait"),
-		TEXT("A portrait, with a dust sheet thrown over it and tied off behind the frame. Everything else in this room was left to the dust. This was covered on purpose.")))
-	{
-		FRoomBuilder B(Portrait, Portrait->GetRootScene());
-		// fancy_picture_frame_02: back at local Y = 0, face +Y; yaw 90 turns that to -X, off the
-		// east wall into the room. What is under the sheet is never seen.
-		if (UStaticMeshComponent* Frame = B.Prop(RoomProps::GiltFrame, FVector(-0.2f, 0.f, 0.f), FRotator(0.f, FacingYaw(EWall::East), 0.f), 118.f, false))
-		{
-			FRoomShapes::TintSlots(Frame, FLinearColor(0.45f, 0.38f, 0.28f), 0);
-			FRoomShapes::TintSlots(Frame, FLinearColor(0.16f, 0.12f, 0.08f), 1);
-		}
-		// The sheet stands off the wall and falls back to it at its edges: pitch 90 puts the
-		// cloth's own up (+Z) along -X, out of the wall, and its length (+X) up the wall.
-		// Rumpled hard: the frame's moulding and the cord behind it hold a sheet off in folds, and at
-		// a small rumple it hung as a flat grey board.
-		B.Cloth(FVector(-13.f, 0.f, -14.f), FRotator(90.f, 0.f, 0.f), FVector2D(158.f, 128.f), 7.f, 12.f, 7303, MatDustSheet, 34.f);
-		B.Sph(FVector(-0.8f, 0.f, 66.f), 1.8f, MatIron);
-		HitVolume(B, FVector(-8.f, 0.f, -10.f), FVector(16.f, 126.f, 150.f));
 	}
 
 	// The sheet music on the piano's desk.

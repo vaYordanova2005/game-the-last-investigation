@@ -127,13 +127,14 @@ private:
 	FVector CommodeSeat() const { return FVector(WestX() + 250.f, NorthY() + 30.f, FloorZ()); }
 	/** GothicCommode_01 goes in at its own size, and this is its top. */
 	static constexpr float CommodeHeight = 121.2f;
-	/** The covered portrait on the east wall, and the panel and the table under it. */
-	float CoveredPortraitY() const { return NorthY() + 290.f; }
+	/** The moulded panel on the east wall, and the console under it. */
+	float EastPanelY() const { return NorthY() + 290.f; }
 	/** The middle of the length of cornice gone from the east wall, which is on the floor under it. */
 	float CorniceGapU() const { return SouthY() - 283.f; }
 
 	// The piano. Its own frame: +X from the keyboard to the tail, +Y to the player's right.
-	FVector PianoOrigin() const { return FVector(MidX() + 240.f, SouthY() - 270.f, FloorZ()); }
+	/** Far enough into the corner that there is a way between the stool and the big sofa. */
+	FVector PianoOrigin() const { return FVector(MidX() + 285.f, SouthY() - 222.f, FloorZ()); }
 	static constexpr float PianoYaw = 46.f;
 	static constexpr float PianoCaseTop = 92.f;
 	/** The music desk: how far behind the keys it stands, and how far it leans back. */
@@ -225,7 +226,6 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPaper;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPaperDamp;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatNewsprint;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatDustSheet;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatIron;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBrass;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatGlass;
@@ -236,11 +236,11 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatShadow;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatCharred;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatAsh;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatLacquer;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatLacquerSheet;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatIvory;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatIvoryDark;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatEbony;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFelt;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatCushion;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatScreen;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPlastic;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPhoto;

@@ -840,9 +840,17 @@ def build_surface_instances(master, sets):
     return instances
 
 
+# Models generated in Blender by our own scripts (Tools/make_piano.py) rather than downloaded. They
+# carry hardened custom normals — flat faces kept flat right up to their bevels — so the import
+# takes the normals from the file instead of recomputing them, and they are re-imported every run,
+# because the script is where they are edited.
+GENERATED_MODELS = {"grand_piano", "piano_bench"}
+
+
 def import_mesh(fbx_path, asset_name):
     asset_path = "{}/{}".format(MESH_PACKAGE, asset_name)
-    if ASSET_LIB.does_asset_exist(asset_path):
+    generated = asset_name in GENERATED_MODELS
+    if ASSET_LIB.does_asset_exist(asset_path) and not generated:
         return ASSET_LIB.load_asset(asset_path)
 
     task = unreal.AssetImportTask()
@@ -864,6 +872,8 @@ def import_mesh(fbx_path, asset_name):
         mesh_data = options.static_mesh_import_data
         mesh_data.set_editor_property("combine_meshes", True)
         mesh_data.set_editor_property("generate_lightmap_u_vs", False)  # everything here is dynamically lit
+        if generated:
+            mesh_data.set_editor_property("normal_import_method", unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS)
         task.options = options
     except Exception as error:
         unreal.log_warning("FbxImportUI unavailable ({}), importing with defaults".format(error))

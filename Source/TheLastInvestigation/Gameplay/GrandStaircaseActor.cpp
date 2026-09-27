@@ -176,9 +176,9 @@ void AGrandStaircaseActor::Configure(const FStairHallSetup& InSetup, AStormWindo
 		{ EWall::East, Setup.CenterY, Setup.OpeningWidth * 0.5f, 0.f, Setup.OpeningHeight },
 		// The front door, below it.
 		{ EWall::East, Setup.CenterY, 60.f, GroundZ, GroundZ + 250.f },
-		// The dining room and the parlour, either side of the hall.
+		// The dining room door, and opposite it the open way into the living room.
 		{ EWall::North, SideDoorX(), SideDoorHalf, GroundZ, GroundZ + SideDoorHeight },
-		{ EWall::South, SideDoorX(), SideDoorHalf, GroundZ, GroundZ + SideDoorHeight },
+		{ EWall::South, SideDoorX(), ParlourHalf, GroundZ, GroundZ + ParlourHeight },
 		// The window over the landing.
 		{ EWall::West, Setup.CenterY, WindowWidth * 0.5f, LandingZ + WindowSill, LandingZ + WindowSill + WindowHeight },
 	};
@@ -264,8 +264,6 @@ void AGrandStaircaseActor::CacheMaterials(FRoomBuilder& Build)
 	MatShell = Build.Flat(FLinearColor(0.012f, 0.008f, 0.005f), 1.f);
 	MatBackRoom = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.035f, 0.032f, 0.029f));
 	MatWax = Build.Flat(FLinearColor(0.34f, 0.30f, 0.22f), 0.55f);
-	MatStem = Build.Flat(FLinearColor(0.045f, 0.036f, 0.020f), 0.95f);
-	MatPetal = Build.Flat(FLinearColor(0.090f, 0.030f, 0.026f), 0.9f);
 	MatShadow = Build.Flat(FLinearColor(0.002f, 0.002f, 0.002f), 1.f);
 }
 
@@ -416,8 +414,8 @@ void AGrandStaircaseActor::BuildShell(FRoomBuilder& Build)
 	Build.Box(FVector(Middle.X, Middle.Y, CeilingZ + 10.f), FRotator::ZeroRotator, Span, MatShell);
 
 	// Behind the dining room door and the front door, rooms the hall never lets you into, as in the
-	// corridor: a floor that goes on and a wall a long way off, both nearly black. The parlour door
-	// opens, and what is behind it is the living room (SpawnLivingRoom).
+	// corridor: a floor that goes on and a wall a long way off, both nearly black. The opening in
+	// the south wall has the living room behind it (SpawnLivingRoom).
 	auto BackRoom = [&](const FVector& Front, const FVector& Into, float HalfWidth, float Depth, float Height)
 	{
 		const FVector Across(-Into.Y, Into.X, 0.f);
@@ -441,7 +439,7 @@ void AGrandStaircaseActor::BuildShell(FRoomBuilder& Build)
 
 	// Thresholds through the wall in every doorway, and a deeper stone one at the front door.
 	Build.Box(FVector(SideDoorX(), NorthY() - T * 0.5f, GroundZ + 1.f), FRotator::ZeroRotator, FVector(SideDoorHalf * 2.f, T + 4.f, 4.f), MatOakDark);
-	Build.Box(FVector(SideDoorX(), SouthY() + T * 0.5f, GroundZ + 1.f), FRotator::ZeroRotator, FVector(SideDoorHalf * 2.f, T + 4.f, 4.f), MatOakDark);
+	Build.Box(FVector(SideDoorX(), SouthY() + T * 0.5f, GroundZ + 1.f), FRotator::ZeroRotator, FVector(ParlourHalf * 2.f, T + 4.f, 4.f), MatOakDark);
 	Build.Box(FVector(EastX() + T * 0.5f, Setup.CenterY, GroundZ + 1.5f), FRotator::ZeroRotator, FVector(T + 30.f, 130.f, 5.f), MatMarble);
 	// And through the archway from the corridor, where the two floors meet.
 	Build.Box(FVector(EastX() + T * 0.5f, Setup.CenterY, 0.f), FRotator::ZeroRotator, FVector(T + 4.f, Setup.OpeningWidth, 6.f), MatOakDark);
@@ -1094,16 +1092,17 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 		WallBox(Build, EWall::East, Setup.CenterY, H + 22.f, Half * 2.f + 50.f, 8.f, 7.f, 0.f, MatOak);
 	}
 
-	// The two side doors' casings.
+	// The casings of the dining room door and of the open way into the living room.
 	for (const EWall Wall : { EWall::North, EWall::South })
 	{
 		const float U = SideDoorX();
-		const float H = GroundZ + SideDoorHeight;
+		const float Half = Wall == EWall::North ? SideDoorHalf : ParlourHalf;
+		const float H = GroundZ + (Wall == EWall::North ? SideDoorHeight : ParlourHeight);
 		for (const float S : { -1.f, 1.f })
 		{
-			WallBox(Build, Wall, U + S * (SideDoorHalf + 6.f), (GroundZ + H + 12.f) * 0.5f, 12.f, H + 12.f - GroundZ, 3.f, 0.3f, MatOak);
+			WallBox(Build, Wall, U + S * (Half + 6.f), (GroundZ + H + 12.f) * 0.5f, 12.f, H + 12.f - GroundZ, 3.f, 0.3f, MatOak);
 		}
-		WallBox(Build, Wall, U, H + 6.f, SideDoorHalf * 2.f + 24.f, 12.f, 3.f, 0.3f, MatOak);
+		WallBox(Build, Wall, U, H + 6.f, Half * 2.f + 24.f, 12.f, 3.f, 0.3f, MatOak);
 	}
 }
 
@@ -1430,57 +1429,16 @@ void AGrandStaircaseActor::BuildFurniture(FRoomBuilder& Build)
 	// The hall floor. Nothing in the middle of it: the way from the stairs to the door is clear,
 	// and everything stands against the walls where a hall keeps its furniture.
 
-	// A console against the north wall between the door and the corner, with a candelabrum on it,
-	// a vase of flowers long dead, and above it the clean rectangle where a mirror hung.
-	const FVector ConsoleSeat(EastX() - 130.f, NorthY() + 30.f, GroundZ);
-	if (UStaticMeshComponent* Console = Build.PropSeated(RoomProps::Console, ConsoleSeat, FRotator::ZeroRotator, 0.f))
-	{
-		FRoomShapes::TintSlots(Console, FLinearColor(0.60f, 0.56f, 0.50f));
-	}
-	const float ConsoleTop = GroundZ + 95.f;
-	if (UStaticMeshComponent* Candles = Build.PropSeated(RoomProps::Candelabra, ConsoleSeat + FVector(-20.f, 4.f, 95.f), FRotator::ZeroRotator, 0.f, false))
-	{
-		// Its candles are modelled lit. These went out a very long time ago: the flames go black,
-		// which is a wick, and the rest is dulled.
-		Candles->SetMaterial(1, MatShadow);
-		FRoomShapes::TintSlots(Candles, FLinearColor(0.45f, 0.40f, 0.34f), 0);
-		FRoomShapes::TintSlots(Candles, FLinearColor(0.45f, 0.40f, 0.34f), 2);
-		FRoomShapes::TintSlots(Candles, FLinearColor(0.50f, 0.46f, 0.38f), 3);
-		FRoomShapes::TintSlots(Candles, FLinearColor(0.45f, 0.40f, 0.34f), 4);
-	}
-	const FVector VaseSeat = ConsoleSeat + FVector(56.f, 2.f, 95.f);
-	if (UStaticMeshComponent* Vase = Build.PropSeated(RoomProps::CeramicVase, VaseSeat, FRotator(0.f, 40.f, 0.f), 30.f, false))
-	{
-		FRoomShapes::TintSlots(Vase, FLinearColor(0.50f, 0.48f, 0.44f));
-	}
-	{
-		// Roses dried on the stem, heads bowed over the rim, and petals on the marble round it.
-		FRandomStream Stems(88);
-		for (int32 i = 0; i < 9; ++i)
-		{
-			const float A = Stems.FRandRange(0.f, 2.f * PI);
-			const float Lean = Stems.FRandRange(8.f, 30.f);
-			const float Length = Stems.FRandRange(34.f, 48.f);
-			const FRotator Stem(Lean * FMath::Cos(A), 0.f, Lean * FMath::Sin(A));
-			const FVector Base = VaseSeat + FVector(0.f, 0.f, 24.f);
-			Build.Cyl(Base + Stem.RotateVector(FVector(0.f, 0.f, Length * 0.5f)), Stem, FVector(0.6f, 0.6f, Length), MatStem, false);
-			const FVector Head = Base + Stem.RotateVector(FVector(0.f, 0.f, Length)) - FVector(0.f, 0.f, Stems.FRandRange(0.f, 6.f));
-			Build.Sph(Head, Stems.FRandRange(3.2f, 4.4f), MatPetal);
-		}
-		for (int32 i = 0; i < 7; ++i)
-		{
-			Build.Sph(FVector(VaseSeat.X + Stems.FRandRange(-26.f, 20.f), VaseSeat.Y + Stems.FRandRange(-10.f, 12.f), ConsoleTop + 0.6f), 1.6f, MatPetal);
-		}
-	}
+	// A dust sheet over an armchair against the north wall between the door and the corner: the
+	// house was being shut up properly once. Above it, the clean rectangle where a mirror hung.
+	// The sheet is whole — a ragged hem cut on the grid came out as a staircase down the fall.
+	const FVector ChairSeat(EastX() - 130.f, NorthY() + 55.f, GroundZ);
+	Build.PropSeated(RoomProps::Armchair, ChairSeat, FRotator(0.f, -12.f, 0.f), 0.f);
+	Build.Cloth(ChairSeat + FVector(0.f, 0.f, 104.f), FRotator(0.f, -12.f, 0.f), FVector2D(170.f, 150.f), 5.5f, 70.f, 2203,
+		Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.20f, 0.15f, 0.11f)), 34.f, /*bWorn*/ false);
 	// The mirror's ghost: the one place a hard edge is right, the wall the dirt never reached.
-	Build.Mark(WallPoint(EWall::North, ConsoleSeat.X, GroundZ + 200.f, 0.8f), FRotator(0.f, 0.f, 90.f), FVector2D(90.f, 110.f), MatWallpaper);
-	Build.Sph(WallPoint(EWall::North, ConsoleSeat.X, GroundZ + 262.f, 1.f), 1.8f, MatIron);
-
-	// A dust sheet over an armchair by the parlour door: the house was being shut up properly once.
-	const FVector ChairSeat(SideDoorX() - 140.f, SouthY() - 70.f, GroundZ);
-	Build.PropSeated(RoomProps::Armchair, ChairSeat, FRotator(0.f, 200.f, 0.f), 0.f);
-	Build.Cloth(ChairSeat + FVector(0.f, 0.f, 104.f), FRotator(0.f, 20.f, 0.f), FVector2D(170.f, 150.f), 5.5f, 70.f, 2203,
-		Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.20f, 0.15f, 0.11f)), 34.f);
+	Build.Mark(WallPoint(EWall::North, ChairSeat.X, GroundZ + 200.f, 0.8f), FRotator(0.f, 0.f, 90.f), FVector2D(90.f, 110.f), MatWallpaper);
+	Build.Sph(WallPoint(EWall::North, ChairSeat.X, GroundZ + 262.f, 1.f), 1.8f, MatIron);
 
 	// The bust at the foot of the stairs on a marble column: the column cracked through and a
 	// corner of its cap gone, the bust knocked a hand's width off true and never set straight.
@@ -1750,9 +1708,6 @@ void AGrandStaircaseActor::SpawnDoors()
 			TEXT("The front door. It does not so much as rattle — the boards across it are nailed deep into the frame.") },
 		{ FVector(SideDoorX() + Half - 2.f, NorthY() - 2.6f, GroundZ), 90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 0.f, 0.f, FLinearColor(0.26f, 0.27f, 0.28f), true,
 			TEXT("Locked. Through the keyhole, the long shape of a table under a sheet, and a place laid at the end of it.") },
-		// The parlour: standing a hand's width open, and it goes the rest of the way when pushed.
-		{ FVector(SideDoorX() - Half + 2.f, SouthY() + 2.6f, GroundZ), -90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 14.f, 100.f, FLinearColor(0.22f, 0.23f, 0.24f), false,
-			TEXT("It stands a hand's width open. The room beyond smells of cold ash — and of something electrical, faintly, like a set left on.") },
 	};
 
 	int32 Seed = 5101;
@@ -1822,8 +1777,8 @@ void AGrandStaircaseActor::SpawnLivingRoom()
 		RoomSetup.FloorZ = GroundZ;
 		RoomSetup.WallThickness = Setup.WallThickness;
 		RoomSetup.DoorX = SideDoorX();
-		RoomSetup.DoorHalf = SideDoorHalf;
-		RoomSetup.DoorHeight = SideDoorHeight;
+		RoomSetup.DoorHalf = ParlourHalf;
+		RoomSetup.DoorHeight = ParlourHeight;
 		LivingRoom->Configure(RoomSetup, LeadStorm);
 		LivingRoom->FinishSpawning(Transform);
 	}

@@ -57,6 +57,9 @@ TEXTURES = {
     "herringbone_parquet": "the living room floor",
     "floral_jacquard": "the faded green carpet in the living room",
     "medieval_blocks_03": "the stone fireplace in the living room",
+    # Polished, scratched cherry: tinted near black it is a lacquered piano case that has been
+    # dusted and knocked about for sixty years, which a flat colour could never be.
+    "lacquered_cherry_wood": "the grand piano and its stool",
 }
 
 # The three maps the master material wants. nor_dx because UE expects DirectX-convention normals;
