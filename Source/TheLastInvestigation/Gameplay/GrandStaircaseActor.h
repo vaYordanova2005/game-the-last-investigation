@@ -125,6 +125,15 @@ private:
 	float CentralNorthY() const { return Setup.CenterY - CentralWidth * 0.5f; }
 	float CentralSouthY() const { return Setup.CenterY + CentralWidth * 0.5f; }
 	float ChandelierX() const { return (GalleryEdgeX() + FlightEastX()) * 0.5f; }
+	/**
+	 * The dining room and parlour doors, facing each other across the entrance hall: under the side
+	 * galleries, ninety in from the gallery's edge, so they stay clear of the return flights and
+	 * the end walls under them whatever the hall's size.
+	 */
+	float SideDoorX() const { return GalleryEdgeX() - 90.f; }
+	/** Half the side doors' opening, and its height above the hall floor. */
+	static constexpr float SideDoorHalf = 50.f;
+	static constexpr float SideDoorHeight = 212.f;
 	/** The portrait on the landing: north of the window, clear of the sconce beside it. */
 	float PortraitCenterY() const { return NorthInnerY() + 60.f; }
 
@@ -162,6 +171,8 @@ private:
 	/** Where a decal on that wall goes and which way it projects. */
 	void AimAt(EWall Wall, float U, float Z, float Roll, FVector& OutLocation, FRotator& OutRotation) const;
 	bool IsOnOpening(EWall Wall, float U, float Z, float HalfU, float HalfZ) const;
+	/** The rectangle [U0,U1] x [Z0,Z1] of one wall with every opening on it cut out. */
+	TArray<FBox2D> CutAround(EWall Wall, float U0, float U1, float Z0, float Z1) const;
 	float WallFace(EWall Wall) const;
 	FVector WallNormal(EWall Wall) const;
 	FVector WallPoint(EWall Wall, float U, float Z, float Proud) const;
@@ -202,6 +213,8 @@ private:
 	FStairHallSetup Setup;
 	FRandomStream Random;
 	float ElapsedTime = 0.f;
+	/** What the stained glass was last set to, so the tick only touches it when that changes. */
+	float GlassIntensity = -1.f;
 
 	int32 FigureStrike = 0;
 	bool bFigureThisStrike = false;

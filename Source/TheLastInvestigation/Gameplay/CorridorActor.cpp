@@ -199,52 +199,17 @@ bool ACorridorActor::IsOnOpening(ESide Side, float U, float V, float HalfU, floa
 	return false;
 }
 
-namespace
+TArray<FBox2D> ACorridorActor::CutAround(ESide Side, float U0, float U1, float V0, float V1) const
 {
-	/** The rectangle [U0,U1] x [V0,V1] with every opening on the wall cut out of it. */
-	template <typename TOpening, typename TSide>
-	TArray<FBox2D> CutAround(const TArray<TOpening>& Openings, TSide Side, float U0, float U1, float V0, float V1)
+	TArray<FBox2D> Holes;
+	for (const FOpening& Opening : Openings)
 	{
-		TArray<const TOpening*> Hits;
-		for (const TOpening& Opening : Openings)
+		if (Opening.Side == Side)
 		{
-			if (Opening.Side == Side
-				&& Opening.CenterU + Opening.HalfU > U0 && Opening.CenterU - Opening.HalfU < U1
-				&& Opening.TopV > V0 && Opening.BottomV < V1)
-			{
-				Hits.Add(&Opening);
-			}
+			Holes.Add(FBox2D(FVector2D(Opening.CenterU - Opening.HalfU, Opening.BottomV), FVector2D(Opening.CenterU + Opening.HalfU, Opening.TopV)));
 		}
-		Hits.Sort([](const TOpening& A, const TOpening& B) { return A.CenterU < B.CenterU; });
-
-		TArray<FBox2D> Pieces;
-		float Cursor = U0;
-		for (const TOpening* Opening : Hits)
-		{
-			const float Left = FMath::Max(U0, Opening->CenterU - Opening->HalfU);
-			const float Right = FMath::Min(U1, Opening->CenterU + Opening->HalfU);
-			if (Left > Cursor)
-			{
-				Pieces.Add(FBox2D(FVector2D(Cursor, V0), FVector2D(Left, V1)));
-			}
-			const float HoleBottom = FMath::Max(V0, Opening->BottomV);
-			const float HoleTop = FMath::Min(V1, Opening->TopV);
-			if (HoleBottom > V0)
-			{
-				Pieces.Add(FBox2D(FVector2D(Left, V0), FVector2D(Right, HoleBottom)));
-			}
-			if (HoleTop < V1)
-			{
-				Pieces.Add(FBox2D(FVector2D(Left, HoleTop), FVector2D(Right, V1)));
-			}
-			Cursor = FMath::Max(Cursor, Right);
-		}
-		if (Cursor < U1)
-		{
-			Pieces.Add(FBox2D(FVector2D(Cursor, V0), FVector2D(U1, V1)));
-		}
-		return Pieces;
 	}
+	return RoomWalls::CutAround(Holes, U0, U1, V0, V1);
 }
 
 void ACorridorActor::FacePanel(FRoomBuilder& Build, ESide Side, float U, float V, float SizeU, float SizeV, UMaterialInterface* Mat) const
@@ -264,7 +229,7 @@ void ACorridorActor::FacePanel(FRoomBuilder& Build, ESide Side, float U, float V
 
 void ACorridorActor::FaceFill(FRoomBuilder& Build, ESide Side, float U0, float U1, float V0, float V1, UMaterialInterface* Mat) const
 {
-	for (const FBox2D& Piece : CutAround(Openings, Side, U0, U1, V0, V1))
+	for (const FBox2D& Piece : CutAround(Side, U0, U1, V0, V1))
 	{
 		const FVector2D Centre = Piece.GetCenter();
 		const FVector2D Size = Piece.GetSize();
@@ -316,7 +281,7 @@ void ACorridorActor::BuildShell(FRoomBuilder& Build)
 	// rest of it, and its corridor face is exactly NorthFace.
 	auto Run = [&](ESide Side, float U0, float U1, float Line)
 	{
-		for (const FBox2D& Piece : CutAround(Openings, Side, U0, U1, -17.f, H + 10.f))
+		for (const FBox2D& Piece : CutAround(Side, U0, U1, -17.f, H + 10.f))
 		{
 			const FVector2D C = Piece.GetCenter();
 			const FVector2D S = Piece.GetSize();
@@ -620,7 +585,7 @@ void ACorridorActor::BuildWallFinish(FRoomBuilder& Build)
 				// the bottom edges never line up, and the top is under the picture rail anyway.
 				const float Bottom = ChairRail + 2.f + Random.FRandRange(0.f, 26.f);
 				UMaterialInterface* Mat = (Strip % 2 == 0) ? MatWallpaper.Get() : MatWallpaperDark.Get();
-				for (const FBox2D& Piece : CutAround(Openings, Side, A, A + StripWidth - 0.3f, Bottom, PictureRail))
+				for (const FBox2D& Piece : CutAround(Side, A, A + StripWidth - 0.3f, Bottom, PictureRail))
 				{
 					const FVector2D C = Piece.GetCenter();
 					const FVector2D S = Piece.GetSize();
@@ -674,7 +639,7 @@ void ACorridorActor::BuildWainscot(FRoomBuilder& Build)
 
 	auto FaceBoxRun = [&](ESide Side, float U0, float U1, float V0, float V1, float Depth, float ProudBase, UMaterialInterface* Mat)
 	{
-		for (const FBox2D& Piece : CutAround(Openings, Side, U0, U1, V0, V1))
+		for (const FBox2D& Piece : CutAround(Side, U0, U1, V0, V1))
 		{
 			const FVector2D C = Piece.GetCenter();
 			const FVector2D S = Piece.GetSize();

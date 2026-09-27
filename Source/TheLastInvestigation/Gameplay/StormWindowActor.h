@@ -38,6 +38,13 @@ struct FStormWindowSetup
 
 	/** Multiplies the sky portal, for an opening whose glass lets through less than a clear pane. */
 	float PortalScale = 1.f;
+
+	/**
+	 * Seed for this window's own layout: which panes are broken, where the curtains are torn, where
+	 * the trees stand. Zero keeps the default for its role (one for the lead, one for a follower),
+	 * so every follower past the first needs its own, or it is the first one's window again.
+	 */
+	int32 Seed = 0;
 };
 
 /**
@@ -152,8 +159,19 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> SkyMaterial;
 
+	/** Whether the sky is already at its between-strikes floor, so the tick can leave it be. */
+	bool bSkyAtFloor = false;
+
 	int32 ActiveBolt = INDEX_NONE;
+	/** The bolt currently shown and lit, or none. Only ShowBolt changes it. */
+	int32 LitBolt = INDEX_NONE;
 	int32 StrikeCount = 0;
+
+	/**
+	 * Shows and lights one bolt (INDEX_NONE for none) and puts out the one before it. Does nothing
+	 * when that bolt is already the lit one, so it can be called every frame for nothing.
+	 */
+	void ShowBolt(int32 Index);
 
 	/** An own-view follower's copy of the lead's strike count, so each strike is placed once. */
 	int32 FollowedStrike = 0;

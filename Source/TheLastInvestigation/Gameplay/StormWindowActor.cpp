@@ -296,8 +296,8 @@ void AStormWindowActor::BeginPlay()
 	Super::BeginPlay();
 
 	// A follower gets its own seed, so its holes are not the lead's shapes (which panes are
-	// broken is chosen in BuildWindow).
-	Random.Initialize(Lead ? 20260923 : 20260918);
+	// broken is chosen in BuildWindow). A second follower brings one of its own in the setup.
+	Random.Initialize(Setup.Seed != 0 ? Setup.Seed : (Lead ? 20260923 : 20260918));
 
 	BuildWindow();
 	if (Lead)
@@ -608,7 +608,9 @@ void AStormWindowActor::BuildWindow()
 		// One drape is longer than the other; nothing in this house is a matched pair any more.
 		// The width runs towards the middle of the window, which is local -SideSign.
 		const float DrapeLength = (Height + 30.f) * (Side == 0 ? 1.f : 0.88f);
-		BuildDrapeMesh(this, Pivot, ClothMat, -SideSign * 64.f, DrapeLength, Side == 0 ? 1104 : 1955);
+		// The tears come from the drape's own seed, not from Random, so a window with a seed of its own
+		// has to carry it in here too or its curtains are torn exactly where every other window's are.
+		BuildDrapeMesh(this, Pivot, ClothMat, -SideSign * 64.f, DrapeLength, (Side == 0 ? 1104 : 1955) + Setup.Seed % 100003);
 
 		// A few threads still hanging where the hem tore away. These are boxes and have every
 		// right to be: a thread is a straight thin thing, which is the one shape a box is honest
@@ -914,17 +916,10 @@ void AStormWindowActor::BeginStrike()
 	// Show the strike, not just its effect. One of the prebuilt bolts is moved out beyond the
 	// treeline and switched on for the leading sub-flash — near enough to be framed by the
 	// window, far enough that it reads as weather rather than as an object in the garden.
+	// It is shown by TickLightning, for as long as a sub-flash is discharging.
 	if (Bolts.Num() > 0)
 	{
 		ActiveBolt = Random.RandRange(0, Bolts.Num() - 1);
-		for (int32 i = 0; i < Bolts.Num(); ++i)
-		{
-			if (Bolts[i])
-			{
-				Bolts[i]->SetVisibility(i == ActiveBolt, /*bPropagateToChildren*/ true);
-			}
-		}
-
 		if (USceneComponent* Bolt = Bolts[ActiveBolt])
 		{
 			Bolt->SetRelativeLocation(FVector(Random.FRandRange(1500.f, 2900.f), Random.FRandRange(-700.f, 700.f), 0.f));
@@ -999,26 +994,40 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 	SkyPortal->SetIntensity(SkyPortalCandelas * (1.f + FlashAlpha * 9.f));
 
 	// The channel is only lit while it is actually discharging — it snaps off with the sub-flash
-	// rather than fading, which is what stops it looking like a hanging neon tube.
+	// rather than fading, which is what stops it looking like a hanging neon tube. Visibility
+	// follows the discharge both ways, so every sub-flash of a strike shows its channel.
 	const bool bDischarging = SubFlashesRemaining > 0 && bSubFlashOn;
-	if (BoltMaterials.IsValidIndex(ActiveBolt) && BoltMaterials[ActiveBolt])
-	{
-		BoltMaterials[ActiveBolt]->SetScalarParameterValue(TEXT("Intensity"), bDischarging ? 14.f : 0.f);
-	}
-	// Visibility follows the discharge both ways: hiding it between sub-flashes and only showing
-	// it again in BeginStrike left every sub-flash after the first lighting a hidden channel.
-	if (ActiveBolt != INDEX_NONE && Bolts.IsValidIndex(ActiveBolt) && Bolts[ActiveBolt]
-		&& Bolts[ActiveBolt]->IsVisible() != bDischarging)
-	{
-		Bolts[ActiveBolt]->SetVisibility(bDischarging, /*bPropagateToChildren*/ true);
-	}
+	ShowBolt(bDischarging ? ActiveBolt : INDEX_NONE);
 
 	// The whole sky lights up with the discharge, not just the channel — from inside the room that
-	// is most of what a distant strike looks like.
-	if (SkyMaterial)
+	// is most of what a distant strike looks like. Between strikes it sits at its floor, and is
+	// left alone there.
+	if (SkyMaterial && (FlashAlpha > 0.f || !bSkyAtFloor))
 	{
 		SkyMaterial->SetScalarParameterValue(TEXT("Intensity"), SkyGlowFloor + FlashAlpha * 5.f);
+		bSkyAtFloor = FlashAlpha <= 0.f;
 	}
+}
+
+void AStormWindowActor::ShowBolt(int32 Index)
+{
+	if (Index == LitBolt)
+	{
+		return;
+	}
+	for (const int32 i : { LitBolt, Index })
+	{
+		const bool bShow = i == Index;
+		if (Bolts.IsValidIndex(i) && Bolts[i])
+		{
+			Bolts[i]->SetVisibility(bShow, /*bPropagateToChildren*/ true);
+		}
+		if (BoltMaterials.IsValidIndex(i) && BoltMaterials[i])
+		{
+			BoltMaterials[i]->SetScalarParameterValue(TEXT("Intensity"), bShow ? 14.f : 0.f);
+		}
+	}
+	LitBolt = Index;
 }
 
 void AStormWindowActor::FollowOwnView()
@@ -1045,21 +1054,11 @@ void AStormWindowActor::FollowOwnView()
 	// The lead does not say whether a sub-flash is on, only how bright the sky is; near the top of
 	// a flash is close enough, and it still snaps off between afterbeats.
 	const bool bDischarging = FlashAlpha > 0.6f;
-	for (int32 i = 0; i < Bolts.Num(); ++i)
-	{
-		const bool bShow = bDischarging && i == ActiveBolt;
-		if (Bolts[i] && Bolts[i]->IsVisible() != bShow)
-		{
-			Bolts[i]->SetVisibility(bShow, /*bPropagateToChildren*/ true);
-		}
-		if (BoltMaterials.IsValidIndex(i) && BoltMaterials[i])
-		{
-			BoltMaterials[i]->SetScalarParameterValue(TEXT("Intensity"), bShow ? 14.f : 0.f);
-		}
-	}
-	if (SkyMaterial)
+	ShowBolt(bDischarging ? ActiveBolt : INDEX_NONE);
+	if (SkyMaterial && (FlashAlpha > 0.f || !bSkyAtFloor))
 	{
 		SkyMaterial->SetScalarParameterValue(TEXT("Intensity"), SkyGlowFloor + FlashAlpha * 5.f);
+		bSkyAtFloor = FlashAlpha <= 0.f;
 	}
 }
 

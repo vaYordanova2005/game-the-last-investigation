@@ -103,6 +103,59 @@ namespace RoomPalette
 	const FLinearColor Skin(0.240f, 0.152f, 0.112f);
 }
 
+TArray<FBox2D> RoomWalls::CutAround(TConstArrayView<FBox2D> Holes, float U0, float U1, float V0, float V1)
+{
+	TArray<const FBox2D*> Hits;
+	TArray<float> Cuts = { U0, U1 };
+	for (const FBox2D& Hole : Holes)
+	{
+		if (Hole.Max.X > U0 && Hole.Min.X < U1 && Hole.Max.Y > V0 && Hole.Min.Y < V1)
+		{
+			Hits.Add(&Hole);
+			Cuts.Add(FMath::Clamp(Hole.Min.X, U0, U1));
+			Cuts.Add(FMath::Clamp(Hole.Max.X, U0, U1));
+		}
+	}
+	Cuts.Sort();
+
+	TArray<FBox2D> Pieces;
+	for (int32 i = 0; i + 1 < Cuts.Num(); ++i)
+	{
+		const float A = Cuts[i];
+		const float B = Cuts[i + 1];
+		if (B - A < 0.01f)
+		{
+			continue;
+		}
+		const float Mid = (A + B) * 0.5f;
+
+		// The holes over this strip, bottom to top, and the wall left between them.
+		TArray<FVector2D> Spans;
+		for (const FBox2D* Hole : Hits)
+		{
+			if (Mid > Hole->Min.X && Mid < Hole->Max.X)
+			{
+				Spans.Add(FVector2D(FMath::Max(V0, Hole->Min.Y), FMath::Min(V1, Hole->Max.Y)));
+			}
+		}
+		Spans.Sort([](const FVector2D& L, const FVector2D& R) { return L.X < R.X; });
+		float Cursor = V0;
+		for (const FVector2D& Span : Spans)
+		{
+			if (Span.X > Cursor)
+			{
+				Pieces.Add(FBox2D(FVector2D(A, Cursor), FVector2D(B, Span.X)));
+			}
+			Cursor = FMath::Max(Cursor, Span.Y);
+		}
+		if (Cursor < V1)
+		{
+			Pieces.Add(FBox2D(FVector2D(A, Cursor), FVector2D(B, V1)));
+		}
+	}
+	return Pieces;
+}
+
 namespace
 {
 	/**

@@ -22,6 +22,16 @@ namespace
 	/** The picture rail and the dado on the gallery walls, above the gallery floor. */
 	constexpr float GalleryPictureRail = 262.f;
 
+	// A flight's strings, measured square to the rake except where said: the board's centre line runs
+	// StringDrop under the pitch line (vertically), and its capping moulding CapRise over that.
+	// Shared by BuildFlight, which builds them, and Banister, which stands the balusters on the cap.
+	constexpr float StringDrop = 12.f;
+	constexpr float StringDepth = 34.f;
+	constexpr float CapRise = 18.f;
+	constexpr float CapThickness = 3.f;
+	/** A baluster's square block, top and bottom. */
+	constexpr float BalusterBlock = 4.6f;
+
 	/** Collision that only a walking man meets: the interaction trace and the camera pass through. */
 	void PawnOnly(UStaticMeshComponent* Part)
 	{
@@ -33,72 +43,6 @@ namespace
 			Part->SetHiddenInGame(true);
 			Part->SetCastShadow(false);
 		}
-	}
-
-	/**
-	 * The rectangle [U0,U1] x [Z0,Z1] with every opening on the wall cut out of it.
-	 *
-	 * Not the corridor's version, which walks the openings left to right and so assumes no two of
-	 * them share any stretch of wall. The hall's east wall has the archway from the corridor
-	 * directly over the front door, and that version filled in the wall "above the front door" all
-	 * the way up through the archway: plaster across the way in, and a solid slab behind it. This
-	 * one cuts the wall at every opening's edges, and in each strip removes every opening that
-	 * covers it, one over another if need be.
-	 */
-	template <typename TOpening, typename TWall>
-	TArray<FBox2D> CutAroundAll(const TArray<TOpening>& Openings, TWall Wall, float U0, float U1, float Z0, float Z1)
-	{
-		TArray<const TOpening*> Hits;
-		TArray<float> Cuts = { U0, U1 };
-		for (const TOpening& Opening : Openings)
-		{
-			if (Opening.Wall == Wall
-				&& Opening.CenterU + Opening.HalfU > U0 && Opening.CenterU - Opening.HalfU < U1
-				&& Opening.TopZ > Z0 && Opening.BottomZ < Z1)
-			{
-				Hits.Add(&Opening);
-				Cuts.Add(FMath::Clamp(Opening.CenterU - Opening.HalfU, U0, U1));
-				Cuts.Add(FMath::Clamp(Opening.CenterU + Opening.HalfU, U0, U1));
-			}
-		}
-		Cuts.Sort();
-
-		TArray<FBox2D> Pieces;
-		for (int32 i = 0; i + 1 < Cuts.Num(); ++i)
-		{
-			const float A = Cuts[i];
-			const float B = Cuts[i + 1];
-			if (B - A < 0.01f)
-			{
-				continue;
-			}
-			const float Mid = (A + B) * 0.5f;
-
-			// The holes over this strip, bottom to top, and the wall left between them.
-			TArray<FVector2D> Holes;
-			for (const TOpening* Opening : Hits)
-			{
-				if (FMath::Abs(Mid - Opening->CenterU) < Opening->HalfU)
-				{
-					Holes.Add(FVector2D(FMath::Max(Z0, Opening->BottomZ), FMath::Min(Z1, Opening->TopZ)));
-				}
-			}
-			Holes.Sort([](const FVector2D& L, const FVector2D& R) { return L.X < R.X; });
-			float Cursor = Z0;
-			for (const FVector2D& Hole : Holes)
-			{
-				if (Hole.X > Cursor)
-				{
-					Pieces.Add(FBox2D(FVector2D(A, Cursor), FVector2D(B, Hole.X)));
-				}
-				Cursor = FMath::Max(Cursor, Hole.Y);
-			}
-			if (Cursor < Z1)
-			{
-				Pieces.Add(FBox2D(FVector2D(A, Cursor), FVector2D(B, Z1)));
-			}
-		}
-		return Pieces;
 	}
 
 	/**
@@ -232,8 +176,8 @@ void AGrandStaircaseActor::Configure(const FStairHallSetup& InSetup, AStormWindo
 		// The front door, below it.
 		{ EWall::East, Setup.CenterY, 60.f, GroundZ, GroundZ + 250.f },
 		// The dining room and the parlour, either side of the hall.
-		{ EWall::North, -1560.f, 50.f, GroundZ, GroundZ + 212.f },
-		{ EWall::South, -1560.f, 50.f, GroundZ, GroundZ + 212.f },
+		{ EWall::North, SideDoorX(), SideDoorHalf, GroundZ, GroundZ + SideDoorHeight },
+		{ EWall::South, SideDoorX(), SideDoorHalf, GroundZ, GroundZ + SideDoorHeight },
 		// The window over the landing.
 		{ EWall::West, Setup.CenterY, WindowWidth * 0.5f, LandingZ + WindowSill, LandingZ + WindowSill + WindowHeight },
 	};
@@ -371,11 +315,24 @@ bool AGrandStaircaseActor::IsOnOpening(EWall Wall, float U, float Z, float HalfU
 	return false;
 }
 
+TArray<FBox2D> AGrandStaircaseActor::CutAround(EWall Wall, float U0, float U1, float Z0, float Z1) const
+{
+	TArray<FBox2D> Holes;
+	for (const FOpening& Opening : Openings)
+	{
+		if (Opening.Wall == Wall)
+		{
+			Holes.Add(FBox2D(FVector2D(Opening.CenterU - Opening.HalfU, Opening.BottomZ), FVector2D(Opening.CenterU + Opening.HalfU, Opening.TopZ)));
+		}
+	}
+	return RoomWalls::CutAround(Holes, U0, U1, Z0, Z1);
+}
+
 void AGrandStaircaseActor::WallFill(FRoomBuilder& Build, EWall Wall, float U0, float U1, float Z0, float Z1, UMaterialInterface* Mat, float Proud)
 {
 	// A Mark stands proud along its own +Z; the rotation per wall is the corridor's (FacePanel),
 	// which was worked out the hard way.
-	for (const FBox2D& Piece : CutAroundAll(Openings, Wall, U0, U1, Z0, Z1))
+	for (const FBox2D& Piece : CutAround(Wall, U0, U1, Z0, Z1))
 	{
 		const FVector2D C = Piece.GetCenter();
 		const FVector2D S = Piece.GetSize();
@@ -432,7 +389,7 @@ void AGrandStaircaseActor::BuildShell(FRoomBuilder& Build)
 	// and is simply built again through it; two black boxes in one place draw nothing new.
 	auto Run = [&](EWall Wall, float U0, float U1, float Line)
 	{
-		for (const FBox2D& Piece : CutAroundAll(Openings, Wall, U0, U1, Z0, Z1))
+		for (const FBox2D& Piece : CutAround(Wall, U0, U1, Z0, Z1))
 		{
 			const FVector2D C = Piece.GetCenter();
 			const FVector2D S = Piece.GetSize();
@@ -475,14 +432,14 @@ void AGrandStaircaseActor::BuildShell(FRoomBuilder& Build)
 			Build.Box(FVector(At.X, At.Y, GroundZ + Height * 0.5f), FRotator::ZeroRotator, Side, MatBackRoom);
 		}
 	};
-	BackRoom(FVector(-1560.f, NorthY() - T, 0.f), FVector(0.f, -1.f, 0.f), 170.f, 300.f, 300.f);
-	BackRoom(FVector(-1560.f, SouthY() + T, 0.f), FVector(0.f, 1.f, 0.f), 170.f, 300.f, 300.f);
+	BackRoom(FVector(SideDoorX(), NorthY() - T, 0.f), FVector(0.f, -1.f, 0.f), 170.f, 300.f, 300.f);
+	BackRoom(FVector(SideDoorX(), SouthY() + T, 0.f), FVector(0.f, 1.f, 0.f), 170.f, 300.f, 300.f);
 	// The vestibule behind the front door is only ever seen through the gaps in the boards.
 	BackRoom(FVector(EastX() + T, Setup.CenterY, 0.f), FVector(1.f, 0.f, 0.f), 110.f, 160.f, 270.f);
 
 	// Thresholds through the wall in every doorway, and a deeper stone one at the front door.
-	Build.Box(FVector(-1560.f, NorthY() - T * 0.5f, GroundZ + 1.f), FRotator::ZeroRotator, FVector(100.f, T + 4.f, 4.f), MatOakDark);
-	Build.Box(FVector(-1560.f, SouthY() + T * 0.5f, GroundZ + 1.f), FRotator::ZeroRotator, FVector(100.f, T + 4.f, 4.f), MatOakDark);
+	Build.Box(FVector(SideDoorX(), NorthY() - T * 0.5f, GroundZ + 1.f), FRotator::ZeroRotator, FVector(SideDoorHalf * 2.f, T + 4.f, 4.f), MatOakDark);
+	Build.Box(FVector(SideDoorX(), SouthY() + T * 0.5f, GroundZ + 1.f), FRotator::ZeroRotator, FVector(SideDoorHalf * 2.f, T + 4.f, 4.f), MatOakDark);
 	Build.Box(FVector(EastX() + T * 0.5f, Setup.CenterY, GroundZ + 1.5f), FRotator::ZeroRotator, FVector(T + 30.f, 130.f, 5.f), MatMarble);
 	// And through the archway from the corridor, where the two floors meet.
 	Build.Box(FVector(EastX() + T * 0.5f, Setup.CenterY, 0.f), FRotator::ZeroRotator, FVector(T + 4.f, Setup.OpeningWidth, 6.f), MatOakDark);
@@ -657,16 +614,20 @@ void AGrandStaircaseActor::BuildFlight(FRoomBuilder& Build, const FVector& FootN
 	// rides a few centimetres over the pitch line — the line through the nosings.
 	const float Length = FVector2D(Going * Treads + Going, Rise * (Treads + 1)).Size();
 	const FRotator Rake = (Up * Going + FVector(0.f, 0.f, Rise)).Rotation();
-	const FVector StringMid = P(Going * Treads * 0.5f, 0.f, Rise + Going * Treads * 0.5f * Slope - 12.f);
+	const FVector StringMid = P(Going * Treads * 0.5f, 0.f, Rise + Going * Treads * 0.5f * Slope - StringDrop);
 	for (const float S : { -1.f, 1.f })
 	{
-		Build.Box(StringMid + Side * S * (Width * 0.5f - 2.5f), Rake, FVector(Length, 5.f, 34.f), MatOak, false);
-		// A capping moulding along the top of the string.
-		Build.Box(StringMid + Side * S * (Width * 0.5f - 2.5f) + FVector(0.f, 0.f, 18.f), Rake, FVector(Length, 7.f, 3.f), MatOak, false);
+		Build.Box(StringMid + Side * S * (Width * 0.5f - 2.5f), Rake, FVector(Length, 5.f, StringDepth), MatOak, false);
+		// A capping moulding along the top of the string: what the balusters stand on.
+		Build.Box(StringMid + Side * S * (Width * 0.5f - 2.5f) + FVector(0.f, 0.f, CapRise), Rake, FVector(Length, 7.f, CapThickness), MatOak, false);
 	}
 
-	// The ramp. Its top surface runs from the foot of the bottom riser to the top of the last one.
-	const FVector From = P(0.f, 0.f, 0.f);
+	// The ramp. Its top surface is the pitch line, the line through the nosings: from the floor one
+	// going in front of the bottom riser to the top of the last one. It used to start at the foot of
+	// the bottom riser, which made it one going short and so steeper than the stair — the camera
+	// sank a whole riser into the bottom treads, rose a riser above the top ones, and at the foot of
+	// the central flight dropped off the curtail step onto a ramp still down at floor level.
+	const FVector From = P(-Going, 0.f, 0.f);
 	const FVector To = P(Going * Treads, 0.f, Rise * RisersPerFlight);
 	const FVector Along = (To - From).GetSafeNormal();
 	const FRotator RampRot = Along.Rotation();
@@ -830,10 +791,19 @@ void AGrandStaircaseActor::Banister(FRoomBuilder& Build, const FVector& From, co
 	// them. The first of each is built as an ordinary part only to get its tiled material.
 	const float Spacing = bRaking ? 13.f : 12.f;
 	const int32 Count = FMath::Max(1, FMath::FloorToInt(Length / Spacing));
-	const float Base = bRaking ? 12.f : 8.5f;
-	const float Top = RailHeight - 5.f;
+	// A block's bottom and top are level and the rails either side of it are not, so on a flight
+	// each block is let into its rail by the rise over half its own width: the bottom on its downhill
+	// corner meets the string's capping, the top on its uphill corner meets the under-rail. It used
+	// to stand at a flat 12 over the pitch line, which is 4 over the capping: every baluster down
+	// every flight hung in the air. (On a level run the slope is nil and these come out as the top
+	// of the bottom rail and the underside of the under-rail.)
+	const float Cos = FMath::Max(Dir.Size2D(), KINDA_SMALL_NUMBER);
+	const float Tan = FMath::Abs(Dir.Z) / Cos;
+	const float LetIn = BalusterBlock * 0.5f * Tan;
+	const float Base = bRaking ? CapRise - StringDrop + CapThickness * 0.5f / Cos - LetIn : 8.5f;
+	const float Top = RailHeight - 3.f - 2.f / Cos + LetIn;
 
-	UStaticMeshComponent* SampleBlock = Build.Box(From + FVector(0.f, 0.f, -500.f), FRotator::ZeroRotator, FVector(4.6f, 4.6f, 9.f), MatOak, false);
+	UStaticMeshComponent* SampleBlock = Build.Box(From + FVector(0.f, 0.f, -500.f), FRotator::ZeroRotator, FVector(BalusterBlock, BalusterBlock, 9.f), MatOak, false);
 	UStaticMeshComponent* SampleShaft = Build.Cyl(From + FVector(0.f, 0.f, -500.f), FRotator::ZeroRotator, FVector(3.2f, 3.2f, 60.f), MatOak, false);
 	UMaterialInterface* BlockMat = SampleBlock ? SampleBlock->GetMaterial(0) : MatOak.Get();
 	UMaterialInterface* ShaftMat = SampleShaft ? SampleShaft->GetMaterial(0) : MatOak.Get();
@@ -868,10 +838,10 @@ void AGrandStaircaseActor::Banister(FRoomBuilder& Build, const FVector& From, co
 		const FQuat Tilt = FRotator(Lean * 0.5f, 0.f, Lean).Quaternion();
 		const float Z0 = Foot.Z + Base;
 		const float Z1 = Foot.Z + (bSnapped ? Wear.FRandRange(26.f, 44.f) : Top);
-		Blocks->AddInstance(FTransform(Tilt, FVector(Foot.X, Foot.Y, Z0 + 4.5f), FVector(0.046f, 0.046f, 0.09f)));
+		Blocks->AddInstance(FTransform(Tilt, FVector(Foot.X, Foot.Y, Z0 + 4.5f), FVector(BalusterBlock / 100.f, BalusterBlock / 100.f, 0.09f)));
 		if (!bSnapped)
 		{
-			Blocks->AddInstance(FTransform(Tilt, FVector(Foot.X, Foot.Y, Z1 - 4.5f), FVector(0.046f, 0.046f, 0.09f)));
+			Blocks->AddInstance(FTransform(Tilt, FVector(Foot.X, Foot.Y, Z1 - 4.5f), FVector(BalusterBlock / 100.f, BalusterBlock / 100.f, 0.09f)));
 		}
 		const float ShaftBottom = Z0 + 9.f;
 		const float ShaftTop = bSnapped ? Z1 : Z1 - 9.f;
@@ -901,11 +871,15 @@ void AGrandStaircaseActor::BuildBalustrades(FRoomBuilder& Build)
 	const float LX = LandingEdgeX() + 3.f;
 	const float CN = CentralNorthY() + 3.f;
 	const float CS = CentralSouthY() - 3.f;
-	// Where the pitch line is at either end of a flight, in the flight's own terms.
-	const float PitchTopReturn = LandingZ + Rise + Going * (RisersPerFlight - 1) * (Rise / Going);   // 0
-	const float PitchFootReturn = LandingZ + Rise;
-	const float PitchTopCentral = GroundZ + Rise + Going * (RisersPerFlight - 1) * (Rise / Going);  // -170
-	const float PitchFootCentral = GroundZ + Rise;
+	// Where the pitch line is at either end of a flight's banister, in the flight's own terms: A is
+	// how far up the flight from the face of its bottom riser. The landing's posts stand 3 in from
+	// the landing edge, so the landing end of every banister is 3 along its flight too.
+	const float Run = Going * (RisersPerFlight - 1);
+	auto PitchAt = [](float FootZ, float A) { return FootZ + Rise + A * (Rise / Going); };
+	const float PitchTopReturn = PitchAt(LandingZ, Run);                  // 0
+	const float PitchFootReturn = PitchAt(LandingZ, LX - LandingEdgeX());
+	const float PitchTopCentral = PitchAt(GroundZ, Run - (LX - LandingEdgeX()));
+	const float PitchFootCentral = PitchAt(GroundZ, 0.f);
 
 	// The gallery: across the east end and along both sides to the stairheads.
 	Banister(Build, FVector(GX, NY, 0.f), FVector(GX, SY, 0.f), 41);
@@ -956,7 +930,7 @@ void AGrandStaircaseActor::BuildBalustrades(FRoomBuilder& Build)
 	// A wall rail up the outer side of each return flight, on brass brackets.
 	for (const float Y : { NorthY() + 6.f, SouthY() - 6.f })
 	{
-		const FVector From(LandingEdgeX(), Y, PitchFootReturn + RailHeight - 4.f);
+		const FVector From(LandingEdgeX(), Y, PitchAt(LandingZ, 0.f) + RailHeight - 4.f);
 		const FVector To(FX, Y, PitchTopReturn + RailHeight - 4.f);
 		const FVector Dir = (To - From).GetSafeNormal();
 		Build.Cyl((From + To) * 0.5f, FRotationMatrix::MakeFromZ(Dir).Rotator(), FVector(5.f, 5.f, FVector::Dist(From, To)), MatOak, false);
@@ -992,7 +966,7 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 	for (const FRun& R : HallWalls)
 	{
 		WallFill(Build, R.Wall, R.U0, R.U1, Z0, Dado, MatWainscot, 0.3f);
-		for (const FBox2D& Piece : CutAroundAll(Openings, R.Wall, R.U0, R.U1, Z0, Dado + 4.f))
+		for (const FBox2D& Piece : CutAround(R.Wall, R.U0, R.U1, Z0, Dado + 4.f))
 		{
 			const FVector2D C = Piece.GetCenter();
 			const FVector2D S = Piece.GetSize();
@@ -1031,7 +1005,7 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 		const float U1 = bAlongX ? EastX() : SouthY();
 		auto Band = [&](float ZA, float ZB, float Depth)
 		{
-			for (const FBox2D& Piece : CutAroundAll(Openings, Wall, U0, U1, ZA, ZB))
+			for (const FBox2D& Piece : CutAround(Wall, U0, U1, ZA, ZB))
 			{
 				const FVector2D C = Piece.GetCenter();
 				const FVector2D S = Piece.GetSize();
@@ -1078,7 +1052,7 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 	// The gallery walls get the wainscot's dado, and paper from it to the picture rail in runs.
 	for (const FRun& R : { FRun{ EWall::East, NorthY(), SouthY() } })
 	{
-		for (const FBox2D& Piece : CutAroundAll(Openings, R.Wall, R.U0, R.U1, 88.f, 96.f))
+		for (const FBox2D& Piece : CutAround(R.Wall, R.U0, R.U1, 88.f, 96.f))
 		{
 			WallBox(Build, R.Wall, Piece.GetCenter().X, 92.f, Piece.GetSize().X, 7.f, 3.2f, 0.f, MatOak);
 		}
@@ -1121,13 +1095,13 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 	// The two side doors' casings.
 	for (const EWall Wall : { EWall::North, EWall::South })
 	{
-		const float U = -1560.f;
-		const float H = GroundZ + 212.f;
+		const float U = SideDoorX();
+		const float H = GroundZ + SideDoorHeight;
 		for (const float S : { -1.f, 1.f })
 		{
-			WallBox(Build, Wall, U + S * 56.f, (GroundZ + H + 12.f) * 0.5f, 12.f, H + 12.f - GroundZ, 3.f, 0.3f, MatOak);
+			WallBox(Build, Wall, U + S * (SideDoorHalf + 6.f), (GroundZ + H + 12.f) * 0.5f, 12.f, H + 12.f - GroundZ, 3.f, 0.3f, MatOak);
 		}
-		WallBox(Build, Wall, U, H + 6.f, 124.f, 12.f, 3.f, 0.3f, MatOak);
+		WallBox(Build, Wall, U, H + 6.f, SideDoorHalf * 2.f + 24.f, 12.f, 3.f, 0.3f, MatOak);
 	}
 }
 
@@ -1501,7 +1475,7 @@ void AGrandStaircaseActor::BuildFurniture(FRoomBuilder& Build)
 	Build.Sph(WallPoint(EWall::North, ConsoleSeat.X, GroundZ + 262.f, 1.f), 1.8f, MatIron);
 
 	// A dust sheet over an armchair by the parlour door: the house was being shut up properly once.
-	const FVector ChairSeat(-1700.f, SouthY() - 70.f, GroundZ);
+	const FVector ChairSeat(SideDoorX() - 140.f, SouthY() - 70.f, GroundZ);
 	Build.PropSeated(RoomProps::Armchair, ChairSeat, FRotator(0.f, 200.f, 0.f), 0.f);
 	Build.Cloth(ChairSeat + FVector(0.f, 0.f, 104.f), FRotator(0.f, 20.f, 0.f), FVector2D(170.f, 150.f), 5.5f, 70.f, 2203,
 		Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.20f, 0.15f, 0.11f)), 34.f);
@@ -1658,8 +1632,11 @@ void AGrandStaircaseActor::BuildFigure(FRoomBuilder& /*Build*/)
 	// there. He is there only while the sky is lit, and only some of the times it is, and only
 	// from far enough away that what he is cannot be made out (see Tick) — a shape against the
 	// glass going up the stairs, which is what the end of the story is.
+	// Beside the north banister rather than up the middle: close enough to have a hand on the rail.
 	const int32 Step = 4;
-	const FVector Foot(FlightEastX() - Going * (Step + 0.5f), Setup.CenterY - 20.f, GroundZ + (Step + 1) * Rise);
+	const float Along = Going * (Step + 0.5f);
+	const float RailY = CentralNorthY() + 3.f;
+	const FVector Foot(FlightEastX() - Along, RailY + 52.f, GroundZ + (Step + 1) * Rise);
 	Figure = NewObject<USceneComponent>(this, TEXT("Figure"));
 	Figure->SetMobility(EComponentMobility::Movable);
 	Figure->AttachToComponent(HallRoot, FAttachmentTransformRules::KeepRelativeTransform);
@@ -1677,9 +1654,20 @@ void AGrandStaircaseActor::BuildFigure(FRoomBuilder& /*Build*/)
 	Shape.Sph(FVector(6.f, 0.f, 150.f), 38.f, MatShadow);
 	Shape.Cyl(FVector(8.f, 0.f, 160.f), FRotator::ZeroRotator, FVector(11.f, 11.f, 14.f), MatShadow, false);
 	Shape.Sph(FVector(10.f, 0.f, 175.f), 22.f, MatShadow);
-	// One hand on the rail.
-	Shape.Cyl(FVector(8.f, -24.f, 124.f), FRotator(10.f, 0.f, 18.f), FVector(8.f, 8.f, 56.f), MatShadow, false);
-	Shape.Cyl(FVector(4.f, 24.f, 118.f), FRotator(-6.f, 0.f, -6.f), FVector(8.f, 8.f, 58.f), MatShadow, false);
+	// One hand on the rail. Yaw 180 turns local +Y to world -Y, so the banister is on his +Y side,
+	// Foot.Y - RailY out; the grip is on top of the handrail a hand's width up the flight, which is
+	// the pitch line there plus the rail's height (see Banister) less where his feet are.
+	auto Limb = [&](const FVector& From, const FVector& To)
+	{
+		Shape.Cyl((From + To) * 0.5f, FRotationMatrix::MakeFromZ(To - From).Rotator(), FVector(8.f, 8.f, FVector::Dist(From, To) + 4.f), MatShadow, false);
+	};
+	const float Reach = 12.f;
+	const float GripZ = GroundZ + Rise + (Along + Reach) * (Rise / Going) + RailHeight + 1.5f + 5.f - Foot.Z;
+	const FVector Grip(Reach, Foot.Y - RailY, GripZ);
+	Limb(FVector(4.f, 21.f, 142.f), Grip);
+	Shape.Sph(Grip, 9.f, MatShadow);
+	// The other hangs at his side.
+	Limb(FVector(4.f, -21.f, 142.f), FVector(0.f, -27.f, 90.f));
 
 	Figure->SetVisibility(false, /*bPropagateToChildren*/ true);
 }
@@ -1694,9 +1682,12 @@ void AGrandStaircaseActor::Tick(float DeltaTime)
 
 	// The glass: dim between strikes — the overcast sky behind it is a faint grey, and coloured
 	// glass lets through a fraction of that — and blazing for the instant the sky is lit.
-	if (StainedGlass)
+	// Only when it changes: between strikes the flash sits at nothing for seconds at a time.
+	const float Glass = 0.30f + Flash * 5.5f;
+	if (StainedGlass && Glass != GlassIntensity)
 	{
-		StainedGlass->SetScalarParameterValue(TEXT("Intensity"), 0.30f + Flash * 5.5f);
+		StainedGlass->SetScalarParameterValue(TEXT("Intensity"), Glass);
+		GlassIntensity = Glass;
 	}
 
 	// The chandelier: a long pendulum, so a slow one, pushed by the draught through the broken
@@ -1750,14 +1741,14 @@ void AGrandStaircaseActor::Tick(float DeltaTime)
 void AGrandStaircaseActor::SpawnDoors()
 {
 	struct FDoorSpec { FVector Hinge; float Yaw; float Width; float Height; float Ajar; FLinearColor Tint; bool bSix; const TCHAR* Prompt; };
-	const float Half = 50.f;
+	const float Half = SideDoorHalf;
 	const FDoorSpec Specs[] = {
 		// The front door. Local +X is the hall side: yaw 180 on the east wall.
 		{ FVector(EastX() + 2.6f, Setup.CenterY + 60.f - 2.f, GroundZ), 180.f, 116.f, 248.f, 0.f, FLinearColor(0.20f, 0.20f, 0.20f), true,
 			TEXT("The front door. It does not so much as rattle — the boards across it are nailed deep into the frame.") },
-		{ FVector(-1560.f + Half - 2.f, NorthY() - 2.6f, GroundZ), 90.f, 96.f, 210.f, 0.f, FLinearColor(0.26f, 0.27f, 0.28f), true,
+		{ FVector(SideDoorX() + Half - 2.f, NorthY() - 2.6f, GroundZ), 90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 0.f, FLinearColor(0.26f, 0.27f, 0.28f), true,
 			TEXT("Locked. Through the keyhole, the long shape of a table under a sheet, and a place laid at the end of it.") },
-		{ FVector(-1560.f - Half + 2.f, SouthY() + 2.6f, GroundZ), -90.f, 96.f, 210.f, 14.f, FLinearColor(0.22f, 0.23f, 0.24f), false,
+		{ FVector(SideDoorX() - Half + 2.f, SouthY() + 2.6f, GroundZ), -90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 14.f, FLinearColor(0.22f, 0.23f, 0.24f), false,
 			TEXT("It gives a hand's width and stops. The room beyond smells of cold ash — and of something electrical, faintly, like a set left on.") },
 	};
 
@@ -1803,6 +1794,9 @@ void AGrandStaircaseActor::SpawnWindow()
 		WindowSetup.bOwnView = true;
 		// Leaded coloured glass lets through a fraction of what a clear pane does.
 		WindowSetup.PortalScale = 0.55f;
+		// Not the follower default, which the corridor's window already uses: on the same seed this
+		// window's trees stood where the corridor's do and its curtains were torn in the same places.
+		WindowSetup.Seed = 18840926;
 		Window->Configure(WindowSetup);
 		Window->SetLead(LeadStorm);
 		Window->FinishSpawning(Transform);
@@ -1825,9 +1819,9 @@ AClueActor* AGrandStaircaseActor::SpawnClue(const FVector& LocalLocation, const 
 
 void AGrandStaircaseActor::BuildClues()
 {
-	auto HitVolume = [&](FRoomBuilder& B, const FVector& At, const FVector& Size)
+	auto HitVolume = [&](FRoomBuilder& B, const FVector& At, const FVector& Size, const FRotator& Rotation = FRotator::ZeroRotator)
 	{
-		if (UStaticMeshComponent* Hit = B.Box(At, FRotator::ZeroRotator, Size, MatVoid))
+		if (UStaticMeshComponent* Hit = B.Box(At, Rotation, Size, MatVoid))
 		{
 			Hit->SetHiddenInGame(true);
 			Hit->SetCastShadow(false);
@@ -1854,6 +1848,10 @@ void AGrandStaircaseActor::BuildClues()
 			const FPlank& P = Planks[i];
 			const float X = -1.8f - (i % 2) * 2.2f;
 			B.Box(FVector(X, (i % 3 - 1) * 4.f, P.Z), FRotator(0.f, 0.f, P.Roll), FVector(2.2f, P.Length, P.Height), (i % 3 == 0) ? MatOakDark.Get() : MatOak.Get(), false);
+			// What is examined is each board, not the doorway: one volume over the whole door put the
+			// boards in front of the door's own prompt everywhere, and it never showed. Between the
+			// boards the trace goes through to the door.
+			HitVolume(B, FVector(X - 1.f, (i % 3 - 1) * 4.f, P.Z), FVector(4.f, P.Length, P.Height + 2.f), FRotator(0.f, 0.f, P.Roll));
 			const float Reach = P.Length * 0.5f - 9.f;
 			const float R = FMath::DegreesToRadians(P.Roll);
 			for (const float Side : { -1.f, 1.f })
@@ -1861,7 +1859,6 @@ void AGrandStaircaseActor::BuildClues()
 				B.Sph(FVector(X - 1.4f, (i % 3 - 1) * 4.f + Side * Reach * FMath::Cos(R), P.Z + Side * Reach * FMath::Sin(R)), 1.4f, MatIron);
 			}
 		}
-		HitVolume(B, FVector(-4.f, 0.f, 0.f), FVector(2.f, 150.f, 250.f));
 	}
 
 	// The cases, by the door, ready to go. vintage_suitcase is two cases standing side by side along

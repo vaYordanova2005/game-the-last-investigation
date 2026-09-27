@@ -110,6 +110,17 @@ namespace RoomPalette
 	extern const FLinearColor Skin;
 }
 
+namespace RoomWalls
+{
+	/**
+	 * The rectangle [U0,U1] x [V0,V1] of a wall with every hole in it cut out, as the rectangles
+	 * left over. Holes are in the same (along, up) space and may overlap or stand one over another
+	 * — the stair hall has the archway from the corridor directly over the front door. The wall is
+	 * cut at every hole's edges, and in each strip every hole covering it is removed.
+	 */
+	TArray<FBox2D> CutAround(TConstArrayView<FBox2D> Holes, float U0, float U1, float V0, float V1);
+}
+
 /** Lazily loaded engine basic shapes. All of them are 100uu across, so scale is always Size/100. */
 struct FRoomShapes
 {

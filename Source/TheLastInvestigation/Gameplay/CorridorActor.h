@@ -114,6 +114,8 @@ private:
 	/** Where a decal on that wall goes and which way it projects. */
 	void AimAt(ESide Side, float U, float V, float Roll, FVector& OutLocation, FRotator& OutRotation) const;
 	bool IsOnOpening(ESide Side, float U, float V, float HalfU, float HalfV) const;
+	/** The rectangle [U0,U1] x [V0,V1] of one wall with every opening on it cut out. */
+	TArray<FBox2D> CutAround(ESide Side, float U0, float U1, float V0, float V1) const;
 	/** Along-wall extent of a side, between its end walls. */
 	void SideRange(ESide Side, float& OutU0, float& OutU1) const;
 
