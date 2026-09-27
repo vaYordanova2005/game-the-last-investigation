@@ -50,6 +50,10 @@ namespace RoomSurfaces
 	 */
 	extern const FRoomSurface Drapery;
 	extern const FRoomSurface RustedIron;  // lock, hinges, tools
+	/** The stair hall: a chequered entrance floor, panelled wainscot, and marble for the pedestal. */
+	extern const FRoomSurface HallTiles;
+	extern const FRoomSurface Wainscot;
+	extern const FRoomSurface Marble;
 }
 
 /** Imported prop meshes, /Game/Meshes/<name>. Names match Tools/fetch_assets.py's manifest. */
@@ -71,6 +75,18 @@ namespace RoomProps
 	extern const TCHAR* Nightstand;
 	/** A press: the tall cupboard in the corner past the head of the bed. */
 	extern const TCHAR* Press;
+	/** The stair hall. */
+	extern const TCHAR* Chandelier;
+	extern const TCHAR* Bust;
+	extern const TCHAR* Statue;
+	extern const TCHAR* LongcaseClock;
+	extern const TCHAR* Suitcases;
+	extern const TCHAR* CeramicVase;
+	extern const TCHAR* BrassVase;
+	extern const TCHAR* Candelabra;
+	extern const TCHAR* SideTable;
+	extern const TCHAR* Console;
+	extern const TCHAR* GiltFrame;
 }
 
 /**
@@ -92,6 +108,17 @@ namespace RoomPalette
 	extern const FLinearColor Lightning;
 	extern const FLinearColor Coat;
 	extern const FLinearColor Skin;
+}
+
+namespace RoomWalls
+{
+	/**
+	 * The rectangle [U0,U1] x [V0,V1] of a wall with every hole in it cut out, as the rectangles
+	 * left over. Holes are in the same (along, up) space and may overlap or stand one over another
+	 * — the stair hall has the archway from the corridor directly over the front door. The wall is
+	 * cut at every hole's edges, and in each strip every hole covering it is removed.
+	 */
+	TArray<FBox2D> CutAround(TConstArrayView<FBox2D> Holes, float U0, float U1, float V0, float V1);
 }
 
 /** Lazily loaded engine basic shapes. All of them are 100uu across, so scale is always Size/100. */
@@ -318,6 +345,17 @@ public:
 	UStaticMeshComponent* Mark(const FVector& Location, const FRotator& Rotation, const FVector2D& SizeUU, UMaterialInterface* Mat);
 
 	UInstancedStaticMeshComponent* Instances(UStaticMesh* Mesh, UMaterialInterface* Mat);
+
+	/**
+	 * A wall sconce with a candle in it. WallPoint is on the wall's face at the height of the
+	 * backplate's middle; Yaw turns local +X out of the wall.
+	 *
+	 * Built as one piece because the house has several and every one of them was coming out as a
+	 * plate, a stick and a disc with a candle floating over it: nothing joined anything. A sconce
+	 * is a cast backplate, an arm that leaves it horizontally and curves up into the drip pan, a
+	 * socket the candle actually stands in, and the wax that ran down it and pooled.
+	 */
+	void Sconce(const FVector& WallPoint, float Yaw, float CandleLength, UMaterialInterface* Brass, UMaterialInterface* Wax, UMaterialInterface* Wick);
 
 	USceneComponent* Parent() const { return ParentComponent; }
 

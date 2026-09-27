@@ -40,6 +40,10 @@ namespace RoomSurfaces
 	const FRoomSurface Linen{ TEXT("rough_linen"), 90.f };
 	const FRoomSurface Drapery{ TEXT("rough_linen"), 34.f };
 	const FRoomSurface RustedIron{ TEXT("green_metal_rust"), 110.f };
+	// Shot at two metres; ten tiles across it, so a tile is twenty centimetres, as they were.
+	const FRoomSurface HallTiles{ TEXT("checkered_pavement_tiles"), 200.f };
+	const FRoomSurface Wainscot{ TEXT("dark_paneled_wood"), 140.f };
+	const FRoomSurface Marble{ TEXT("marble_01"), 150.f };
 }
 
 namespace RoomProps
@@ -58,6 +62,17 @@ namespace RoomProps
 	const TCHAR* Armchair = TEXT("ArmChair_01");
 	const TCHAR* Nightstand = TEXT("ClassicNightstand_01");
 	const TCHAR* Press = TEXT("GothicCabinet_01");
+	const TCHAR* Chandelier = TEXT("Chandelier_03");
+	const TCHAR* Bust = TEXT("marble_bust_01");
+	const TCHAR* Statue = TEXT("gothic_statue");
+	const TCHAR* LongcaseClock = TEXT("vintage_grandfather_clock_01");
+	const TCHAR* Suitcases = TEXT("vintage_suitcase");
+	const TCHAR* CeramicVase = TEXT("antique_ceramic_vase_01");
+	const TCHAR* BrassVase = TEXT("brass_vase_01");
+	const TCHAR* Candelabra = TEXT("brass_candleholders");
+	const TCHAR* SideTable = TEXT("side_table_tall_01");
+	const TCHAR* Console = TEXT("ClassicConsole_01");
+	const TCHAR* GiltFrame = TEXT("fancy_picture_frame_02");
 }
 
 namespace RoomPalette
@@ -86,6 +101,59 @@ namespace RoomPalette
 	const FLinearColor Lightning(0.78f, 0.86f, 1.000f);
 	const FLinearColor Coat(0.034f, 0.032f, 0.038f);
 	const FLinearColor Skin(0.240f, 0.152f, 0.112f);
+}
+
+TArray<FBox2D> RoomWalls::CutAround(TConstArrayView<FBox2D> Holes, float U0, float U1, float V0, float V1)
+{
+	TArray<const FBox2D*> Hits;
+	TArray<float> Cuts = { U0, U1 };
+	for (const FBox2D& Hole : Holes)
+	{
+		if (Hole.Max.X > U0 && Hole.Min.X < U1 && Hole.Max.Y > V0 && Hole.Min.Y < V1)
+		{
+			Hits.Add(&Hole);
+			Cuts.Add(FMath::Clamp(Hole.Min.X, U0, U1));
+			Cuts.Add(FMath::Clamp(Hole.Max.X, U0, U1));
+		}
+	}
+	Cuts.Sort();
+
+	TArray<FBox2D> Pieces;
+	for (int32 i = 0; i + 1 < Cuts.Num(); ++i)
+	{
+		const float A = Cuts[i];
+		const float B = Cuts[i + 1];
+		if (B - A < 0.01f)
+		{
+			continue;
+		}
+		const float Mid = (A + B) * 0.5f;
+
+		// The holes over this strip, bottom to top, and the wall left between them.
+		TArray<FVector2D> Spans;
+		for (const FBox2D* Hole : Hits)
+		{
+			if (Mid > Hole->Min.X && Mid < Hole->Max.X)
+			{
+				Spans.Add(FVector2D(FMath::Max(V0, Hole->Min.Y), FMath::Min(V1, Hole->Max.Y)));
+			}
+		}
+		Spans.Sort([](const FVector2D& L, const FVector2D& R) { return L.X < R.X; });
+		float Cursor = V0;
+		for (const FVector2D& Span : Spans)
+		{
+			if (Span.X > Cursor)
+			{
+				Pieces.Add(FBox2D(FVector2D(A, Cursor), FVector2D(B, Span.X)));
+			}
+			Cursor = FMath::Max(Cursor, Span.Y);
+		}
+		if (Cursor < V1)
+		{
+			Pieces.Add(FBox2D(FVector2D(A, Cursor), FVector2D(B, V1)));
+		}
+	}
+	return Pieces;
 }
 
 namespace
@@ -1330,6 +1398,60 @@ UStaticMeshComponent* FRoomBuilder::Mark(const FVector& Location, const FRotator
 		Component->AddLocalOffset(FVector(0.f, 0.f, 0.6f));
 	}
 	return Component;
+}
+
+void FRoomBuilder::Sconce(const FVector& WallPoint, float Yaw, float CandleLength, UMaterialInterface* Brass, UMaterialInterface* Wax, UMaterialInterface* Wick)
+{
+	const FRotator Turn(0.f, Yaw, 0.f);
+	auto At = [&](float Out, float Across, float Up) { return WallPoint + Turn.RotateVector(FVector(Out, Across, Up)); };
+
+	// The backplate: a cast plate with a raised field on it and a boss where the arm comes out.
+	Box(At(0.6f, 0.f, 0.f), Turn, FVector(1.2f, 9.f, 17.f), Brass, false);
+	Box(At(1.5f, 0.f, 0.f), Turn, FVector(0.8f, 6.5f, 13.f), Brass, false);
+	Sph(At(1.2f, 0.f, 9.2f), 3.2f, Brass);
+	Sph(At(1.2f, 0.f, -9.2f), 3.2f, Brass);
+	Sph(At(2.4f, 0.f, -4.f), 3.6f, Brass);
+
+	// The arm: out of the boss horizontally, round a quarter circle, and up into the pan — swept
+	// in segments with a ball at every joint, the way the ceiling hook is, so it reads as one bent
+	// rod rather than a chain of sticks.
+	const float Radius = 8.f;
+	const FVector2D Centre(2.4f, -4.f + Radius);
+	const int32 Segments = 7;
+	FVector Previous = At(Centre.X, 0.f, Centre.Y - Radius);
+	for (int32 i = 1; i <= Segments; ++i)
+	{
+		const float A = FMath::DegreesToRadians(-90.f + 90.f * i / Segments);
+		const FVector Next = At(Centre.X + Radius * FMath::Cos(A), 0.f, Centre.Y + Radius * FMath::Sin(A));
+		const FVector Step = Next - Previous;
+		Cyl((Previous + Next) * 0.5f, FRotationMatrix::MakeFromZ(Step.GetSafeNormal()).Rotator(), FVector(1.7f, 1.7f, Step.Size() + 0.2f), Brass, false);
+		Sph(Next, 1.8f, Brass);
+		Previous = Next;
+	}
+	const float PanOut = Centre.X + Radius;
+	const float PanZ = Centre.Y + 2.5f;
+	Cyl(At(PanOut, 0.f, Centre.Y + 1.2f), Turn, FVector(1.7f, 1.7f, 2.6f), Brass, false);
+
+	// Drip pan, with a rolled rim, and the socket the candle stands in.
+	Cyl(At(PanOut, 0.f, PanZ), Turn, FVector(10.f, 10.f, 0.8f), Brass, false);
+	Cyl(At(PanOut, 0.f, PanZ + 0.6f), Turn, FVector(10.4f, 10.4f, 0.5f), Brass, false);
+	Cyl(At(PanOut, 0.f, PanZ + 1.9f), Turn, FVector(3.4f, 3.4f, 3.f), Brass, false);
+
+	// The candle, down in its socket, the wax that ran over the rim and pooled in the pan, and the
+	// wick burnt black.
+	const float CandleBase = PanZ + 1.f;
+	Cyl(At(PanOut, 0.f, CandleBase + CandleLength * 0.5f), Turn, FVector(2.3f, 2.3f, CandleLength), Wax, false);
+	Cyl(At(PanOut + 0.6f, -0.4f, PanZ + 0.55f), Turn, FVector(6.2f, 5.4f, 0.4f), Wax, false);
+	const float Runs[3][3] = { { 1.1f, 0.3f, 0.55f }, { -0.5f, 1.05f, 0.35f }, { -0.9f, -0.7f, 0.7f } };
+	for (const auto& Run : Runs)
+	{
+		// From the lip down, ending in a bead, and never below the socket's rim.
+		const float Top = CandleBase + CandleLength;
+		const float Length = FMath::Min(CandleLength * Run[2], CandleLength - 2.6f);
+		Box(At(PanOut + Run[0], Run[1], Top - Length * 0.5f), Turn, FVector(0.6f, 0.6f, Length), Wax, false);
+		Sph(At(PanOut + Run[0], Run[1], Top - Length), 0.9f, Wax);
+	}
+	Cyl(At(PanOut, 0.f, CandleBase + CandleLength + 0.5f), Turn, FVector(0.3f, 0.3f, 1.1f), Wick, false);
 }
 
 UInstancedStaticMeshComponent* FRoomBuilder::Instances(UStaticMesh* Mesh, UMaterialInterface* Mat)

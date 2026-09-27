@@ -4,6 +4,7 @@
 #include "ClueActor.h"
 #include "StormWindowActor.h"
 #include "DustMotesComponent.h"
+#include "GrandStaircaseActor.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -112,6 +113,7 @@ void ACorridorActor::BeginPlay()
 
 	SpawnDoors();
 	SpawnWindow();
+	SpawnStairHall();
 	BuildClues();
 }
 
@@ -197,52 +199,17 @@ bool ACorridorActor::IsOnOpening(ESide Side, float U, float V, float HalfU, floa
 	return false;
 }
 
-namespace
+TArray<FBox2D> ACorridorActor::CutAround(ESide Side, float U0, float U1, float V0, float V1) const
 {
-	/** The rectangle [U0,U1] x [V0,V1] with every opening on the wall cut out of it. */
-	template <typename TOpening, typename TSide>
-	TArray<FBox2D> CutAround(const TArray<TOpening>& Openings, TSide Side, float U0, float U1, float V0, float V1)
+	TArray<FBox2D> Holes;
+	for (const FOpening& Opening : Openings)
 	{
-		TArray<const TOpening*> Hits;
-		for (const TOpening& Opening : Openings)
+		if (Opening.Side == Side)
 		{
-			if (Opening.Side == Side
-				&& Opening.CenterU + Opening.HalfU > U0 && Opening.CenterU - Opening.HalfU < U1
-				&& Opening.TopV > V0 && Opening.BottomV < V1)
-			{
-				Hits.Add(&Opening);
-			}
+			Holes.Add(FBox2D(FVector2D(Opening.CenterU - Opening.HalfU, Opening.BottomV), FVector2D(Opening.CenterU + Opening.HalfU, Opening.TopV)));
 		}
-		Hits.Sort([](const TOpening& A, const TOpening& B) { return A.CenterU < B.CenterU; });
-
-		TArray<FBox2D> Pieces;
-		float Cursor = U0;
-		for (const TOpening* Opening : Hits)
-		{
-			const float Left = FMath::Max(U0, Opening->CenterU - Opening->HalfU);
-			const float Right = FMath::Min(U1, Opening->CenterU + Opening->HalfU);
-			if (Left > Cursor)
-			{
-				Pieces.Add(FBox2D(FVector2D(Cursor, V0), FVector2D(Left, V1)));
-			}
-			const float HoleBottom = FMath::Max(V0, Opening->BottomV);
-			const float HoleTop = FMath::Min(V1, Opening->TopV);
-			if (HoleBottom > V0)
-			{
-				Pieces.Add(FBox2D(FVector2D(Left, V0), FVector2D(Right, HoleBottom)));
-			}
-			if (HoleTop < V1)
-			{
-				Pieces.Add(FBox2D(FVector2D(Left, HoleTop), FVector2D(Right, V1)));
-			}
-			Cursor = FMath::Max(Cursor, Right);
-		}
-		if (Cursor < U1)
-		{
-			Pieces.Add(FBox2D(FVector2D(Cursor, V0), FVector2D(U1, V1)));
-		}
-		return Pieces;
 	}
+	return RoomWalls::CutAround(Holes, U0, U1, V0, V1);
 }
 
 void ACorridorActor::FacePanel(FRoomBuilder& Build, ESide Side, float U, float V, float SizeU, float SizeV, UMaterialInterface* Mat) const
@@ -262,7 +229,7 @@ void ACorridorActor::FacePanel(FRoomBuilder& Build, ESide Side, float U, float V
 
 void ACorridorActor::FaceFill(FRoomBuilder& Build, ESide Side, float U0, float U1, float V0, float V1, UMaterialInterface* Mat) const
 {
-	for (const FBox2D& Piece : CutAround(Openings, Side, U0, U1, V0, V1))
+	for (const FBox2D& Piece : CutAround(Side, U0, U1, V0, V1))
 	{
 		const FVector2D Centre = Piece.GetCenter();
 		const FVector2D Size = Piece.GetSize();
@@ -314,7 +281,7 @@ void ACorridorActor::BuildShell(FRoomBuilder& Build)
 	// rest of it, and its corridor face is exactly NorthFace.
 	auto Run = [&](ESide Side, float U0, float U1, float Line)
 	{
-		for (const FBox2D& Piece : CutAround(Openings, Side, U0, U1, -17.f, H + 10.f))
+		for (const FBox2D& Piece : CutAround(Side, U0, U1, -17.f, H + 10.f))
 		{
 			const FVector2D C = Piece.GetCenter();
 			const FVector2D S = Piece.GetSize();
@@ -411,92 +378,25 @@ void ACorridorActor::BuildBackRooms(FRoomBuilder& Build)
 
 void ACorridorActor::BuildStairs(FRoomBuilder& Build)
 {
-	// The stairs down, at the far west end, through an opening in the end wall. The man in the
-	// story comes up these; the detective does not go down them. The flight turns out of sight
-	// into the dark below a landing, and the opening is boarded across from this side.
-	const float T = Setup.WallThickness;
-	const float H = Setup.Height;
+	// The far west end opens onto the gallery of the stair hall (AGrandStaircaseActor builds the
+	// hall itself, and the casing on its side). This is the corridor's side of the archway: a
+	// casing like the doors' but heavier, and lined through the wall.
+	//
+	// REPLACED: there used to be a narrow flight here, going down through the end wall into the
+	// dark and boarded across from this side. The house's stairs are the grand stair now, and the
+	// boards — and what the detective is told about them — went down to the front door, which is
+	// the one place in the house where "whoever did it meant to stay" says more.
 	const float Y = CenterY();
-	const float HalfW = StairOpeningWidth * 0.5f;
-	const float Behind = WestFace - T;
-
-	// Landing, then ten steps descending westward.
-	Build.Box(FVector(Behind - 35.f, Y, -5.f), FRotator::ZeroRotator, FVector(70.f, StairOpeningWidth + 30.f, 10.f), MatFloorboardsWorn);
-	const float Rise = 18.f;
-	const float Going = 27.f;
-	for (int32 Step = 0; Step < 10; ++Step)
+	const float Half = StairOpeningWidth * 0.5f;
+	const float H = StairOpeningHeight;
+	const float Casing = 13.f;
+	for (const float Side : { -1.f, 1.f })
 	{
-		const float Top = -Rise * (Step + 1);
-		const float X = Behind - 70.f - Going * (Step + 0.5f);
-		Build.Box(FVector(X, Y, Top - 5.f), FRotator::ZeroRotator, FVector(Going + 2.f, StairOpeningWidth + 10.f, 10.f), MatFloorboardsWorn);
-		// The risers, a shade darker, so each step has an edge where the lantern catches it.
-		Build.Box(FVector(X + Going * 0.5f, Y, Top - Rise * 0.5f), FRotator::ZeroRotator, FVector(2.f, StairOpeningWidth + 10.f, Rise), MatPanelField, false);
+		Build.Box(FVector(WestFace + 1.5f, Y + Side * (Half + Casing * 0.5f), (H + Casing) * 0.5f), FRotator::ZeroRotator, FVector(3.f, Casing, H + Casing), MatTrim, false);
+		Build.Box(FVector(WestFace + 2.2f, Y + Side * (Half + Casing * 0.5f), 13.f), FRotator::ZeroRotator, FVector(4.4f, Casing + 3.f, 26.f), MatTrim, false);
 	}
-
-	// The well around it.
-	const float WellX0 = Behind - 420.f;
-	const float WellMidX = (Behind + WellX0) * 0.5f;
-	const float WellLength = Behind - WellX0;
-	const float Bottom = -Rise * 10.f - 80.f;
-	const float WallH = H - Bottom;
-	Build.Box(FVector(WellMidX, Y - HalfW - 20.f, Bottom + WallH * 0.5f), FRotator::ZeroRotator, FVector(WellLength, 10.f, WallH), MatBackRoom);
-	Build.Box(FVector(WellMidX, Y + HalfW + 20.f, Bottom + WallH * 0.5f), FRotator::ZeroRotator, FVector(WellLength, 10.f, WallH), MatBackRoom);
-	Build.Box(FVector(WellX0 - 5.f, Y, Bottom + WallH * 0.5f), FRotator::ZeroRotator, FVector(10.f, StairOpeningWidth + 50.f, WallH), MatBackRoom);
-	Build.Box(FVector(WellMidX, Y, H + 5.f), FRotator::ZeroRotator, FVector(WellLength, StairOpeningWidth + 50.f, 10.f), MatBackRoom);
-	Build.Box(FVector(WellMidX, Y, Bottom - 5.f), FRotator::ZeroRotator, FVector(WellLength, StairOpeningWidth + 50.f, 10.f), MatVoid);
-
-	// Handrail down the south side, on turned balusters, and a newel at the landing.
-	const float RailY = Y + HalfW - 6.f;
-	Build.Box(FVector(Behind - 64.f, RailY, 55.f), FRotator::ZeroRotator, FVector(11.f, 11.f, 110.f), MatTrim, false);
-	Build.Sph(FVector(Behind - 64.f, RailY, 114.f), 12.f, MatTrim);
-	const FVector RailFrom(Behind - 64.f, RailY, 92.f);
-	const FVector RailTo(Behind - 70.f - Going * 10.f, RailY, 92.f - Rise * 10.f);
-	const FVector RailDir = (RailTo - RailFrom).GetSafeNormal();
-	Build.Cyl((RailFrom + RailTo) * 0.5f, FRotationMatrix::MakeFromZ(RailDir).Rotator(), FVector(6.f, 6.f, (RailTo - RailFrom).Size()), MatTrim, false);
-	for (int32 Step = 0; Step < 10; Step += 1)
-	{
-		const float X = Behind - 70.f - Going * (Step + 0.5f);
-		const float Tread = -Rise * (Step + 1);
-		const float RailZ = FMath::Lerp(RailFrom.Z, RailTo.Z, (RailFrom.X - X) / (RailFrom.X - RailTo.X));
-		// Two of them are gone; a banister with every baluster present is a new banister.
-		if (Step == 3 || Step == 7)
-		{
-			continue;
-		}
-		Build.Cyl(FVector(X, RailY, (Tread + RailZ) * 0.5f), FRotator::ZeroRotator, FVector(3.2f, 3.2f, RailZ - Tread), MatTrim, false);
-	}
-
-	// Boarded over, from this side: seven planks nailed across the opening at whatever angle the
-	// next one would go on at. Only in-plane rotation (roll, about the wall's normal) — a plank
-	// turned any other way stands off the wall at one end.
-	struct FPlank { float V; float Roll; float Length; float Height; };
-	const FPlank Planks[] = {
-		{ 30.f, 4.f, 190.f, 16.f }, { 62.f, -6.f, 186.f, 14.f }, { 96.f, 2.f, 194.f, 18.f },
-		{ 128.f, 18.f, 200.f, 15.f }, { 152.f, -3.f, 188.f, 16.f }, { 190.f, -14.f, 196.f, 14.f },
-		{ 224.f, 5.f, 184.f, 17.f },
-	};
-	for (int32 i = 0; i < UE_ARRAY_COUNT(Planks); ++i)
-	{
-		const FPlank& P = Planks[i];
-		const float X = WestFace + 1.8f + (i % 2) * 2.2f;
-		Build.Box(FVector(X, Y + (i % 3 - 1) * 4.f, P.V), FRotator(0.f, 0.f, P.Roll), FVector(2.2f, P.Length, P.Height),
-			(i % 3 == 0) ? MatPanelField : MatRoughWood);
-		const float Reach = P.Length * 0.5f - 9.f;
-		for (const float Side : { -1.f, 1.f })
-		{
-			const float RollRad = FMath::DegreesToRadians(P.Roll);
-			const FVector Nail(X + 1.4f, Y + (i % 3 - 1) * 4.f + Side * Reach * FMath::Cos(RollRad), P.V + Side * Reach * FMath::Sin(RollRad));
-			Build.Sph(Nail, 1.4f, MatIron);
-		}
-	}
-
-	// And whatever the boards do not stop, this does.
-	if (UStaticMeshComponent* Blocker = Build.Box(FVector(WestFace - T * 0.5f, Y, StairOpeningHeight * 0.5f), FRotator::ZeroRotator,
-		FVector(T, StairOpeningWidth, StairOpeningHeight), MatVoid))
-	{
-		Blocker->SetHiddenInGame(true);
-		Blocker->SetCastShadow(false);
-	}
+	Build.Box(FVector(WestFace + 1.5f, Y, H + Casing * 0.5f), FRotator::ZeroRotator, FVector(3.f, StairOpeningWidth + Casing * 2.f, Casing), MatTrim, false);
+	Build.Box(FVector(WestFace + 2.5f, Y, H + Casing + 2.5f), FRotator::ZeroRotator, FVector(5.f, StairOpeningWidth + Casing * 2.f + 8.f, 5.f), MatTrim, false);
 }
 
 void ACorridorActor::BuildFloor(FRoomBuilder& Build)
@@ -685,7 +585,7 @@ void ACorridorActor::BuildWallFinish(FRoomBuilder& Build)
 				// the bottom edges never line up, and the top is under the picture rail anyway.
 				const float Bottom = ChairRail + 2.f + Random.FRandRange(0.f, 26.f);
 				UMaterialInterface* Mat = (Strip % 2 == 0) ? MatWallpaper.Get() : MatWallpaperDark.Get();
-				for (const FBox2D& Piece : CutAround(Openings, Side, A, A + StripWidth - 0.3f, Bottom, PictureRail))
+				for (const FBox2D& Piece : CutAround(Side, A, A + StripWidth - 0.3f, Bottom, PictureRail))
 				{
 					const FVector2D C = Piece.GetCenter();
 					const FVector2D S = Piece.GetSize();
@@ -739,7 +639,7 @@ void ACorridorActor::BuildWainscot(FRoomBuilder& Build)
 
 	auto FaceBoxRun = [&](ESide Side, float U0, float U1, float V0, float V1, float Depth, float ProudBase, UMaterialInterface* Mat)
 	{
-		for (const FBox2D& Piece : CutAround(Openings, Side, U0, U1, V0, V1))
+		for (const FBox2D& Piece : CutAround(Side, U0, U1, V0, V1))
 		{
 			const FVector2D C = Piece.GetCenter();
 			const FVector2D S = Piece.GetSize();
@@ -836,16 +736,10 @@ void ACorridorActor::BuildDoorCasings(FRoomBuilder& Build)
 		}
 	}
 
-	// A pair of candle sconces either side of the bedroom door: brass backplate, a curved arm, a
-	// drip pan and a stub of candle that went out a very long time ago.
+	// A pair of candle sconces either side of the bedroom door, candles long burnt down.
 	for (const float Side : { -1.f, 1.f })
 	{
-		const float U = Setup.StartDoorCenterX + Side * 96.f;
-		const FVector Plate(U, NorthFace() + 0.8f, 168.f);
-		Build.Box(Plate, FRotator::ZeroRotator, FVector(9.f, 1.6f, 20.f), MatBrass, false);
-		Build.Cyl(Plate + FVector(0.f, 6.f, -2.f), FRotator(0.f, 0.f, -70.f), FVector(1.8f, 1.8f, 14.f), MatBrass, false);
-		Build.Cyl(Plate + FVector(0.f, 12.f, 3.f), FRotator::ZeroRotator, FVector(8.f, 8.f, 1.2f), MatBrass, false);
-		Build.Cyl(Plate + FVector(0.f, 12.f, 3.f + (Side < 0.f ? 3.5f : 6.f)), FRotator::ZeroRotator, FVector(2.4f, 2.4f, Side < 0.f ? 7.f : 12.f), MatWax, false);
+		Build.Sconce(FVector(Setup.StartDoorCenterX + Side * 96.f, NorthFace(), 168.f), 90.f, Side < 0.f ? 6.f : 11.f, MatBrass, MatWax, MatShadow);
 	}
 }
 
@@ -1090,9 +984,6 @@ void ACorridorActor::BuildFurniture(FRoomBuilder& Build)
 	Build.Box(CrateSeat + FVector(-38.f, 30.f, 1.6f), FRotator(0.f, -20.f, 3.f), FVector(17.f, 22.f, 1.4f), MatPaper, false);
 	Build.Box(CrateSeat + FVector(-38.f, 30.f, 1.6f) + FVector(-14.f, -4.f, 0.f), FRotator(0.f, -20.f, -3.f), FVector(17.f, 22.f, 1.4f), MatPaper, false);
 
-	// A kitchen chair on its side by the stairs.
-	Build.Prop(RoomProps::Chair, FVector(-990.f, SouthFace() - 50.f, 24.f), FRotator(0.f, 70.f, 88.f), 92.f);
-
 	// A floor candelabrum, over on its side on the runner at the far end: three arms, the stem
 	// across the boards, candles rolled out of their cups.
 	const FVector Foot(-1100.f, CenterY() - 42.f, 3.f);
@@ -1192,7 +1083,7 @@ void ACorridorActor::BuildDebris(FRoomBuilder& Build)
 
 void ACorridorActor::BuildFigures(FRoomBuilder& /*Build*/)
 {
-	// At the far end, by the boarded stairs: a woman, and a little girl holding her hand. They are
+	// At the far end, in the archway to the stairs: a woman, and a little girl holding her hand. They are
 	// not there. They are there only while the sky is lit, and only some of the times it is, and
 	// never when the detective is near enough to see what they are (see Tick).
 	//
@@ -1330,6 +1221,25 @@ void ACorridorActor::SpawnWindow()
 		Window->Configure(WindowSetup);
 		Window->SetLead(LeadStorm);
 		Window->FinishSpawning(Transform);
+	}
+}
+
+void ACorridorActor::SpawnStairHall()
+{
+	// The hall is in the same frame as the corridor (and so the room): spawned at the corridor's
+	// own transform, with the corridor's west wall as its east face.
+	const FTransform Transform = GetActorTransform();
+	StairHall = GetWorld()->SpawnActorDeferred<AGrandStaircaseActor>(AGrandStaircaseActor::StaticClass(), Transform, this);
+	if (StairHall)
+	{
+		FStairHallSetup HallSetup;
+		HallSetup.EastFace = WestFace - Setup.WallThickness;
+		HallSetup.CenterY = CenterY();
+		HallSetup.WallThickness = Setup.WallThickness;
+		HallSetup.OpeningWidth = StairOpeningWidth;
+		HallSetup.OpeningHeight = StairOpeningHeight;
+		StairHall->Configure(HallSetup, LeadStorm);
+		StairHall->FinishSpawning(Transform);
 	}
 }
 
@@ -1531,19 +1441,6 @@ void ACorridorActor::BuildClues()
 			B.Box(FVector(2.2f, -0.3f, Z + 1.6f), FRotator::ZeroRotator, FVector(1.4f, 0.4f, 1.6f), MatShadow, false);
 		}
 		if (UStaticMeshComponent* Hit = B.Box(FVector(0.f, 0.5f, 92.f), FRotator::ZeroRotator, FVector(11.f, 2.f, 50.f), MatVoid))
-		{
-			Hit->SetHiddenInGame(true);
-			Hit->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-		}
-	}
-
-	// The stairs, boarded from the landing side.
-	if (AClueActor* Stairs = SpawnClue(FVector(WestFace + 6.f, CenterY(), 120.f), FRotator::ZeroRotator,
-		TEXT("Examine the boards"),
-		TEXT("The stairs down, boarded over. The nails were driven from this side. Whoever did it meant to stay up here.")))
-	{
-		FRoomBuilder B(Stairs, Stairs->GetRootScene());
-		if (UStaticMeshComponent* Hit = B.Box(FVector::ZeroVector, FRotator::ZeroRotator, FVector(2.f, StairOpeningWidth, 200.f), MatVoid))
 		{
 			Hit->SetHiddenInGame(true);
 			Hit->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);

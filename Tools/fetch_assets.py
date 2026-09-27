@@ -48,6 +48,11 @@ TEXTURES = {
     "raw_plank_wall": "skirting and loose boards",
     "rough_linen": "curtains and cloth",
     "green_metal_rust": "iron: lock, hinges, tools",
+    # The stair hall. The entrance hall floor is the one surface in the house that was laid to be
+    # looked at, so it gets the one thing a Victorian hall floor always was: a chequer.
+    "checkered_pavement_tiles": "the entrance hall floor",
+    "dark_paneled_wood": "the wainscot panelling in the stair hall",
+    "marble_01": "the pedestal at the foot of the stairs",
 }
 
 # The three maps the master material wants. nor_dx because UE expects DirectX-convention normals;
@@ -73,6 +78,18 @@ MODELS = {
     "ArmChair_01": "the armchair beside it",
     "ClassicNightstand_01": "the nightstand",
     "GothicCabinet_01": "the press in the corner past the head of the bed",
+    # The stair hall: what a house this size kept in the one room every visitor walked through.
+    "Chandelier_03": "the dead chandelier over the stairwell",
+    "marble_bust_01": "the bust on the cracked pedestal at the foot of the stairs",
+    "gothic_statue": "the statue in the alcove under the gallery",
+    "vintage_grandfather_clock_01": "the long-case clock, face down in the hall",
+    "vintage_suitcase": "the luggage left by the front door",
+    "antique_ceramic_vase_01": "a vase on the landing",
+    "brass_vase_01": "a vase on the console",
+    "brass_candleholders": "the candelabra on the console",
+    "side_table_tall_01": "the side table on the gallery",
+    "ClassicConsole_01": "the console table in the hall",
+    "fancy_picture_frame_02": "the family portrait on the half-landing",
 }
 
 

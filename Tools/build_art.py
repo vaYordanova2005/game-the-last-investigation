@@ -19,6 +19,8 @@ What it produces:
     /Game/Materials/M_RoomCrack     projected fissures, drawn from noise rather than from a texture
     /Game/Materials/M_RoomWeb       cobweb: a net of filaments, also drawn from noise
     /Game/Materials/M_RoomGlassCrack the fracture on a struck pane, from the baked crack map
+    /Game/Materials/M_RoomStainedGlass  the stair window's glass, from Tools/make_stained_glass.py
+    /Game/Materials/M_RoomLeadCame      the lead that glass is held in, which is what casts shadow
     /Game/Materials/MI_<set>        an instance per texture set (floor, wallpaper, plaster, ...)
     /Game/Textures/T_*              the imported maps
     /Game/Meshes/<Model>            the imported props, with their materials already assigned
@@ -42,6 +44,8 @@ DECAL_PATH = MATERIAL_PACKAGE + "/M_RoomDecal"
 CRACK_PATH = MATERIAL_PACKAGE + "/M_RoomCrack"
 WEB_PATH = MATERIAL_PACKAGE + "/M_RoomWeb"
 GLASS_CRACK_PATH = MATERIAL_PACKAGE + "/M_RoomGlassCrack"
+STAINED_GLASS_PATH = MATERIAL_PACKAGE + "/M_RoomStainedGlass"
+LEAD_CAME_PATH = MATERIAL_PACKAGE + "/M_RoomLeadCame"
 
 ASSET_TOOLS = unreal.AssetToolsHelpers.get_asset_tools()
 MAT_LIB = unreal.MaterialEditingLibrary
@@ -238,10 +242,36 @@ def build_master_material(name=None, masked=False, defaults=None):
                               defaults.get("arm"))
         MAT_LIB.connect_material_property(opacity_map, "R", unreal.MaterialProperty.MP_OPACITY_MASK)
 
+    allow_instancing(material)
     MAT_LIB.recompile_material(material)
     ASSET_LIB.save_loaded_asset(material)
     unreal.log("Built " + path)
     return material
+
+
+def allow_instancing(material):
+    """
+    Marks a master as usable on instanced static meshes.
+
+    Without the flag the material simply is not compiled for that vertex factory, and in game an
+    instanced mesh wearing it — or any instance of it — draws with the engine's default material
+    instead: a hall full of white balusters. The editor compiles missing usages on demand, which
+    is why it only shows up in -game.
+    """
+    MAT_LIB.set_material_usage(material, unreal.MaterialUsage.MATUSAGE_INSTANCED_STATIC_MESHES)
+
+
+def rebuild_usage():
+    """The flag above, on the masters already in the project, without rebuilding them."""
+    for path in (MASTER_PATH, MASKED_PATH):
+        material = ASSET_LIB.load_asset(path)
+        if not material:
+            unreal.log_error("No " + path)
+            continue
+        allow_instancing(material)
+        MAT_LIB.recompile_material(material)
+        ASSET_LIB.save_loaded_asset(material)
+        unreal.log("Instancing allowed on " + path)
 
 
 def build_glass_master():
@@ -875,9 +905,12 @@ def build_models(master):
 
     mesh_subsystem = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
 
+    only = only_requested()
     for model_id in sorted(os.listdir(MODEL_SOURCE)):
         folder = os.path.join(MODEL_SOURCE, model_id)
         if not os.path.isdir(folder):
+            continue
+        if only and model_id.lower() not in only:
             continue
 
         fbx = next((f for f in sorted(os.listdir(folder)) if f.lower().endswith(".fbx")), None)
@@ -939,6 +972,11 @@ def build_models(master):
             # Match the mesh's slot to a texture group: exact name first, then containment, then
             # whatever single group exists (the common case — one material per prop).
             maps = by_slot.get(slot_name)
+            if not maps and slot_name == model_id.lower():
+                # A slot named after the model itself is the model's main surface, and its maps
+                # are the ones with no slot name in them (fancy_picture_frame_02_diff next to
+                # fancy_picture_frame_02_canvas_diff), which are grouped as "default".
+                maps = by_slot.get("default")
             if not maps:
                 maps = next((v for k, v in by_slot.items() if k in slot_name or slot_name in k), None)
             if not maps and len(by_slot) == 1:
@@ -1150,6 +1188,157 @@ def build_glass_crack_master():
     unreal.log("Built " + GLASS_CRACK_PATH)
 
 
+def only_requested():
+    """-ArtOnly=a,b,c: restrict the models and surfaces stages to these asset ids.
+
+    Both stages rebuild every material instance they touch, and re-running them to add three new
+    props rewrites every prop already in the project — a hundred binary diffs that change nothing.
+    Lower-cased, so the command line does not have to match Poly Haven's capitalisation.
+    """
+    line = unreal.SystemLibrary.get_command_line()
+    for token in line.split():
+        if token.lower().startswith("-artonly="):
+            names = token.split("=", 1)[1].strip('"')
+            return set(name.strip().lower() for name in names.split(",") if name.strip())
+    return None
+
+
+def rebuild_surfaces():
+    """New photographed surface sets, as instances of the master already in the project.
+
+    Every texture already imported is skipped by import_texture, and a set that already has its
+    MI_ is left alone unless it is named in -ArtOnly, so this only ever adds.
+    """
+    master = ASSET_LIB.load_asset(MASTER_PATH)
+    if not master:
+        unreal.log_error("No " + MASTER_PATH + " — run the whole pipeline first")
+        return
+    only = only_requested()
+    sets = import_surface_textures()
+    for set_name, maps in sorted(sets.items()):
+        # neutral_arm.png lives beside the library but is the props' fallback ARM, not a surface.
+        if set_name == "neutral":
+            continue
+        if only and set_name.lower() not in only:
+            continue
+        if not only and ASSET_LIB.does_asset_exist("{}/MI_{}".format(MATERIAL_PACKAGE, set_name)):
+            continue
+        make_instance("MI_" + set_name, master, maps, TILING.get(set_name, 2.0))
+        unreal.log("Surface MI_{} ({} maps)".format(set_name, len(maps)))
+
+
+def import_generated_color(file_name, asset_name, srgb, compression):
+    """A baked map that is a picture rather than a set of numbers: sRGB where it is colour."""
+    path = os.path.join(GENERATED_SOURCE, file_name)
+    if not os.path.isfile(path):
+        unreal.log_error("Missing {} — run: python Tools/make_stained_glass.py".format(path))
+        return None
+
+    asset_path = "{}/{}".format(TEXTURE_PACKAGE, asset_name)
+    task = unreal.AssetImportTask()
+    task.filename = path
+    task.destination_path = TEXTURE_PACKAGE
+    task.destination_name = asset_name
+    task.automated = True
+    task.replace_existing = True
+    task.save = True
+    ASSET_TOOLS.import_asset_tasks([task])
+
+    texture = ASSET_LIB.load_asset(asset_path)
+    if not texture:
+        unreal.log_error("Failed to import " + path)
+        return None
+    texture.set_editor_property("compression_settings", compression)
+    texture.set_editor_property("srgb", srgb)
+    texture.set_editor_property("address_x", unreal.TextureAddress.TA_CLAMP)
+    texture.set_editor_property("address_y", unreal.TextureAddress.TA_CLAMP)
+    ASSET_LIB.save_loaded_asset(texture)
+    return texture
+
+
+def build_stained_glass_masters():
+    """
+    The stair window, as two sheets laid one in front of the other.
+
+    M_RoomStainedGlass — the glass. Unlit and masked:
+        Emissive     = Glass.RGB * Intensity
+        OpacityMask  = Glass.A            (0 where a piece has dropped out of its lead)
+
+    Unlit, because stained glass at night is not a surface anything in the room lights. From
+    inside it is dark until the sky behind it is bright, and then it is the colour of what comes
+    through it — which is emission, not reflection. C++ drives Intensity from the storm every
+    frame, and Lumen carries the glow onto the landing as coloured light for free.
+
+    M_RoomLeadCame — the lead. Lit, masked by the came map, and the only one of the two that casts
+    a shadow: the glass component has shadows switched off, so the storm light behind the window
+    passes through the colour and is stopped only by the lead — and prints the drawing of the
+    window across the stairs.
+    """
+    glass_map = import_generated_color("stained_glass_color.png", "T_stained_glass_color", True,
+                                       unreal.TextureCompressionSettings.TC_BC7)
+    lead_map = import_generated_color("stained_glass_lead.png", "T_stained_glass_lead", False,
+                                      unreal.TextureCompressionSettings.TC_MASKS)
+    if not glass_map or not lead_map:
+        return
+
+    for path in (STAINED_GLASS_PATH, LEAD_CAME_PATH):
+        if ASSET_LIB.does_asset_exist(path):
+            ASSET_LIB.delete_asset(path)
+
+    glass = ASSET_TOOLS.create_asset("M_RoomStainedGlass", MATERIAL_PACKAGE, unreal.Material, unreal.MaterialFactoryNew())
+    glass.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    glass.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    glass.set_editor_property("two_sided", True)
+
+    sample = MAT_LIB.create_material_expression(glass, unreal.MaterialExpressionTextureSampleParameter2D, -700, 0)
+    sample.set_editor_property("parameter_name", "GlassMap")
+    sample.set_editor_property("texture", glass_map)
+    sample.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+
+    intensity = MAT_LIB.create_material_expression(glass, unreal.MaterialExpressionScalarParameter, -700, 300)
+    intensity.set_editor_property("parameter_name", "Intensity")
+    intensity.set_editor_property("default_value", 0.4)
+
+    glow = MAT_LIB.create_material_expression(glass, unreal.MaterialExpressionMultiply, -350, 60)
+    MAT_LIB.connect_material_expressions(sample, "RGB", glow, "A")
+    MAT_LIB.connect_material_expressions(intensity, "", glow, "B")
+
+    MAT_LIB.connect_material_property(glow, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MAT_LIB.connect_material_property(sample, "A", unreal.MaterialProperty.MP_OPACITY_MASK)
+    MAT_LIB.recompile_material(glass)
+    ASSET_LIB.save_loaded_asset(glass)
+    unreal.log("Built " + STAINED_GLASS_PATH)
+
+    lead = ASSET_TOOLS.create_asset("M_RoomLeadCame", MATERIAL_PACKAGE, unreal.Material, unreal.MaterialFactoryNew())
+    lead.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    lead.set_editor_property("two_sided", True)
+
+    came = MAT_LIB.create_material_expression(lead, unreal.MaterialExpressionTextureSampleParameter2D, -700, 0)
+    came.set_editor_property("parameter_name", "LeadMap")
+    came.set_editor_property("texture", lead_map)
+    came.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
+
+    tint = MAT_LIB.create_material_expression(lead, unreal.MaterialExpressionVectorParameter, -700, -250)
+    tint.set_editor_property("parameter_name", "Tint")
+    tint.set_editor_property("default_value", unreal.LinearColor(0.035, 0.034, 0.032, 1.0))
+
+    rough = MAT_LIB.create_material_expression(lead, unreal.MaterialExpressionScalarParameter, -700, 300)
+    rough.set_editor_property("parameter_name", "Roughness")
+    rough.set_editor_property("default_value", 0.55)
+
+    metal = MAT_LIB.create_material_expression(lead, unreal.MaterialExpressionScalarParameter, -700, 420)
+    metal.set_editor_property("parameter_name", "Metallic")
+    metal.set_editor_property("default_value", 0.6)
+
+    MAT_LIB.connect_material_property(tint, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    MAT_LIB.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    MAT_LIB.connect_material_property(metal, "", unreal.MaterialProperty.MP_METALLIC)
+    MAT_LIB.connect_material_property(came, "R", unreal.MaterialProperty.MP_OPACITY_MASK)
+    MAT_LIB.recompile_material(lead)
+    ASSET_LIB.save_loaded_asset(lead)
+    unreal.log("Built " + LEAD_CAME_PATH)
+
+
 def stage_requested():
     """-ArtStage=<name> on the command line, or None for the whole pipeline.
 
@@ -1183,6 +1372,9 @@ STANDALONE_STAGES = {
     "web": build_web_master,
     "glasscrack": build_glass_crack_master,
     "models": rebuild_models,
+    "surfaces": rebuild_surfaces,
+    "stainedglass": build_stained_glass_masters,
+    "usage": rebuild_usage,
 }
 
 
@@ -1214,6 +1406,7 @@ def run():
     build_crack_master()
     build_web_master()
     build_glass_crack_master()
+    build_stained_glass_masters()
 
     build_surface_instances(master, sets)
     build_models(master)
