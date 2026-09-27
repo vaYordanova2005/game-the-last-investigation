@@ -495,8 +495,27 @@ void AStormWindowActor::BuildWindow()
 		// the one thing a pane that has been hit does not have.
 		// Which panes, not only the shape of the holes, has to differ on a follower: the seed alone
 		// only reshapes the holes, and two windows broken in the same two places read as one prop.
-		const FIntPoint BlownPanes[2] = { Lead ? FIntPoint(3, 1) : FIntPoint(0, 2), Lead ? FIntPoint(1, 0) : FIntPoint(2, 3) };
-		const FIntPoint CrackedPane = Lead ? FIntPoint(2, 2) : FIntPoint(1, 1);
+		FIntPoint BlownPanes[2] = { Lead ? FIntPoint(3, 1) : FIntPoint(0, 2), Lead ? FIntPoint(1, 0) : FIntPoint(2, 3) };
+		FIntPoint CrackedPane = Lead ? FIntPoint(2, 2) : FIntPoint(1, 1);
+		// A window given its own seed picks its own panes too: the living room has three followers in
+		// one wall, and three sashes broken in the same three places side by side read as one prop
+		// three times. Three distinct cells, drawn from the window's own stream.
+		if (Setup.Seed != 0)
+		{
+			TArray<FIntPoint> Cells;
+			for (int32 Col = 0; Col < Cols; ++Col)
+			{
+				for (int32 Row = 0; Row < Rows; ++Row)
+				{
+					Cells.Add(FIntPoint(Col, Row));
+				}
+			}
+			for (FIntPoint* Pick : { &BlownPanes[0], &BlownPanes[1], &CrackedPane })
+			{
+				*Pick = Cells[Random.RandRange(0, Cells.Num() - 1)];
+				Cells.Remove(*Pick);
+			}
+		}
 
 		for (int32 Col = 0; Col < Cols; ++Col)
 		{
@@ -681,7 +700,13 @@ void AStormWindowActor::BuildOutsideWorld()
 	{
 		Sky->SetCastShadow(false);
 	}
-	if (UStaticMeshComponent* Ground = Build.Box(FVector(1600.f, 0.f, -40.f), FRotator::ZeroRotator, FVector(3400.f, 6000.f, 40.f), GroundMat, /*bBlockingCollision*/ false))
+	// The ground starts at the wall's outer face and goes out. It used to start a metre *inside* the
+	// wall, under the floor of whatever room the window is in, where nobody could see it — until the
+	// living room was built on the storey under the stair window, and sixty metres of black ground
+	// stood out of its west wall at mantel height, straight through the fireplace.
+	const float GroundNear = Setup.WallThickness * 0.5f;
+	const float GroundFar = 3300.f;
+	if (UStaticMeshComponent* Ground = Build.Box(FVector((GroundNear + GroundFar) * 0.5f, 0.f, -40.f), FRotator::ZeroRotator, FVector(GroundFar - GroundNear, 6000.f, 40.f), GroundMat, /*bBlockingCollision*/ false))
 	{
 		Ground->SetCastShadow(false);
 	}

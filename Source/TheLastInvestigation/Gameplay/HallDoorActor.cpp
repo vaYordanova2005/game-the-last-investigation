@@ -33,7 +33,8 @@ void AHallDoorActor::BeginPlay()
 	// -OpenDoors (see ADoorActor): swung wide into its room, so the room behind can be walked into.
 	if (FParse::Param(FCommandLine::Get(), TEXT("OpenDoors")))
 	{
-		Setup.AjarYaw = 95.f;
+		Setup.AjarYaw = FMath::Max(95.f, Setup.OpenYaw);
+		bOpened = Setup.OpenYaw > 0.f;
 	}
 	Swing->SetRelativeRotation(FRotator(0.f, Setup.AjarYaw, 0.f));
 }
@@ -163,6 +164,23 @@ void AHallDoorActor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	if (SwingTime >= 0.f)
+	{
+		// Pushed: a heavy leaf on hinges that have not turned in years, so it starts slow, goes, and
+		// runs out of way against nothing.
+		SwingTime += DeltaTime;
+		const float Duration = 2.2f;
+		const float Alpha = FMath::Clamp(SwingTime / Duration, 0.f, 1.f);
+		const float Eased = FMath::InterpEaseInOut(0.f, 1.f, Alpha, 2.4f);
+		Swing->SetRelativeRotation(FRotator(0.f, FMath::Lerp(Setup.AjarYaw, Setup.OpenYaw, Eased), 0.f));
+		if (Alpha >= 1.f)
+		{
+			SwingTime = -1.f;
+			SetActorTickEnabled(false);
+		}
+		return;
+	}
+
 	if (RattleTime < 0.f)
 	{
 		return;
@@ -185,11 +203,25 @@ void AHallDoorActor::Tick(float DeltaTime)
 
 void AHallDoorActor::Interact(AActor* /*Interactor*/)
 {
-	RattleTime = 0.f;
+	if (bOpened)
+	{
+		return;
+	}
+	if (Setup.OpenYaw > Setup.AjarYaw)
+	{
+		bOpened = true;
+		RattleTime = -1.f;
+		SwingTime = 0.f;
+	}
+	else
+	{
+		RattleTime = 0.f;
+	}
 	SetActorTickEnabled(true);
 }
 
 FText AHallDoorActor::GetInteractPrompt(const AActor* /*Interactor*/) const
 {
-	return FText::FromString(Setup.Prompt);
+	// Once it is open there is nothing more to be told about it: the room is the answer.
+	return bOpened ? FText::GetEmpty() : FText::FromString(Setup.Prompt);
 }

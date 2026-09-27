@@ -54,6 +54,10 @@ namespace RoomSurfaces
 	extern const FRoomSurface HallTiles;
 	extern const FRoomSurface Wainscot;
 	extern const FRoomSurface Marble;
+	/** The living room: a herringbone floor, the carpet's woven field, and the chimney breast. */
+	extern const FRoomSurface Parquet;
+	extern const FRoomSurface Carpet;
+	extern const FRoomSurface Stone;
 }
 
 /** Imported prop meshes, /Game/Meshes/<name>. Names match Tools/fetch_assets.py's manifest. */
@@ -87,6 +91,21 @@ namespace RoomProps
 	extern const TCHAR* SideTable;
 	extern const TCHAR* Console;
 	extern const TCHAR* GiltFrame;
+	/** The living room. */
+	extern const TCHAR* Sofa;
+	extern const TCHAR* Settee;
+	extern const TCHAR* GreenChair;
+	extern const TCHAR* CoffeeTable;
+	extern const TCHAR* LampTable;
+	extern const TCHAR* Commode;
+	extern const TCHAR* MantelClock;
+	extern const TCHAR* PhotoFrame;
+	extern const TCHAR* PhotoFrameWhite;
+	extern const TCHAR* LandscapeFrame;
+	extern const TCHAR* OvalFrame;
+	extern const TCHAR* OilLamp;
+	extern const TCHAR* Vase;
+	extern const TCHAR* PorcelainHorse;
 }
 
 /**

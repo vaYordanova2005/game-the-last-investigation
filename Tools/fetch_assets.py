@@ -53,6 +53,10 @@ TEXTURES = {
     "checkered_pavement_tiles": "the entrance hall floor",
     "dark_paneled_wood": "the wainscot panelling in the stair hall",
     "marble_01": "the pedestal at the foot of the stairs",
+    # The living room behind the parlour door.
+    "herringbone_parquet": "the living room floor",
+    "floral_jacquard": "the faded green carpet in the living room",
+    "medieval_blocks_03": "the stone fireplace in the living room",
 }
 
 # The three maps the master material wants. nor_dx because UE expects DirectX-convention normals;
@@ -90,6 +94,21 @@ MODELS = {
     "side_table_tall_01": "the side table on the gallery",
     "ClassicConsole_01": "the console table in the hall",
     "fancy_picture_frame_02": "the family portrait on the half-landing",
+    # The living room: the room the family sat in, and the room the story ends in.
+    "Sofa_01": "the green sofa facing the fireplace",
+    "sofa_03": "the smaller sofa across the carpet",
+    "GreenChair_01": "the pair of green armchairs by the hearth",
+    "gothic_coffee_table": "the coffee table in the middle of the carpet",
+    "round_wooden_table_01": "the lamp table beside the sofa",
+    "GothicCommode_01": "the commode with the family photographs on it",
+    "mantel_clock_01": "the broken clock on the mantelpiece",
+    "standing_picture_frame_01": "a family photograph",
+    "standing_picture_frame_02": "a family photograph",
+    "fancy_picture_frame_01": "a portrait on the living room wall",
+    "hanging_picture_frame_03": "the oval portrait on the living room wall",
+    "vintage_oil_lamp": "the oil lamp on the lamp table",
+    "ceramic_vase_01": "an empty vase",
+    "horse_statue_01": "the porcelain horse on the commode",
 }
 
 
