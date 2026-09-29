@@ -23,25 +23,25 @@ struct FLivingRoomSetup
 	/** The entrance hall's floor, which this room shares. */
 	float FloorZ = -340.f;
 	float WallThickness = 20.f;
-	/** The door from the hall, in this room's north wall. */
+	/** The open way from the hall (no door), in this room's north wall. */
 	float DoorX = -1560.f;
-	float DoorHalf = 50.f;
-	float DoorHeight = 212.f;
+	float DoorHalf = 100.f;
+	float DoorHeight = 240.f;
 };
 
 /**
- * The living room, behind the parlour door off the entrance hall: the room the family sat in, and
- * the room the story ends in — the television over the fireplace is the one that switches itself
- * on at the finale.
+ * The living room, through a wide cased opening off the entrance hall: the room the family sat
+ * in. The television over the fireplace is the one that switches itself on at the finale (the
+ * story itself ends back in Room01).
  *
  * One tall storey, no stair. The plan is composed for the two looks the player gets from the
  * doorway: straight ahead, the grand piano in the far corner against three tall windows and the
  * storm; and turning right, the stone fireplace filling the west wall with a modern flat-screen
  * over the mantel — the newest thing in the house by forty years, and the wrongest.
  *
- *            north (door from the hall)
+ *            north (open way from the hall)
  *      +--------------------------------------------+
- *      |  commode            coat stand   [door]     |
+ *      |  commode            coat stand   [opening]  |
  *      |                                             |
  *   F  |  armchair   +------ carpet ------+  lamp    |
  *   I  |             |                    |  table   |

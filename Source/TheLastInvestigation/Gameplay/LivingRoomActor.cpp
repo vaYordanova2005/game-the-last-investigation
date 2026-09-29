@@ -814,8 +814,10 @@ void ALivingRoomActor::BuildFireplace(FRoomBuilder& Build)
 		FRoomShapes::TintSlots(Vase, FLinearColor(0.42f, 0.40f, 0.37f));
 	}
 	// Aimed down (pitch -90), a decal's first size is along world Y and its second along world X.
-	Build.Stain(RoomSurfaces::Damp, FVector(Face + 14.f, H, Top + 6.f), FRotator(-90.f, 0.f, 0.f), FVector2D(230.f, 24.f), FLinearColor(0.40f, 0.38f, 0.35f), 0.4f, 1.1f);
-	Build.Mark(FVector(Face + 14.f, H + 8.f, Top - 0.5f), FRotator(0.f, 90.f, 0.f), FVector2D(34.f, 12.f), MatStone);
+	// The dust is laid either side of the oblong rather than over it: a decal cannot skip one part
+	// of a slab, and a patch of the mantel's own stone under the same dust is not there at all.
+	Build.Stain(RoomSurfaces::Damp, FVector(Face + 14.f, H - 58.f, Top + 6.f), FRotator(-90.f, 0.f, 0.f), FVector2D(118.f, 24.f), FLinearColor(0.40f, 0.38f, 0.35f), 0.4f, 1.1f);
+	Build.Stain(RoomSurfaces::Damp, FVector(Face + 14.f, H + 72.f, Top + 6.f), FRotator(-90.f, 0.f, 0.f), FVector2D(86.f, 24.f), FLinearColor(0.40f, 0.38f, 0.35f), 0.4f, 1.1f);
 
 	// Behind the fire irons and the basket, the breast's sides are stone to the ceiling too.
 	Footprints.Add(FBox2D(FVector2D(WestX(), H - HalfW - 10.f), FVector2D(Face + 64.f, H + HalfW + 10.f)));
@@ -1059,7 +1061,8 @@ void ALivingRoomActor::BuildWallFurniture(FRoomBuilder& Build)
 	{
 		FRoomShapes::TintSlots(Oval, FLinearColor(0.50f, 0.42f, 0.34f), 0);
 		FRoomShapes::TintSlots(Oval, FLinearColor(0.34f, 0.27f, 0.21f), 1);
-		Oval->SetMaterial(2, MatGlass);
+		// The clock crystal's value: at the window's 0.28 the glass is a milky sheet under the lantern.
+		Oval->SetMaterial(2, Build.Glass(RoomPalette::GlassShard, 0.035f, 0.06f));
 	}
 	Build.Sph(WallPoint(EWall::North, Commode.X, F + 262.f, 1.f), 1.8f, MatIron);
 
@@ -1297,7 +1300,7 @@ void ALivingRoomActor::BuildDamage(FRoomBuilder& Build)
 		}
 		// And on the parquet under each, standing water gone to a dark stain, wettest under the
 		// middle window, where the blocks have lifted (BuildFloor).
-		Build.Stain(RoomSurfaces::Damp, FVector(U, SouthY() - 70.f, F + 10.f), FRotator(-90.f, 0.f, Random.FRandRange(0.f, 360.f)),
+		Build.Stain(RoomSurfaces::Damp, FVector(U, SouthY() - 70.f, F + 4.f), FRotator(-90.f, 0.f, Random.FRandRange(0.f, 360.f)),
 			FVector2D(Random.FRandRange(150.f, 210.f), Random.FRandRange(80.f, 130.f)), FLinearColor(0.12f, 0.10f, 0.08f), i == 1 ? 0.85f : 0.6f, 1.2f, 0.25f);
 	}
 
@@ -1310,10 +1313,10 @@ void ALivingRoomActor::BuildDamage(FRoomBuilder& Build)
 		FRotator Rot(-90.f, 0.f, 0.f);
 		switch (i % 4)
 		{
-		case 0: At = FVector(Random.FRandRange(WestX() + 30.f, EastX() - 30.f), NorthY() + Random.FRandRange(12.f, 34.f), F + 10.f); break;
-		case 1: At = FVector(Random.FRandRange(WestX() + 30.f, EastX() - 30.f), SouthY() - Random.FRandRange(12.f, 34.f), F + 10.f); break;
-		case 2: At = FVector(EastX() - Random.FRandRange(12.f, 34.f), Random.FRandRange(NorthY() + 30.f, SouthY() - 30.f), F + 10.f); Rot.Roll = 90.f; break;
-		default: At = FVector(WestX() + Random.FRandRange(12.f, 34.f), Random.FRandRange(NorthY() + 30.f, SouthY() - 30.f), F + 10.f); Rot.Roll = 90.f; break;
+		case 0: At = FVector(Random.FRandRange(WestX() + 30.f, EastX() - 30.f), NorthY() + Random.FRandRange(12.f, 34.f), F + 4.f); Rot.Roll = 90.f; break;
+		case 1: At = FVector(Random.FRandRange(WestX() + 30.f, EastX() - 30.f), SouthY() - Random.FRandRange(12.f, 34.f), F + 4.f); Rot.Roll = 90.f; break;
+		case 2: At = FVector(EastX() - Random.FRandRange(12.f, 34.f), Random.FRandRange(NorthY() + 30.f, SouthY() - 30.f), F + 4.f); break;
+		default: At = FVector(WestX() + Random.FRandRange(12.f, 34.f), Random.FRandRange(NorthY() + 30.f, SouthY() - 30.f), F + 4.f); break;
 		}
 		Build.Stain(RoomSurfaces::Damp, At, Rot, FVector2D(Random.FRandRange(60.f, 150.f), Random.FRandRange(24.f, 44.f)), DustTint, Random.FRandRange(0.22f, 0.36f), 1.35f);
 	}
@@ -1366,7 +1369,7 @@ void ALivingRoomActor::BuildDebris(FRoomBuilder& Build)
 		Build.Box(Heap + FVector(Random.FRandRange(-40.f, 40.f), Random.FRandRange(-40.f, 40.f), 2.f + i * 0.9f), FRotator(Random.FRandRange(-5.f, 5.f), Random.FRandRange(0.f, 180.f), 0.f),
 			FVector(Random.FRandRange(50.f, 90.f), 3.f, 0.9f), MatOakDark, false);
 	}
-	Build.Stain(RoomSurfaces::Damp, Heap + FVector(0.f, 0.f, 10.f), FRotator(-90.f, 0.f, 20.f), FVector2D(170.f, 140.f), FLinearColor(0.44f, 0.42f, 0.38f), 0.5f, 1.3f);
+	Build.Stain(RoomSurfaces::Damp, Heap + FVector(0.f, 0.f, 4.f), FRotator(-90.f, 0.f, 20.f), FVector2D(170.f, 140.f), FLinearColor(0.44f, 0.42f, 0.38f), 0.5f, 1.3f);
 
 	// The length of cornice that came off the east wall, on the parquet under the gap in two
 	// pieces, and the plaster behind the gap where it tore away (see BuildWallFinish).

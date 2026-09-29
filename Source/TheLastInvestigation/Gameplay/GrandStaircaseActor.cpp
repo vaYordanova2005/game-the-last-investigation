@@ -1395,12 +1395,12 @@ void AGrandStaircaseActor::BuildDamage(FRoomBuilder& Build)
 	for (int32 i = 0; i < 22; ++i)
 	{
 		const bool bNorth = Random.FRand() < 0.5f;
-		const FVector At(Random.FRandRange(FlightEastX() + 30.f, EastX() - 30.f), bNorth ? NorthY() + Random.FRandRange(10.f, 36.f) : SouthY() - Random.FRandRange(10.f, 36.f), GroundZ + 10.f);
-		Build.Stain(RoomSurfaces::Damp, At, FRotator(-90.f, 0.f, Random.FRandRange(-20.f, 20.f)), FVector2D(Random.FRandRange(60.f, 150.f), Random.FRandRange(24.f, 44.f)), DustTint, Random.FRandRange(0.22f, 0.36f), 1.35f);
+		const FVector At(Random.FRandRange(FlightEastX() + 30.f, EastX() - 30.f), bNorth ? NorthY() + Random.FRandRange(10.f, 36.f) : SouthY() - Random.FRandRange(10.f, 36.f), GroundZ + 4.f);
+		Build.Stain(RoomSurfaces::Damp, At, FRotator(-90.f, 0.f, 90.f + Random.FRandRange(-20.f, 20.f)), FVector2D(Random.FRandRange(60.f, 150.f), Random.FRandRange(24.f, 44.f)), DustTint, Random.FRandRange(0.22f, 0.36f), 1.35f);
 	}
 	for (const FVector2D& Spot : { FVector2D(ChandelierX() + 20.f, Setup.CenterY - 60.f), FVector2D(FlightEastX() + 110.f, Setup.CenterY + 280.f), FVector2D(EastX() - 140.f, Setup.CenterY - 260.f) })
 	{
-		Build.Stain(RoomSurfaces::Damp, FVector(Spot.X, Spot.Y, GroundZ + 10.f), FRotator(-90.f, 0.f, Random.FRandRange(0.f, 360.f)),
+		Build.Stain(RoomSurfaces::Damp, FVector(Spot.X, Spot.Y, GroundZ + 4.f), FRotator(-90.f, 0.f, Random.FRandRange(0.f, 360.f)),
 			FVector2D(Random.FRandRange(120.f, 200.f), Random.FRandRange(80.f, 140.f)), FLinearColor(0.14f, 0.12f, 0.10f), 0.7f, 1.2f, 0.25f);
 	}
 	for (int32 i = 0; i < 6; ++i)
@@ -1532,6 +1532,10 @@ void AGrandStaircaseActor::BuildDebris(FRoomBuilder& Build)
 			if (FMath::Abs(Spot.Y - Setup.CenterY) < 70.f && Spot.X > EastX() - 40.f)
 			{
 				continue; // not in a doorway
+			}
+			if (S.Z == GroundZ && FMath::Abs(Spot.X - SideDoorX()) < FMath::Max(SideDoorHalf, ParlourHalf) + 10.f)
+			{
+				continue; // nor across the dining room door or the way into the living room
 			}
 			Build.Box(FVector(Spot.X, Spot.Y, S.Z + Size * 0.35f), FRotator(Random.FRandRange(-30.f, 30.f), Random.FRandRange(0.f, 360.f), Random.FRandRange(-30.f, 30.f)),
 				FVector(Size * Random.FRandRange(0.8f, 1.8f), Size * Random.FRandRange(0.8f, 1.5f), Size * 0.6f), MatRubble, false);
