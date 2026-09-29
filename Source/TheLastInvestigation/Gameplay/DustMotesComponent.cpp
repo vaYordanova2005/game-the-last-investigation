@@ -4,6 +4,9 @@
 #include "Components/SceneComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+#include "Camera/PlayerCameraManager.h"
 
 UDustMotesComponent::UDustMotesComponent()
 {
@@ -75,6 +78,23 @@ void UDustMotesComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 	// Wind coming through the broken window pushes the air along -Y and lifts it slightly.
 	const float Gust = FMath::Lerp(0.6f, 5.5f, FMath::Clamp(WindStrength, 0.f, 1.f));
 
+	// The camera in the same space as the motes (the owner's), so the ones drifting past the face
+	// can be faded out. A mote a few centimetres from the lens is under the lantern, blown up to
+	// the size of a coin, and its slow settle crosses the whole screen in a second: it read as
+	// something falling fast, straight down, stuck in front of the eyes wherever the player went.
+	// Dust is something seen in the light a little way off, never on the lens.
+	FVector Eye = FVector(1.e9f);
+	if (const UWorld* World = GetWorld())
+	{
+		if (const APlayerController* PC = World->GetFirstPlayerController())
+		{
+			if (PC->PlayerCameraManager && GetOwner())
+			{
+				Eye = GetOwner()->GetActorTransform().InverseTransformPosition(PC->PlayerCameraManager->GetCameraLocation());
+			}
+		}
+	}
+
 	// Reused rather than rebuilt: three hundred transforms allocated and discarded every frame
 	// for the life of the level, for nothing. Reset keeps the slack it already has.
 	Transforms.Reset(Positions.Num());
@@ -113,7 +133,8 @@ void UDustMotesComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 			Position.Y = Center.Y - FMath::Sign(Local.Y) * Extent.Y;
 		}
 
-		Transforms.Add(FTransform(FRotator::ZeroRotator, Position, FVector(Sizes[i] / 100.f)));
+		const float Near = FMath::SmoothStep(ClearRadius, ClearRadius + FadeWidth, static_cast<float>(FVector::Dist(Position, Eye)));
+		Transforms.Add(FTransform(FRotator::ZeroRotator, Position, FVector(Sizes[i] / 100.f * Near)));
 	}
 
 	Motes->BatchUpdateInstancesTransforms(0, Transforms, /*bWorldSpace*/ false, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ true);

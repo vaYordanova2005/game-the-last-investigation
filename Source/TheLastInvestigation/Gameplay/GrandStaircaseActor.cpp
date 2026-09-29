@@ -2,6 +2,7 @@
 #include "RoomBuildLibrary.h"
 #include "HallDoorActor.h"
 #include "LivingRoomActor.h"
+#include "KitchenActor.h"
 #include "ClueActor.h"
 #include "StormWindowActor.h"
 #include "DustMotesComponent.h"
@@ -176,7 +177,7 @@ void AGrandStaircaseActor::Configure(const FStairHallSetup& InSetup, AStormWindo
 		{ EWall::East, Setup.CenterY, Setup.OpeningWidth * 0.5f, 0.f, Setup.OpeningHeight },
 		// The front door, below it.
 		{ EWall::East, Setup.CenterY, 60.f, GroundZ, GroundZ + 250.f },
-		// The dining room door, and opposite it the open way into the living room.
+		// The kitchen door, and opposite it the open way into the living room.
 		{ EWall::North, SideDoorX(), SideDoorHalf, GroundZ, GroundZ + SideDoorHeight },
 		{ EWall::South, SideDoorX(), ParlourHalf, GroundZ, GroundZ + ParlourHeight },
 		// The window over the landing.
@@ -210,6 +211,7 @@ void AGrandStaircaseActor::BeginPlay()
 	SpawnDoors();
 	SpawnWindow();
 	SpawnLivingRoom();
+	SpawnKitchen();
 	BuildClues();
 }
 
@@ -413,9 +415,10 @@ void AGrandStaircaseActor::BuildShell(FRoomBuilder& Build)
 	Build.Box(FVector(Middle.X, Middle.Y, GroundZ - 12.f), FRotator::ZeroRotator, Span, MatShell);
 	Build.Box(FVector(Middle.X, Middle.Y, CeilingZ + 10.f), FRotator::ZeroRotator, Span, MatShell);
 
-	// Behind the dining room door and the front door, rooms the hall never lets you into, as in the
-	// corridor: a floor that goes on and a wall a long way off, both nearly black. The opening in
-	// the south wall has the living room behind it (SpawnLivingRoom).
+	// Behind the front door, a vestibule the hall never lets you into, as in the corridor: a floor
+	// that goes on and a wall a long way off, both nearly black. The opening in the south wall has
+	// the living room behind it (SpawnLivingRoom), and the door in the north wall the kitchen
+	// (SpawnKitchen).
 	auto BackRoom = [&](const FVector& Front, const FVector& Into, float HalfWidth, float Depth, float Height)
 	{
 		const FVector Across(-Into.Y, Into.X, 0.f);
@@ -433,7 +436,6 @@ void AGrandStaircaseActor::BuildShell(FRoomBuilder& Build)
 			Build.Box(FVector(At.X, At.Y, GroundZ + Height * 0.5f), FRotator::ZeroRotator, Side, MatBackRoom);
 		}
 	};
-	BackRoom(FVector(SideDoorX(), NorthY() - T, 0.f), FVector(0.f, -1.f, 0.f), 170.f, 300.f, 300.f);
 	// The vestibule behind the front door is only ever seen through the gaps in the boards.
 	BackRoom(FVector(EastX() + T, Setup.CenterY, 0.f), FVector(1.f, 0.f, 0.f), 110.f, 160.f, 270.f);
 
@@ -1092,7 +1094,7 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 		WallBox(Build, EWall::East, Setup.CenterY, H + 22.f, Half * 2.f + 50.f, 8.f, 7.f, 0.f, MatOak);
 	}
 
-	// The casings of the dining room door and of the open way into the living room.
+	// The casings of the kitchen door and of the open way into the living room.
 	for (const EWall Wall : { EWall::North, EWall::South })
 	{
 		const float U = SideDoorX();
@@ -1540,7 +1542,7 @@ void AGrandStaircaseActor::BuildDebris(FRoomBuilder& Build)
 			const float DoorHalf = Spot.Y > Setup.CenterY ? ParlourHalf : SideDoorHalf;
 			if (S.Z == GroundZ && FMath::Abs(Spot.X - SideDoorX()) < DoorHalf + 10.f)
 			{
-				continue; // nor across the dining room door or the way into the living room
+				continue; // nor across the kitchen door or the way into the living room
 			}
 			Build.Box(FVector(Spot.X, Spot.Y, S.Z + Size * 0.35f), Rot, Scale, MatRubble, false);
 		}
@@ -1714,8 +1716,10 @@ void AGrandStaircaseActor::SpawnDoors()
 		// The front door. Local +X is the hall side: yaw 180 on the east wall.
 		{ FVector(EastX() + 2.6f, Setup.CenterY + 60.f - 2.f, GroundZ), 180.f, 116.f, 248.f, 0.f, 0.f, FLinearColor(0.20f, 0.20f, 0.20f), true,
 			TEXT("The front door. It does not so much as rattle — the boards across it are nailed deep into the frame.") },
-		{ FVector(SideDoorX() + Half - 2.f, NorthY() - 2.6f, GroundZ), 90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 0.f, 0.f, FLinearColor(0.26f, 0.27f, 0.28f), true,
-			TEXT("Locked. Through the keyhole, the long shape of a table under a sheet, and a place laid at the end of it.") },
+		// The kitchen: swollen in its frame and standing a hand's width open, and it goes the rest of
+		// the way when pushed.
+		{ FVector(SideDoorX() + Half - 2.f, NorthY() - 2.6f, GroundZ), 90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 14.f, 100.f, FLinearColor(0.26f, 0.27f, 0.28f), true,
+			TEXT("It has swollen in its frame and stands a hand's width open. Beyond it, a smell of old damp — and, very faintly, of something that was baking.") },
 	};
 
 	int32 Seed = 5101;
@@ -1789,6 +1793,28 @@ void AGrandStaircaseActor::SpawnLivingRoom()
 		RoomSetup.DoorHeight = ParlourHeight;
 		LivingRoom->Configure(RoomSetup, LeadStorm);
 		LivingRoom->FinishSpawning(Transform);
+	}
+}
+
+void AGrandStaircaseActor::SpawnKitchen()
+{
+	// Through the door across the hall from the living room: the kitchen, about seven metres by six,
+	// its east wall in line with the hall's, on the hall's floor, in the same frame.
+	const FTransform Transform = GetActorTransform();
+	Kitchen = GetWorld()->SpawnActorDeferred<AKitchenActor>(AKitchenActor::StaticClass(), Transform, this);
+	if (Kitchen)
+	{
+		FKitchenSetup RoomSetup;
+		RoomSetup.SouthFace = NorthY() - Setup.WallThickness;
+		RoomSetup.WestX = EastX() - AKitchenActor::RoomWidth;
+		RoomSetup.EastX = EastX();
+		RoomSetup.FloorZ = GroundZ;
+		RoomSetup.WallThickness = Setup.WallThickness;
+		RoomSetup.DoorX = SideDoorX();
+		RoomSetup.DoorHalf = SideDoorHalf;
+		RoomSetup.DoorHeight = SideDoorHeight;
+		Kitchen->Configure(RoomSetup, LeadStorm);
+		Kitchen->FinishSpawning(Transform);
 	}
 }
 

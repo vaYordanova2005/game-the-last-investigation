@@ -62,4 +62,11 @@ private:
 	/** Baseline sink rate. Dust settles; the noise field is what keeps it alive on the way down. */
 	UPROPERTY(EditAnywhere, Category = "Dust")
 	float FallSpeed = 3.2f;
+
+	/** No dust at all within this distance of the camera; it fades back in over FadeWidth. Covers the lantern, held ~60cm out. */
+	UPROPERTY(EditAnywhere, Category = "Dust")
+	float ClearRadius = 90.f;
+
+	UPROPERTY(EditAnywhere, Category = "Dust")
+	float FadeWidth = 60.f;
 };
