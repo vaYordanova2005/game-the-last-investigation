@@ -500,7 +500,7 @@ void ACorridorActor::BuildFloor(FRoomBuilder& Build)
 		{
 			continue;
 		}
-		Build.Stain(RoomSurfaces::Damp, FVector(Spot.X, Spot.Y, 10.f), FRotator(-90.f, 0.f, Random.FRandRange(-20.f, 20.f)),
+		Build.Stain(RoomSurfaces::Damp, FVector(Spot.X, Spot.Y, 10.f), FRotator(-90.f, 0.f, 90.f + Random.FRandRange(-20.f, 20.f)),
 			FVector2D(Random.FRandRange(60.f, 140.f), Random.FRandRange(22.f, 40.f)), DustTint, Random.FRandRange(0.22f, 0.36f), 1.35f);
 	}
 

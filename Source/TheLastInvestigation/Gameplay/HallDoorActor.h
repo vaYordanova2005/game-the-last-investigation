@@ -15,6 +15,11 @@ struct FHallDoorSetup
 	float Height = 212.f;
 	/** Degrees the leaf already stands open into its room. Zero is shut. */
 	float AjarYaw = 0.f;
+	/**
+	 * How far the leaf swings when pushed. Zero — or anything short of AjarYaw — and it never
+	 * gives: it knocks against whatever is holding it and settles back, as every door upstairs does.
+	 */
+	float OpenYaw = 0.f;
 	/** Seed for the rot, splits and fittings, so every door on the landing is a different door. */
 	int32 Seed = 1;
 	/** Multiplies the wood tint: some doors kept more of their finish than others. */
@@ -28,10 +33,11 @@ struct FHallDoorSetup
 };
 
 /**
- * A bedroom door on the upstairs corridor. None of them open: the locked ones are locked, and the
- * ones standing ajar will not go any further, because the corridor is a place to be walked down,
- * not a set of rooms. What is behind an ajar door is a black gap a hand wide, which is worth more
- * than any room that could be built behind it.
+ * A bedroom door on the upstairs corridor, and the side doors off the entrance hall. Upstairs none
+ * of them open: the locked ones are locked, and the ones standing ajar will not go any further,
+ * because the corridor is a place to be walked down, not a set of rooms. What is behind an ajar
+ * door is a black gap a hand wide, which is worth more than any room that could be built behind it.
+ * A door with an OpenYaw is the exception, and has a room behind it.
  *
  * Convention: the actor's local +X is the corridor side of the leaf. The leaf is built out along
  * local +Y from the hinge, and a positive swing turns it away from the corridor, into its room.
@@ -65,6 +71,10 @@ private:
 	FHallDoorSetup Setup;
 	FRandomStream Random;
 
-	/** A tried door gives a little and settles back: the only answer any of these doors gives. */
+	/** A tried door gives a little and settles back: the only answer most of these doors give. */
 	float RattleTime = -1.f;
+
+	/** Seconds into the swing open, or negative when the leaf is not moving. */
+	float SwingTime = -1.f;
+	bool bOpened = false;
 };

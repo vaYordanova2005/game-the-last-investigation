@@ -44,6 +44,15 @@ namespace RoomSurfaces
 	const FRoomSurface HallTiles{ TEXT("checkered_pavement_tiles"), 200.f };
 	const FRoomSurface Wainscot{ TEXT("dark_paneled_wood"), 140.f };
 	const FRoomSurface Marble{ TEXT("marble_01"), 150.f };
+	// Shot at 3.4 metres; a little finer than that, so the blocks are the size of real parquet
+	// blocks rather than of the photograph's.
+	const FRoomSurface Parquet{ TEXT("herringbone_parquet"), 260.f };
+	// A jacquard shot at under 30cm, blown up three times: the pattern of a carpet is bigger than
+	// the pattern of an upholstery cloth, and at life size the weave is invisible from standing.
+	const FRoomSurface Carpet{ TEXT("floral_jacquard"), 90.f };
+	// Shot at two metres: courses about forty centimetres high, which is dressed stone.
+	const FRoomSurface Stone{ TEXT("medieval_blocks_03"), 170.f };
+	const FRoomSurface PianoWood{ TEXT("lacquered_cherry_wood"), 120.f };
 }
 
 namespace RoomProps
@@ -73,6 +82,22 @@ namespace RoomProps
 	const TCHAR* SideTable = TEXT("side_table_tall_01");
 	const TCHAR* Console = TEXT("ClassicConsole_01");
 	const TCHAR* GiltFrame = TEXT("fancy_picture_frame_02");
+	const TCHAR* Sofa = TEXT("sofa_03");
+	const TCHAR* Settee = TEXT("Sofa_01");
+	const TCHAR* GreenChair = TEXT("GreenChair_01");
+	const TCHAR* CoffeeTable = TEXT("gothic_coffee_table");
+	const TCHAR* LampTable = TEXT("round_wooden_table_01");
+	const TCHAR* Commode = TEXT("GothicCommode_01");
+	const TCHAR* MantelClock = TEXT("mantel_clock_01");
+	const TCHAR* PhotoFrame = TEXT("standing_picture_frame_01");
+	const TCHAR* PhotoFrameWhite = TEXT("standing_picture_frame_02");
+	const TCHAR* GrandPiano = TEXT("grand_piano");
+	const TCHAR* PianoBench = TEXT("piano_bench");
+	const TCHAR* LandscapeFrame = TEXT("fancy_picture_frame_01");
+	const TCHAR* OvalFrame = TEXT("hanging_picture_frame_03");
+	const TCHAR* OilLamp = TEXT("vintage_oil_lamp");
+	const TCHAR* Vase = TEXT("ceramic_vase_01");
+	const TCHAR* PorcelainHorse = TEXT("horse_statue_01");
 }
 
 namespace RoomPalette
@@ -890,7 +915,7 @@ UStaticMeshComponent* FRoomBuilder::PropSeated(const TCHAR* Name, const FVector&
 }
 
 UProceduralMeshComponent* FRoomBuilder::Cloth(const FVector& Centre, const FRotator& Facing, const FVector2D& SizeUU,
-	float Rumple, float EdgeFall, int32 Seed, UMaterialInterface* Mat, float TexelSizeCm)
+	float Rumple, float EdgeFall, int32 Seed, UMaterialInterface* Mat, float TexelSizeCm, bool bWorn)
 {
 	if (!Owner || !ParentComponent)
 	{
@@ -924,6 +949,10 @@ UProceduralMeshComponent* FRoomBuilder::Cloth(const FVector& Centre, const FRota
 
 	auto Solid = [&](float U, float V) -> bool
 	{
+		if (!bWorn)
+		{
+			return true;
+		}
 		// The hem, eaten in by up to a twelfth of the piece and never by the same amount twice.
 		const float Frayed = 0.038f * (0.5f + 0.5f * FMath::PerlinNoise1D((U + V * 1.7f) * 5.3f + Grain));
 		if (U < Frayed || U > 1.f - Frayed || V < Frayed || V > 1.f - Frayed)

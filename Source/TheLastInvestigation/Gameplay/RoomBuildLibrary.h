@@ -54,6 +54,12 @@ namespace RoomSurfaces
 	extern const FRoomSurface HallTiles;
 	extern const FRoomSurface Wainscot;
 	extern const FRoomSurface Marble;
+	/** The living room: a herringbone floor, the carpet's woven field, and the chimney breast. */
+	extern const FRoomSurface Parquet;
+	extern const FRoomSurface Carpet;
+	extern const FRoomSurface Stone;
+	/** Polished, scratched cherry, tinted near black: the grand piano's case. */
+	extern const FRoomSurface PianoWood;
 }
 
 /** Imported prop meshes, /Game/Meshes/<name>. Names match Tools/fetch_assets.py's manifest. */
@@ -87,6 +93,24 @@ namespace RoomProps
 	extern const TCHAR* SideTable;
 	extern const TCHAR* Console;
 	extern const TCHAR* GiltFrame;
+	/** The living room. */
+	extern const TCHAR* Sofa;
+	extern const TCHAR* Settee;
+	extern const TCHAR* GreenChair;
+	extern const TCHAR* CoffeeTable;
+	extern const TCHAR* LampTable;
+	extern const TCHAR* Commode;
+	extern const TCHAR* MantelClock;
+	extern const TCHAR* PhotoFrame;
+	extern const TCHAR* PhotoFrameWhite;
+	/** Generated in Blender by Tools/make_piano.py, not downloaded: nothing free is a grand piano. */
+	extern const TCHAR* GrandPiano;
+	extern const TCHAR* PianoBench;
+	extern const TCHAR* LandscapeFrame;
+	extern const TCHAR* OvalFrame;
+	extern const TCHAR* OilLamp;
+	extern const TCHAR* Vase;
+	extern const TCHAR* PorcelainHorse;
 }
 
 /**
@@ -304,9 +328,14 @@ public:
 	 *
 	 * Both faces are generated: M_RoomSurface is single-sided, and the underside of a quilt
 	 * hanging over the edge of a bed is half of what is seen of it.
+	 *
+	 * bWorn = false keeps the outline whole: no frayed hem and no holes. The outline is cut on
+	 * the grid, so on a large piece (a carpet, where the step is several centimetres) or where
+	 * the edge falls steeply (a sheet over a chair, where one row spans a hand's height) the
+	 * ragged edge comes out as a staircase.
 	 */
 	UProceduralMeshComponent* Cloth(const FVector& Centre, const FRotator& Facing, const FVector2D& SizeUU,
-		float Rumple, float EdgeFall, int32 Seed, UMaterialInterface* Mat, float TexelSizeCm = 34.f);
+		float Rumple, float EdgeFall, int32 Seed, UMaterialInterface* Mat, float TexelSizeCm = 34.f, bool bWorn = true);
 
 	/**
 	 * A pane of glass with a hole smashed through it.

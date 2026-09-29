@@ -12,6 +12,7 @@ class UDustMotesComponent;
 class AStormWindowActor;
 class AHallDoorActor;
 class AClueActor;
+class ALivingRoomActor;
 
 /** Where the stair hall meets the corridor, handed over by the corridor that spawns it. */
 struct FStairHallSetup
@@ -134,6 +135,12 @@ private:
 	/** Half the side doors' opening, and its height above the hall floor. */
 	static constexpr float SideDoorHalf = 50.f;
 	static constexpr float SideDoorHeight = 212.f;
+	/**
+	 * The way into the living room, opposite the dining room door: no door in it, a cased opening
+	 * the width of a pair of doors, so the room opens straight off the hall.
+	 */
+	static constexpr float ParlourHalf = 100.f;
+	static constexpr float ParlourHeight = 240.f;
 	/** The portrait on the landing: north of the window, clear of the sconce beside it. */
 	float PortraitCenterY() const { return NorthInnerY() + 60.f; }
 
@@ -153,6 +160,8 @@ private:
 	void BuildClues();
 	void SpawnDoors();
 	void SpawnWindow();
+	/** The living room behind the parlour door (ALivingRoomActor), in the same frame as the hall. */
+	void SpawnLivingRoom();
 
 	/** One flight: treads, risers, runner, stringers, and the invisible ramp that is walked on. */
 	void BuildFlight(FRoomBuilder& Build, const FVector& FootNosing, const FVector& Up, float Width, int32 Seed, bool bRunner);
@@ -196,6 +205,9 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AClueActor>> Clues;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ALivingRoomActor> LivingRoom;
 
 	/** The chandelier hangs from this, and this is what the wind moves. */
 	UPROPERTY(Transient)
@@ -248,7 +260,5 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatShell;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBackRoom;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWax;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatStem;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPetal;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatShadow;
 };
