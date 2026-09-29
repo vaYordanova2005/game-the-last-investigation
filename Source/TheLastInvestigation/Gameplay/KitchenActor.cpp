@@ -136,12 +136,17 @@ void AKitchenActor::CacheMaterials(FRoomBuilder& Build)
 	MatTiles = Build.Surface(KitchenTileSet, FLinearColor(0.58f, 0.56f, 0.54f), 1.1f);
 	MatCeiling = Build.Surface(RoomSurfaces::Ceiling, FLinearColor(0.19f, 0.18f, 0.17f));
 	MatBeam = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.200f, 0.190f, 0.180f));
-	// The cupboards are painted a grey that was once smart, over pine. Grey, but not neutral: a
-	// neutral grey in front of a cold window comes back blue (the bedroom's 09-18 note), so the
-	// photograph is solved to a warm grey at about (0.088, 0.083, 0.074). The crazing in the
-	// photograph reads, at a cupboard's size, as paint that has cracked on the wood.
-	MatPaint = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.17f, 0.185f, 0.21f), 1.1f);
-	MatPaintDark = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.085f, 0.090f, 0.100f), 1.2f);
+	// The cupboards are painted a grey that was once smart, over boarded pine. The paint is carried
+	// on the planks photograph (linear 0.120, 0.073, 0.044), not on the plaster: painted on the
+	// same cracked-concrete photograph as the walls, the dresser and the wall behind it were one
+	// surface in two tints, and nothing separated them but a line. Solved to a grey a shade lighter
+	// than the plaster at about (0.10, 0.10, 0.093) — still a touch warm, since a neutral grey in
+	// front of a cold window comes back blue (the bedroom's 09-18 note).
+	MatPaint = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.84f, 1.37f, 2.12f), 1.1f);
+	MatPaintDark = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.34f, 0.55f, 0.84f), 1.2f);
+	// The backs of the plate racks, painted dark green to show the china off, as dressers were: pale
+	// plates against grey boards were one value, and a rack of plates is read by its plates.
+	MatRackBack = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.15f, 0.44f, 0.52f), 1.2f);
 	// Scrubbed deal for the worktops and the table: paler than the oak everywhere else, because a
 	// kitchen table was scoured with sand and soda every day until the day it was not.
 	MatScrubbed = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.320f, 0.300f, 0.270f));
@@ -151,10 +156,17 @@ void AKitchenActor::CacheMaterials(FRoomBuilder& Build)
 	MatCastIron = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(0.34f, 0.18f, 0.28f), 1.1f);
 	MatCopper = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(1.1f, 0.30f, 0.18f), 0.6f);
 	MatBrass = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(1.0f, 0.36f, 0.24f), 0.7f);
-	// The living room's teacup: old china as the cracked plaster photograph at about 0.07, the
-	// cracks reading as crazed glaze. A flat pale grey was the cleanest thing in the room.
-	MatChina = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.145f, 0.147f, 0.142f), 0.9f);
-	MatChinaDusty = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.115f, 0.112f, 0.104f), 1.1f);
+	// The living room's teacup: old china on the cracked plaster photograph, the cracks reading as
+	// crazed glaze. Ivory at about 0.13 rather than the teacup's 0.07: at 0.07 a rack of plates was
+	// the value of the paint it stood on and the plaster behind that.
+	MatChina = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.276f, 0.296f, 0.323f), 0.9f);
+	MatChinaDusty = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.197f, 0.216f, 0.249f), 1.1f);
+	// The transfer-printed band round the everyday plates, faded blue. A flat colour, like the clock
+	// dial's: a printed band is a flat thing by design.
+	MatChinaBand = Build.Flat(FLinearColor(0.020f, 0.030f, 0.068f), 0.45f);
+	// The mixing bowl: buff earthenware, its own instance because the bowl is a generated mesh
+	// whose UVs are already in repeats (FRoomBuilder::Lathe).
+	MatBowl = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.290f, 0.232f, 0.180f), 0.8f);
 	// Jars are dusty glass, a good deal less clear than a window, and still nearly nothing.
 	MatGlass = Build.Glass(RoomPalette::GlassShard, 0.16f, 0.12f);
 	MatPaper = Build.Surface(RoomSurfaces::Linen, FLinearColor(0.464f, 0.245f, 0.108f));
@@ -342,16 +354,23 @@ void AKitchenActor::CupboardDoor(FRoomBuilder& Build, const FVector& Hinge, cons
 		FLinearColor(0.16f, 0.07f, 0.03f), 0.55f, 1.1f);
 }
 
-void AKitchenActor::StandingPlate(FRoomBuilder& Build, const FVector& Foot, const FVector& Out, float Diameter, float Lean, UMaterialInterface* Mat)
+void AKitchenActor::StandingPlate(FRoomBuilder& Build, const FVector& Foot, const FVector& Out, float Diameter, float Lean, UMaterialInterface* Mat, UMaterialInterface* Band)
 {
 	// Leaning back by Lean degrees, the plate's face tilts up and its top goes back towards the wall.
 	const float L = FMath::DegreesToRadians(Lean);
 	const FVector Normal = Out * FMath::Cos(L) + FVector::UpVector * FMath::Sin(L);
 	const FVector Up = FVector::UpVector * FMath::Cos(L) - Out * FMath::Sin(L);
 	const FRotator Rot = FRotationMatrix::MakeFromZ(Normal).Rotator();
-	Build.Cyl(Foot + Up * (Diameter * 0.5f), Rot, FVector(Diameter, Diameter, 1.1f), Mat, false);
+	const FVector Middle = Foot + Up * (Diameter * 0.5f);
+	Build.Cyl(Middle, Rot, FVector(Diameter, Diameter, 1.1f), Mat, false);
+	if (Band)
+	{
+		// The printed band: a ring of colour inside the rim, left by laying the well over a disc of it.
+		Build.Cyl(Middle + Normal * 0.6f, Rot, FVector(Diameter * 0.88f, Diameter * 0.88f, 0.2f), Band, false);
+		Build.Cyl(Middle + Normal * 0.75f, Rot, FVector(Diameter * 0.68f, Diameter * 0.68f, 0.2f), Mat, false);
+	}
 	// The well of the plate, a shade darker, a hair in front of the rim.
-	Build.Cyl(Foot + Up * (Diameter * 0.5f) + Normal * 0.6f, Rot, FVector(Diameter * 0.62f, Diameter * 0.62f, 0.2f), MatChinaDusty, false);
+	Build.Cyl(Middle + Normal * 0.9f, Rot, FVector(Diameter * 0.56f, Diameter * 0.56f, 0.2f), MatChinaDusty, false);
 }
 
 void AKitchenActor::Jar(FRoomBuilder& Build, const FVector& Base, float Diameter, float Height, float Fill, UMaterialInterface* Contents)
@@ -833,7 +852,7 @@ void AKitchenActor::BuildCounters(FRoomBuilder& Build)
 	const float RackW = WindowSpacing - WindowWidth - 40.f;
 	const float RackZ0 = F + 150.f;
 	const float RackZ1 = F + 270.f;
-	WallFill(Build, EWall::North, RackU - RackW * 0.5f, RackU + RackW * 0.5f, RackZ0, RackZ1, MatPaintDark, 0.6f);
+	WallFill(Build, EWall::North, RackU - RackW * 0.5f, RackU + RackW * 0.5f, RackZ0, RackZ1, MatRackBack, 0.6f);
 	for (const float S : { -1.f, 1.f })
 	{
 		WallBox(Build, EWall::North, RackU + S * (RackW * 0.5f - 1.5f), (RackZ0 + RackZ1) * 0.5f, 3.f, RackZ1 - RackZ0, 26.f, 0.f, MatPaint);
@@ -855,7 +874,8 @@ void AKitchenActor::BuildCounters(FRoomBuilder& Build)
 			}
 			const float Dia = Row == 0 ? 26.f : (Row == 1 ? 22.f : 18.f);
 			const float U = RackU - RackW * 0.5f + 14.f + p * (RackW - 28.f) / FMath::Max(1, Plates - 1);
-			StandingPlate(Build, WallPoint(EWall::North, U, Z + 2.f, 12.f), FVector(0.f, 1.f, 0.f), Dia, 14.f + (p % 3) * 2.f, p % 4 == 0 ? MatChinaDusty.Get() : MatChina.Get());
+			StandingPlate(Build, WallPoint(EWall::North, U, Z + 2.f, 12.f), FVector(0.f, 1.f, 0.f), Dia, 14.f + (p % 3) * 2.f, p % 4 == 0 ? MatChinaDusty.Get() : MatChina.Get(),
+				(p + Row) % 3 == 1 ? nullptr : MatChinaBand.Get());
 		}
 	}
 
@@ -1104,7 +1124,7 @@ void AKitchenActor::BuildDresser(FRoomBuilder& Build)
 	const float RackDepth = 26.f;
 	const float Z0 = Top + 12.f;
 	const float Z1 = F + 262.f;
-	WallFill(Build, EWall::East, Y0 + 4.f, Y1 - 4.f, Top, Z1, MatPaintDark, 0.6f);
+	WallFill(Build, EWall::East, Y0 + 4.f, Y1 - 4.f, Top, Z1, MatRackBack, 0.6f);
 	for (const float U : { Y0 + 2.f, Y1 - 2.f })
 	{
 		WallBox(Build, EWall::East, U, (Top + Z1) * 0.5f, 4.f, Z1 - Top, RackDepth, 0.f, MatPaint);
@@ -1125,13 +1145,19 @@ void AKitchenActor::BuildDresser(FRoomBuilder& Build)
 			}
 			const float Dia = Row == 2 ? 20.f : (p % 3 == 0 ? 28.f : 25.f);
 			const float U = Y0 + 20.f + p * (DresserWidth - 40.f) / (Plates - 1);
-			StandingPlate(Build, WallPoint(EWall::East, U, Z + 0.2f, 12.f), Out, Dia, 13.f + (p % 3) * 2.5f, (p + Row) % 4 == 0 ? MatChinaDusty.Get() : MatChina.Get());
+			// The everyday set is banded; the odd plain one is what got broken and replaced.
+			StandingPlate(Build, WallPoint(EWall::East, U, Z + 0.2f, 12.f), Out, Dia, 13.f + (p % 3) * 2.5f, (p + Row) % 4 == 0 ? MatChinaDusty.Get() : MatChina.Get(),
+				(p * 5 + Row) % 7 == 3 ? nullptr : MatChinaBand.Get());
 		}
 	}
-	// Dust along each shelf, and a web from the cornice down to the top shelf.
+	// Dust along the front of each shelf, and a web from the cornice down to the top shelf. Only the
+	// strip in front of the plates: a decal aimed down projects onto everything in its box, and one
+	// the depth of the shelf laid the dust up the lower half of every plate standing on it, which is
+	// what sank the plates into the boards behind them. Aimed down on the east wall, roll 0 puts
+	// the first size along the wall (world Y).
 	for (const float Z : ShelfZ)
 	{
-		Build.Stain(RoomSurfaces::Damp, WallPoint(EWall::East, DresserY(), Z + 6.f, 12.f), FRotator(-90.f, 0.f, 90.f), FVector2D(DresserWidth, 24.f), FLinearColor(0.40f, 0.38f, 0.35f), 0.35f, 1.2f);
+		Build.Stain(RoomSurfaces::Damp, WallPoint(EWall::East, DresserY(), Z + 2.f, 20.5f), FRotator(-90.f, 0.f, 0.f), FVector2D(DresserWidth, 7.f), FLinearColor(0.40f, 0.38f, 0.35f), 0.35f, 1.2f);
 	}
 	Build.Add(FRoomShapes::Plane(), WallPoint(EWall::East, Y1 - 30.f, Z1 - 16.f, 14.f), FRotator(0.f, 90.f, 90.f), FVector(50.f, 30.f, 1.f), MatWeb, false);
 
@@ -1140,7 +1166,7 @@ void AKitchenActor::BuildDresser(FRoomBuilder& Build)
 
 void AKitchenActor::BuildLarder(FRoomBuilder& Build)
 {
-	// The larder cupboard in the corner by the door: tall, shelved, its door standing open, and on
+	// The larder cupboard in the corner by the door: tall, shelved, its door long gone, and on
 	// its shelves the store a household keeps — jars of what was bottled from the garden, tins,
 	// a crock of flour gone solid, a sack slumped on the floor of it.
 	const float F = FloorZ();
@@ -1149,7 +1175,6 @@ void AKitchenActor::BuildLarder(FRoomBuilder& Build)
 	const float Depth = 55.f;
 	const float H = 232.f;
 	const float Y0 = Y - W * 0.5f;
-	const FVector Out(-1.f, 0.f, 0.f);
 
 	auto Panel = [&](float PU, float PZ, float PProud, float SU, float SZ, float SDepth, UMaterialInterface* Mat)
 	{
@@ -1166,8 +1191,13 @@ void AKitchenActor::BuildLarder(FRoomBuilder& Build)
 	{
 		Panel(Y, Z, Depth * 0.5f - 2.f, W - 6.f, 2.4f, Depth - 4.f, MatPaintDark);
 	}
-	// Hinged on its north edge, standing open towards the window wall.
-	CupboardDoor(Build, WallPoint(EWall::East, Y0 + 2.f, F + H * 0.5f + 2.f, Depth), FVector(0.f, 1.f, 0.f), Out, W - 4.f, H - 12.f, 72.f);
+	// No door: a two-metre leaf standing open across the corner was a wall of its own, and it hid
+	// the one cupboard in the room with anything worth looking at in it. What is left of it is the
+	// two hinges, rusted on to the carcass.
+	for (const float Z : { F + 30.f, F + H - 30.f })
+	{
+		Build.Box(WallPoint(EWall::East, Y0 + 1.f, Z, Depth + 0.6f), FRotator::ZeroRotator, FVector(1.2f, 3.2f, 9.f), MatIron, false);
+	}
 	KitchenPawnOnly(Build.Box(WallPoint(EWall::East, Y, F + H * 0.5f, Depth * 0.5f), FRotator::ZeroRotator, FVector(Depth, W, H), MatVoid));
 
 	// The stores. Bottled fruit gone to black syrup, jars with a crust in the bottom, tins.
@@ -1303,13 +1333,38 @@ void AKitchenActor::BuildTable(FRoomBuilder& Build)
 	Build.Stain(RoomSurfaces::Damp, FVector(C.X + 34.f, C.Y - 40.f, TopZ + 6.f), FRotator(-90.f, 0.f, 0.f), FVector2D(10.f, 10.f), FLinearColor(0.06f, 0.04f, 0.025f), 0.7f, 1.f);
 
 	// The mixing bowl, with the batter dried to a cracked crust in it, and the spoon still in that.
+	// Turned rather than assembled (FRoomBuilder::Lathe): as a cylinder with a disc of batter
+	// flush with its top it was a solid drum of stone with a stick in it, and nobody could say
+	// what it was. What makes it a bowl is a foot, a belly flaring out to a rolled lip, and an
+	// inside — and the batter sunk down in that inside, shrunk off the glaze as it dried.
 	const FVector Mix(C.X + 62.f, C.Y + 18.f, TopZ);
-	UMaterialInterface* Batter = Build.Flat(FLinearColor(0.15f, 0.12f, 0.08f), 0.95f);
-	Build.Cyl(Mix + FVector(0.f, 0.f, 6.5f), FRotator::ZeroRotator, FVector(34.f, 34.f, 13.f), MatChina, false);
-	Build.Cyl(Mix + FVector(0.f, 0.f, 10.55f), FRotator::ZeroRotator, FVector(30.f, 30.f, 0.1f), Batter, false);
-	Build.Crack(Mix + FVector(0.f, 0.f, 16.f), FRotator(-90.f, 0.f, 0.f), FVector2D(28.f, 28.f), 1.f, 24.f);
-	KitchenRod(Build, Mix + FVector(2.f, 2.f, 9.f), Mix + FVector(20.f, 16.f, 28.f), 1.6f, MatOakDark);
-	Build.Add(FRoomShapes::Sphere(), Mix + FVector(1.f, 1.f, 10.f), FRotator(40.f, 40.f, 0.f), FVector(6.f, 4.f, 2.f), MatOakDark, false);
+	{
+		const TArray<FVector2D> Turned = {
+			// Under the foot, and the foot ring's hard edge.
+			{ 0.f, 0.f }, { 8.2f, 0.f }, { 8.2f, 0.f }, { 8.8f, 1.1f },
+			// The belly, out and up to the lip.
+			{ 11.8f, 3.4f }, { 14.6f, 6.8f }, { 16.3f, 10.6f }, { 17.0f, 13.2f },
+			// The rolled lip.
+			{ 17.4f, 14.0f }, { 17.0f, 14.6f }, { 16.2f, 14.1f },
+			// Down the inside to the bottom of the bowl.
+			{ 15.6f, 11.4f }, { 14.0f, 7.8f }, { 11.2f, 4.6f }, { 7.0f, 2.4f }, { 0.f, 1.8f },
+		};
+		Build.Lathe(Mix, FRotator(0.f, 0.f, 0.f), Turned, 40, MatBowl, RoomSurfaces::Plaster.TexelSizeCm * 0.25f);
+		// The crust: a low dome that has come away from the glaze all round, so a dark ring of the
+		// bowl's inside shows between the two, and cracked across as batter cracks.
+		UMaterialInterface* Batter = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.20f, 0.155f, 0.10f), 1.3f);
+		// Walked inwards, so it faces up (the profile runs out along an underside and in along a top).
+		const TArray<FVector2D> Crust = { { 11.4f, 5.0f }, { 11.0f, 5.8f }, { 9.2f, 6.6f }, { 5.f, 7.2f }, { 0.f, 7.4f } };
+		Build.Lathe(Mix, FRotator(0.f, 0.f, 0.f), Crust, 32, Batter, 30.f);
+		// Kept inside the crust's own radius, so the fissures do not run up the glaze and over the lip.
+		Build.Crack(Mix + FVector(0.f, 0.f, 10.f), FRotator(-90.f, 0.f, 0.f), FVector2D(18.f, 18.f), 1.f, 22.f);
+		// The wooden spoon, stuck in the crust where it was left and leaning on the lip.
+		const FVector Stuck = Mix + FVector(-2.f, -2.f, 7.f);
+		const FVector OnLip = Mix + FVector(12.3f, 12.3f, 15.3f);
+		const FVector Handle = (OnLip - Stuck).GetSafeNormal();
+		KitchenRod(Build, Stuck, OnLip + Handle * 14.f, 1.4f, MatOakDark);
+		Build.Add(FRoomShapes::Sphere(), Stuck + Handle * 0.5f, FRotationMatrix::MakeFromX(Handle).Rotator(), FVector(5.f, 4.f, 1.6f), MatOakDark, false);
+	}
 	// Flour spilled round it, grey now.
 	Build.Stain(RoomSurfaces::Damp, Mix + FVector(-8.f, -4.f, 6.f), FRotator(-90.f, 0.f, 30.f), FVector2D(46.f, 60.f), FLinearColor(0.52f, 0.50f, 0.46f), 0.45f, 1.3f);
 	// The rolling pin, and two empty jars with their lids off.
@@ -1335,21 +1390,28 @@ void AKitchenActor::BuildTable(FRoomBuilder& Build)
 
 	// The chairs: two pushed in along the north side, one along the south, and the one at the east
 	// end pulled well back and turned out, as a chair is left by somebody who got up in a hurry.
-	// WoodenChair_01 faces its local +Y, as the other props do.
+	// Painted ladder-backs, at their own life size (RoomProps::KitchenChair): WoodenChair_01 is a
+	// Gothic hall chair 2.3 metres tall, and brought down to a kitchen chair's height it had a seat
+	// the size of a stool's and sat at the table like doll's furniture. Its footprint is 64 x 66
+	// about the middle, so a chair pushed in has the front of its seat just under the table's edge.
 	struct FSeat { FVector At; float Yaw; };
+	const float PushedIn = HalfW + 22.f;
 	const FSeat Seats[] = {
-		{ FVector(C.X - 55.f, C.Y - HalfW - 12.f, F), 0.f + 3.f },
-		{ FVector(C.X + 45.f, C.Y - HalfW - 14.f, F), 0.f - 4.f },
-		{ FVector(C.X - 10.f, C.Y + HalfW + 16.f, F), 180.f + 5.f },
-		{ FVector(C.X + HalfL + 70.f, C.Y + 22.f, F), 90.f + 28.f },
+		{ FVector(C.X - 60.f, C.Y - PushedIn, F), 0.f + 3.f },
+		{ FVector(C.X + 50.f, C.Y - PushedIn - 3.f, F), 0.f - 4.f },
+		{ FVector(C.X - 10.f, C.Y + PushedIn + 2.f, F), 180.f + 5.f },
+		{ FVector(C.X + HalfL + 74.f, C.Y + 22.f, F), 90.f + 28.f },
 	};
 	for (const FSeat& Seat : Seats)
 	{
-		if (UStaticMeshComponent* Chair = Build.PropSeated(RoomProps::Chair, Seat.At, FRotator(0.f, Seat.Yaw, 0.f), 92.f))
+		if (UStaticMeshComponent* Chair = Build.PropSeated(RoomProps::KitchenChair, Seat.At, FRotator(0.f, Seat.Yaw, 0.f)))
 		{
-			FRoomShapes::TintSlots(Chair, FLinearColor(0.62f, 0.60f, 0.58f));
+			// The photograph is a cool blue-grey (linear 0.149, 0.174, 0.177), and untinted the chairs
+			// were the palest things on the floor. Warmed and held to about 0.06, under the table's
+			// scrubbed top, so they are the same kitchen and not a white set.
+			FRoomShapes::TintSlots(Chair, FLinearColor(0.42f, 0.355f, 0.32f));
 		}
-		Footprints.Add(FBox2D(FVector2D(Seat.At.X - 30.f, Seat.At.Y - 30.f), FVector2D(Seat.At.X + 30.f, Seat.At.Y + 30.f)));
+		Footprints.Add(FBox2D(FVector2D(Seat.At.X - 36.f, Seat.At.Y - 36.f), FVector2D(Seat.At.X + 36.f, Seat.At.Y + 36.f)));
 	}
 	// The scrape its legs left in the dust on the tiles.
 	for (int32 i = 0; i < 2; ++i)
@@ -1708,16 +1770,40 @@ void AKitchenActor::BuildClues()
 			Hit->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 		}
 	};
-	// Lines of handwriting on a sheet lying flat: thin dark strokes of uneven length.
-	auto Writing = [&](FRoomBuilder& B, const FVector& Centre, float Yaw, float Width, float Height, int32 Lines, int32 Seed)
+	// One word of handwriting: a flat stroke in the plane of the sheet. A plane rather than a Mark,
+	// and casting no shadow: a Mark is a box four millimetres thick, and on a page under a lantern a
+	// row of them stood up off the paper, each throwing its own shadow, and read as the slats of a
+	// ventilation grille.
+	auto Word = [&](FRoomBuilder& B, const FTransform& Sheet, float X, float Y, float Length, float Weight, UMaterialInterface* Ink)
+	{
+		if (UStaticMeshComponent* Stroke = B.Add(FRoomShapes::Plane(), Sheet.TransformPosition(FVector(X, Y, 0.f)), Sheet.Rotator(),
+			FVector(Length, Weight, 1.f), Ink, false))
+		{
+			Stroke->SetCastShadow(false);
+		}
+	};
+	// Lines of handwriting in the XY plane of Sheet, whose origin is the middle of the written area
+	// on the paper's surface. Read along local +X, the lines running down the sheet towards +Y,
+	// which is how a page reads from above in this frame. Each line is broken into words of
+	// uneven length, and the last line of each paragraph stops short: evenly ruled strokes of one
+	// length were a grille, not writing.
+	auto Writing = [&](FRoomBuilder& B, const FTransform& Sheet, float Width, float Height, int32 Lines, int32 Seed)
 	{
 		FRandomStream Hand(Seed);
-		const FRotator Turn(0.f, Yaw, 0.f);
+		const float Pitch = Height / FMath::Max(1, Lines);
 		for (int32 l = 0; l < Lines; ++l)
 		{
-			const float Length = Width * Hand.FRandRange(0.35f, 0.8f);
-			const FVector Local(-Height * 0.5f + 3.f + l * (Height - 6.f) / FMath::Max(1, Lines - 1), -Width * 0.5f + 2.f + Length * 0.5f, 0.05f);
-			B.Mark(Centre + Turn.RotateVector(Local), FRotator(0.f, Yaw + 90.f, 0.f), FVector2D(Length, 0.35f), MatInk);
+			// A paragraph every four or so lines: its last line is short and the next is indented.
+			const bool bLast = Hand.FRand() < 0.24f || l == Lines - 1;
+			const float Y = -Height * 0.5f + Pitch * (l + 0.5f);
+			float Cursor = -Width * 0.5f + (l > 0 && Hand.FRand() < 0.2f ? Width * 0.08f : 0.f);
+			const float End = -Width * 0.5f + Width * (bLast ? Hand.FRandRange(0.3f, 0.65f) : Hand.FRandRange(0.9f, 1.f));
+			while (Cursor < End - 0.6f)
+			{
+				const float Length = FMath::Min(Hand.FRandRange(0.7f, 2.6f), End - Cursor);
+				Word(B, Sheet, Cursor + Length * 0.5f, Y + Hand.FRandRange(-0.06f, 0.06f), Length, Hand.FRandRange(0.26f, 0.34f), MatInk);
+				Cursor += Length + Hand.FRandRange(0.4f, 0.6f);
+			}
 		}
 	};
 	const float F = FloorZ();
@@ -1733,16 +1819,39 @@ void AKitchenActor::BuildClues()
 		{
 			FRoomBuilder B(Book, Book->GetRootScene());
 			UMaterialInterface* Boards = B.Flat(FLinearColor(0.035f, 0.018f, 0.012f), 0.85f);
-			B.Box(FVector(0.f, 0.f, 0.4f), FRotator(0.f, 6.f, 0.f), FVector(44.f, 30.f, 0.8f), Boards, false);
+			const float Yaw = 6.f;
+			B.Box(FVector(0.f, 0.f, 0.4f), FRotator(0.f, Yaw, 0.f), FVector(44.f, 30.f, 0.8f), Boards, false);
 			for (const float S : { -1.f, 1.f })
 			{
-				// Each half of the block of pages, rising to the spine.
-				B.Box(FVector(S * 10.5f, 0.f, 1.6f), FRotator(0.f, 6.f, S * -4.f), FVector(20.f, 27.f, 1.6f), S < 0.f ? MatPaper.Get() : MatPaperDamp.Get(), false);
-				Writing(B, FVector(S * 10.5f, 0.f, 2.55f), 6.f + 90.f, 16.f, 22.f, 9, S < 0.f ? 31 : 32);
+				// Each half of the block of pages, falling away into the gutter: an open book lies in
+				// a shallow V, pinched down at the spine. Pitch is the tilt about the spine. The first
+				// version rolled the pages about the other axis, which tipped each one along its
+				// lines, so the writing laid flat over it stood clear of the paper at one end.
+				const FTransform Page(FRotator(S * 3.f, Yaw, 0.f), FRotator(0.f, Yaw, 0.f).RotateVector(FVector(S * 10.5f, 0.f, 1.5f)));
+				B.Box(Page.GetLocation(), Page.Rotator(), FVector(20.f, 27.f, 2.4f), S < 0.f ? MatPaperDamp.Get() : MatPaper.Get(), false);
+				// Written in the page's own frame, turned half round so that it reads from the side
+				// of the worktop the detective stands on: along world -X, the lines coming towards him.
+				const FTransform Sheet = FTransform(FRotator(0.f, 180.f, 0.f), FVector(0.f, 0.f, 1.25f)) * Page;
+				if (S > 0.f)
+				{
+					// The left-hand page as he reads it: the recipe's name over the method.
+					Word(B, Sheet, -1.f, -10.2f, 9.f, 0.45f, MatInk);
+					Writing(B, FTransform(FVector(0.f, 1.2f, 0.f)) * Sheet, 15.f, 18.f, 11, 31);
+				}
+				else
+				{
+					Writing(B, FTransform(FVector(0.f, -2.f, 0.f)) * Sheet, 15.f, 16.f, 10, 32);
+					// And in the margin under it, in big crooked capitals: MORE SPRINKLES.
+					const FTransform Margin = FTransform(FRotator(0.f, -7.f, 0.f), FVector(-1.f, 9.6f, 0.01f)) * Sheet;
+					Word(B, Margin, -4.2f, 0.f, 4.6f, 0.9f, MatInk);
+					Word(B, Margin, 2.4f, 0.3f, 7.2f, 0.9f, MatInk);
+				}
 			}
-			// A fat thumbprint of butter gone brown on the left page, and the ribbon.
-			B.Stain(RoomSurfaces::Damp, FVector(-14.f, 8.f, 6.f), FRotator(-90.f, 0.f, 0.f), FVector2D(6.f, 5.f), FLinearColor(0.08f, 0.05f, 0.02f), 0.7f, 1.f);
-			B.Box(FVector(0.5f, 12.f, 2.6f), FRotator(0.f, 6.f, 0.f), FVector(0.8f, 16.f, 0.1f), MatRedInk, false);
+			// The crease of the spine, in the bottom of the V, and the ribbon lying in it.
+			B.Box(FRotator(0.f, Yaw, 0.f).RotateVector(FVector(0.f, 0.f, 1.5f)), FRotator(0.f, Yaw, 0.f), FVector(1.2f, 27.f, 1.3f), MatShadow, false);
+			B.Box(FRotator(0.f, Yaw, 0.f).RotateVector(FVector(0.2f, -4.f, 2.2f)), FRotator(0.f, Yaw + 1.5f, 0.f), FVector(0.8f, 19.f, 0.1f), MatRedInk, false);
+			// A fat thumbprint of butter gone brown on the left-hand page.
+			B.Stain(RoomSurfaces::Damp, FVector(13.f, -6.f, 6.f), FRotator(-90.f, 0.f, 0.f), FVector2D(6.f, 5.f), FLinearColor(0.08f, 0.05f, 0.02f), 0.7f, 1.f);
 			HitVolume(B, FVector(0.f, 0.f, 3.f), FVector(48.f, 34.f, 6.f));
 		}
 	}
@@ -1870,7 +1979,9 @@ void AKitchenActor::BuildClues()
 		{
 			FRoomBuilder B(Note, Note->GetRootScene());
 			B.Mark(FVector(0.f, 0.f, 0.1f), FRotator(0.f, 14.f, 0.f), FVector2D(15.f, 20.f), MatPaper);
-			Writing(B, FVector(0.f, 0.f, 0.15f), 14.f, 12.f, 14.f, 6, 71);
+			// A Mark's face is 0.8 above where it is put (FRoomBuilder::Mark). Written across the
+			// short side of the sheet, which is how a note is written.
+			Writing(B, FTransform(FRotator(0.f, 14.f, 0.f), FVector(0.f, 0.f, 0.94f)), 11.f, 14.f, 6, 71);
 			// The salt cellar holding it down: a glass pot with a pewter top, the salt gone to a lump.
 			B.Cyl(FVector(4.f, -4.f, 3.6f), FRotator::ZeroRotator, FVector(5.f, 5.f, 3.2f), MatChina, false);
 			B.Cyl(FVector(4.f, -4.f, 3.5f), FRotator::ZeroRotator, FVector(6.2f, 6.2f, 7.f), MatGlass, false);

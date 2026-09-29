@@ -98,6 +98,7 @@ namespace RoomProps
 	const TCHAR* OilLamp = TEXT("vintage_oil_lamp");
 	const TCHAR* Vase = TEXT("ceramic_vase_01");
 	const TCHAR* PorcelainHorse = TEXT("horse_statue_01");
+	const TCHAR* KitchenChair = TEXT("painted_wooden_chair_02");
 }
 
 namespace RoomPalette
@@ -1399,6 +1400,105 @@ UProceduralMeshComponent* FRoomBuilder::Pane(const FVector& Centre, const FRotat
 		}
 	}
 
+	return Mesh;
+}
+
+UProceduralMeshComponent* FRoomBuilder::Lathe(const FVector& Base, const FRotator& Rotation, const TArray<FVector2D>& Profile,
+	int32 Segments, UMaterialInterface* Mat, float TexelSizeCm)
+{
+	if (!Owner || !ParentComponent || Profile.Num() < 2)
+	{
+		return nullptr;
+	}
+	Segments = FMath::Max(Segments, 6);
+	const int32 Points = Profile.Num();
+	const int32 Ring = Segments + 1; // the seam is doubled so the UVs can close
+	TexelSizeCm = FMath::Max(TexelSizeCm, 1.f);
+
+	// The normal of each segment in the profile's own (radius, height) plane. Walking out, up, over
+	// and down, the solid is always on the same side of the walk, so (dZ, -dR) points off the
+	// surface: out of the wall on the outside, up off the rim, and in towards the axis inside.
+	TArray<FVector2D> SegmentNormals;
+	SegmentNormals.SetNum(Points - 1);
+	for (int32 i = 0; i + 1 < Points; ++i)
+	{
+		const FVector2D Step = Profile[i + 1] - Profile[i];
+		SegmentNormals[i] = Step.SizeSquared() < KINDA_SMALL_NUMBER ? FVector2D::ZeroVector : FVector2D(Step.Y, -Step.X).GetSafeNormal();
+	}
+	TArray<FVector2D> PointNormals;
+	TArray<float> PathLength;
+	PointNormals.SetNum(Points);
+	PathLength.SetNum(Points);
+	float MaxRadius = 1.f;
+	for (int32 i = 0; i < Points; ++i)
+	{
+		// A repeated point sits between a real segment and an empty one, so it takes the normal of
+		// the real one alone: that is what makes a repeat a hard edge.
+		const FVector2D Sum = (i > 0 ? SegmentNormals[i - 1] : FVector2D::ZeroVector) + (i + 1 < Points ? SegmentNormals[i] : FVector2D::ZeroVector);
+		PointNormals[i] = Sum.GetSafeNormal();
+		PathLength[i] = i > 0 ? PathLength[i - 1] + FVector2D::Distance(Profile[i], Profile[i - 1]) : 0.f;
+		MaxRadius = FMath::Max(MaxRadius, Profile[i].X);
+	}
+	const float RepeatsAround = FMath::Max(1.f, FMath::RoundToFloat(2.f * PI * MaxRadius / TexelSizeCm));
+
+	TArray<FVector> Verts;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UVs;
+	TArray<FProcMeshTangent> Tangents;
+	TArray<int32> Tris;
+	Verts.Reserve(Points * Ring);
+	for (int32 i = 0; i < Points; ++i)
+	{
+		for (int32 s = 0; s < Ring; ++s)
+		{
+			const float A = 2.f * PI * s / Segments;
+			const float C = FMath::Cos(A);
+			const float S = FMath::Sin(A);
+			Verts.Add(FVector(Profile[i].X * C, Profile[i].X * S, Profile[i].Y));
+			Normals.Add(FVector(PointNormals[i].X * C, PointNormals[i].X * S, PointNormals[i].Y));
+			UVs.Add(FVector2D(RepeatsAround * s / Segments, PathLength[i] / TexelSizeCm));
+			Tangents.Add(FProcMeshTangent(FVector(-S, C, 0.f), false));
+		}
+	}
+	for (int32 i = 0; i + 1 < Points; ++i)
+	{
+		if (SegmentNormals[i].IsZero())
+		{
+			continue;
+		}
+		for (int32 s = 0; s < Segments; ++s)
+		{
+			const int32 A = i * Ring + s;
+			const int32 B = i * Ring + s + 1;
+			const int32 C = (i + 1) * Ring + s + 1;
+			const int32 D = (i + 1) * Ring + s;
+			// Both windings: the rasteriser keeps whichever faces the eye, and the normal array
+			// already says which way the surface faces (the curtains' lesson).
+			for (const int32 Index : { A, B, C, A, C, D, A, C, B, A, D, C })
+			{
+				Tris.Add(Index);
+			}
+		}
+	}
+
+	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(Owner, MakeUniqueObjectName(Owner, UProceduralMeshComponent::StaticClass(), TEXT("Lathe")));
+	Mesh->SetMobility(EComponentMobility::Movable);
+	Mesh->AttachToComponent(ParentComponent, FAttachmentTransformRules::KeepRelativeTransform);
+	Mesh->SetRelativeLocationAndRotation(Base, Rotation);
+	Mesh->bUseAsyncCooking = false;
+	Mesh->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, UVs, TArray<FLinearColor>(), Tangents, /*bCreateCollision*/ false);
+	if (Mat)
+	{
+		if (UMaterialInstanceDynamic* Instance = Cast<UMaterialInstanceDynamic>(Mat))
+		{
+			Instance->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(1.f, 1.f, 0.f, 1.f));
+			Instance->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(0.f, 0.f, 0.f, 1.f));
+		}
+		Mesh->SetMaterial(0, Mat);
+	}
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh->RegisterComponent();
+	Owner->AddInstanceComponent(Mesh);
 	return Mesh;
 }
 

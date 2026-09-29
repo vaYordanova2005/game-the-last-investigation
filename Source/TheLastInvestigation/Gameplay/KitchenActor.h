@@ -179,8 +179,11 @@ private:
 	 * Out the way the carcass faces. Painted, with a sunk panel and a rusted handle.
 	 */
 	void CupboardDoor(FRoomBuilder& Build, const FVector& Hinge, const FVector& Along, const FVector& Out, float Width, float Height, float OpenYaw);
-	/** A plate standing on its edge, leaning back against whatever is behind it: Out is the way it faces. */
-	void StandingPlate(FRoomBuilder& Build, const FVector& Foot, const FVector& Out, float Diameter, float Lean, UMaterialInterface* Mat);
+	/**
+	 * A plate standing on its edge, leaning back against whatever is behind it: Out is the way it
+	 * faces. Band, if given, is the printed ring round the rim.
+	 */
+	void StandingPlate(FRoomBuilder& Build, const FVector& Foot, const FVector& Out, float Diameter, float Lean, UMaterialInterface* Mat, UMaterialInterface* Band = nullptr);
 	/** A glass jar with what is left in it, standing on Base. Fill is the fraction still in it. */
 	void Jar(FRoomBuilder& Build, const FVector& Base, float Diameter, float Height, float Fill, UMaterialInterface* Contents);
 
@@ -232,6 +235,9 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBrass;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatChina;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatChinaDusty;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatChinaBand;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatRackBack;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBowl;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatGlass;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPaper;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPaperDamp;

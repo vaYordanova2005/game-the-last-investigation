@@ -39,6 +39,12 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | `ClassicConsole_01` | model | the console table in the hall |
 | `fancy_picture_frame_02` | model | the family portrait on the landing |
 
+## Kitchen — Poly Haven (CC0 / public domain)
+
+| Asset ID | Kind | Used for |
+|---|---|---|
+| `painted_wooden_chair_02` | model | the ladder-back chairs round the kitchen table |
+
 ## Generated in-repo
 
 | File | Made by | Used for |

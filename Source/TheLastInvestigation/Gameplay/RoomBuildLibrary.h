@@ -111,6 +111,11 @@ namespace RoomProps
 	extern const TCHAR* OilLamp;
 	extern const TCHAR* Vase;
 	extern const TCHAR* PorcelainHorse;
+	/**
+	 * The kitchen. A grey-painted ladder-back authored at life size (64 x 66 x 126), seat at about
+	 * 46: goes in unscaled. Faces its local +Y (the back is at -Y), as the other props do.
+	 */
+	extern const TCHAR* KitchenChair;
 }
 
 /**
@@ -362,6 +367,22 @@ public:
 	 */
 	UProceduralMeshComponent* Pane(const FVector& Centre, const FRotator& Facing, const FVector2D& SizeUU,
 		const FPaneDamage& Damage, int32 Seed, UMaterialInterface* Mat, UMaterialInterface* SplitMat = nullptr);
+
+	/**
+	 * A surface of revolution about local Z: a bowl, a crock, a jug. Every one of those built as a
+	 * cylinder is a solid drum with a lid on it, because a cylinder has no inside, no lip and no
+	 * belly, and those are the three things that say a vessel.
+	 *
+	 * Profile is (radius, height) pairs walked once, in order: from the axis under the foot, out
+	 * and up the outside, over the rim, and down the inside back to the axis. The shading normal
+	 * of each point is taken from the segments either side of it; repeat a point to put a hard
+	 * edge there. Both windings are emitted and the normal is forced, as for the cloth.
+	 *
+	 * The UVs are in repeats of TexelSizeCm, and like Cloth the instance's own tiling is reset, so
+	 * Mat wants to be an instance nothing else draws with.
+	 */
+	UProceduralMeshComponent* Lathe(const FVector& Base, const FRotator& Rotation, const TArray<FVector2D>& Profile,
+		int32 Segments, UMaterialInterface* Mat, float TexelSizeCm = 34.f);
 
 	UStaticMeshComponent* Box(const FVector& Location, const FRotator& Rotation, const FVector& SizeUU, UMaterialInterface* Mat, bool bBlockingCollision = true);
 	UStaticMeshComponent* Cyl(const FVector& Location, const FRotator& Rotation, const FVector& SizeUU, UMaterialInterface* Mat, bool bBlockingCollision = true);

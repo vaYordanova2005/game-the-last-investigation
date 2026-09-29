@@ -1434,9 +1434,13 @@ void AGrandStaircaseActor::BuildFurniture(FRoomBuilder& Build)
 	// A dust sheet over an armchair against the north wall between the door and the corner: the
 	// house was being shut up properly once. Above it, the clean rectangle where a mirror hung.
 	// The sheet is whole — a ragged hem cut on the grid came out as a staircase down the fall.
+	// It must stay on this side of the wall: at 150 deep about the chair its back third came
+	// through into the kitchen, which is behind this wall now, as a grey flap at the skirting. At
+	// 120 deep and 30 into the hall, the corner turned furthest back (85 x 60 at -12 degrees:
+	// 76cm) stops 9cm short of the plaster; the front falls about where it used to.
 	const FVector ChairSeat(EastX() - 130.f, NorthY() + 55.f, GroundZ);
 	Build.PropSeated(RoomProps::Armchair, ChairSeat, FRotator(0.f, -12.f, 0.f), 0.f);
-	Build.Cloth(ChairSeat + FVector(0.f, 0.f, 104.f), FRotator(0.f, -12.f, 0.f), FVector2D(170.f, 150.f), 5.5f, 70.f, 2203,
+	Build.Cloth(ChairSeat + FVector(0.f, 30.f, 104.f), FRotator(0.f, -12.f, 0.f), FVector2D(170.f, 120.f), 5.5f, 70.f, 2203,
 		Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.20f, 0.15f, 0.11f)), 34.f, /*bWorn*/ false);
 	// The mirror's ghost: the one place a hard edge is right, the wall the dirt never reached.
 	Build.Mark(WallPoint(EWall::North, ChairSeat.X, GroundZ + 200.f, 0.8f), FRotator(0.f, 0.f, 90.f), FVector2D(90.f, 110.f), MatWallpaper);
