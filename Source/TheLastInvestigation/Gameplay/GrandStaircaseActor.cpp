@@ -1533,12 +1533,16 @@ void AGrandStaircaseActor::BuildDebris(FRoomBuilder& Build)
 			{
 				continue; // not in a doorway
 			}
-			if (S.Z == GroundZ && FMath::Abs(Spot.X - SideDoorX()) < FMath::Max(SideDoorHalf, ParlourHalf) + 10.f)
+			// Drawn before the doorway test below, so skipping a lump there does not move every lump,
+			// paper and heap built after it off the positions they had before that test existed.
+			const FRotator Rot(Random.FRandRange(-30.f, 30.f), Random.FRandRange(0.f, 360.f), Random.FRandRange(-30.f, 30.f));
+			const FVector Scale(Size * Random.FRandRange(0.8f, 1.8f), Size * Random.FRandRange(0.8f, 1.5f), Size * 0.6f);
+			const float DoorHalf = Spot.Y > Setup.CenterY ? ParlourHalf : SideDoorHalf;
+			if (S.Z == GroundZ && FMath::Abs(Spot.X - SideDoorX()) < DoorHalf + 10.f)
 			{
 				continue; // nor across the dining room door or the way into the living room
 			}
-			Build.Box(FVector(Spot.X, Spot.Y, S.Z + Size * 0.35f), FRotator(Random.FRandRange(-30.f, 30.f), Random.FRandRange(0.f, 360.f), Random.FRandRange(-30.f, 30.f)),
-				FVector(Size * Random.FRandRange(0.8f, 1.8f), Size * Random.FRandRange(0.8f, 1.5f), Size * 0.6f), MatRubble, false);
+			Build.Box(FVector(Spot.X, Spot.Y, S.Z + Size * 0.35f), Rot, Scale, MatRubble, false);
 		}
 	}
 

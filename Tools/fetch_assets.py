@@ -97,7 +97,7 @@ MODELS = {
     "side_table_tall_01": "the side table on the gallery",
     "ClassicConsole_01": "the console table in the hall",
     "fancy_picture_frame_02": "the family portrait on the half-landing",
-    # The living room: the room the family sat in, and the room the story ends in.
+    # The living room: the room the family sat in; the finale's television is here.
     "Sofa_01": "the smaller sofa across the carpet",
     "sofa_03": "the green sofa facing the fireplace",
     "GreenChair_01": "the pair of green armchairs by the hearth",
@@ -107,7 +107,7 @@ MODELS = {
     "mantel_clock_01": "the broken clock lying face down on the hearth",
     "standing_picture_frame_01": "a family photograph",
     "standing_picture_frame_02": "a family photograph",
-    "fancy_picture_frame_01": "a landscape in an oval frame on the living room wall",
+    "fancy_picture_frame_01": "the two landscapes either side of the chimney breast",
     "hanging_picture_frame_03": "the oval portrait on the living room wall",
     "vintage_oil_lamp": "the oil lamp on the lamp table",
     "ceramic_vase_01": "an empty vase",
