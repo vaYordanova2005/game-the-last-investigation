@@ -51,6 +51,20 @@ namespace
 		return Build.Cyl((A + B) * 0.5f, FRotationMatrix::MakeFromZ(Step.GetSafeNormal()).Rotator(), FVector(Diameter, Diameter, Step.Size()), Mat, false);
 	}
 
+	/**
+	 * Keeps the wall's decals off a sheet pinned to it. A decal projects onto everything in its box,
+	 * and paper a centimetre off the plaster is inside the box of every crack and damp stain behind
+	 * it: they ran across the calendar's grid as if drawn on the page.
+	 */
+	void KitchenNoDecals(AActor* Actor)
+	{
+		TInlineComponentArray<UPrimitiveComponent*> Parts(Actor);
+		for (UPrimitiveComponent* Part : Parts)
+		{
+			Part->SetReceivesDecals(false);
+		}
+	}
+
 	/** A yaw that lays a part's local +X along Dir. */
 	float KitchenYawOf(const FVector& Dir)
 	{
@@ -1911,6 +1925,7 @@ void AKitchenActor::BuildClues()
 		// The pin through its bottom corner, which is what holds the list up under it.
 		B.Sph(FVector(14.f, -0.8f, -21.5f), 1.1f, MatBrass);
 		HitVolume(B, FVector(0.f, -1.f, 0.f), FVector(34.f, 2.f, 48.f));
+		KitchenNoDecals(Calendar);
 	}
 	if (AClueActor* List = SpawnClue(WallPoint(EWall::South, CalU + 13.f, CalZ - 29.f, 0.3f), FRotator::ZeroRotator,
 		TEXT("Examine the list"),
@@ -1921,7 +1936,9 @@ void AKitchenActor::BuildClues()
 		// calendar's bottom corner and the pin there.
 		// Tilted in the wall's plane: that is pitch here; yaw swung one edge out through the calendar.
 		const FRotator Flat(4.f, 0.f, -90.f);
-		B.Mark(FVector(0.f, 0.f, 0.f), Flat, FVector2D(11.f, 17.f), MatPaperDamp);
+		// Its own paper, a shade under the calendar's: in the damp paper it was the plaster's value
+		// and only the ink showed, hanging on the wall with no sheet under it.
+		B.Mark(FVector(0.f, 0.f, 0.f), Flat, FVector2D(11.f, 17.f), B.Surface(RoomSurfaces::Linen, FLinearColor(0.40f, 0.215f, 0.095f)));
 		const FTransform Sheet = FTransform(FRotator(0.f, 180.f, 0.f)) * FTransform(Flat, FVector(0.f, -0.85f, 0.f));
 		const float UpZ = Sheet.GetUnitAxis(EAxis::Y).Z;
 		Writing(B, FTransform(FVector(0.f, -0.5f * UpZ, 0.f)) * Sheet, 8.f, 13.f, 6, 47);
@@ -1929,6 +1946,7 @@ void AKitchenActor::BuildClues()
 		Word(B, Sheet, 0.f, -7.4f * UpZ, 6.f, 0.25f, MatInk);
 		Word(B, Sheet, 0.3f, -7.9f * UpZ, 5.4f, 0.25f, MatInk);
 		HitVolume(B, FVector(0.f, -1.f, -2.f), FVector(14.f, 2.f, 16.f));
+		KitchenNoDecals(List);
 	}
 
 	// The clock over the worktop, high on the south wall: a plain round kitchen clock, stopped, its
