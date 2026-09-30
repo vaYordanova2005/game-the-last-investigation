@@ -28,6 +28,15 @@ struct FStormWindowSetup
 	bool bGlazed = true;
 
 	/**
+	 * How far the inner sill stands out into the room past the wall face. A deep sill is a shelf,
+	 * and over a worktop (the kitchen's, ten centimetres under its windows) it was a slab hanging
+	 * over the sink with the taps through it. Zero lines the bottom of the reveal and no more,
+	 * and leaves the room to put its own sill board in front. The apron under it is only built
+	 * for a sill deep enough to need one.
+	 */
+	float InnerSillProud = 33.f;
+
+	/**
 	 * For a follower (see SetLead) on another side of the house: builds its own sky, treeline,
 	 * rain and bolts rather than borrowing the lead's, which are all on the lead's side. The lead's
 	 * directional light cannot come in through a window facing away from it, so an own-view

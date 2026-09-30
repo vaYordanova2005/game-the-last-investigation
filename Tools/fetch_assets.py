@@ -112,6 +112,8 @@ MODELS = {
     "vintage_oil_lamp": "the oil lamp on the lamp table",
     "ceramic_vase_01": "an empty vase",
     "horse_statue_01": "the porcelain horse on the commode",
+    # The kitchen.
+    "painted_wooden_chair_02": "the painted ladder-back chairs round the kitchen table",
 }
 
 

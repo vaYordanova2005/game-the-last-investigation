@@ -28,8 +28,6 @@ struct FHallDoorSetup
 	bool bSixPanel = false;
 	/** A fist-sized hole rotted through the bottom panel. */
 	bool bRotHole = false;
-	/** What the detective is told when he tries it. */
-	FString Prompt;
 };
 
 /**

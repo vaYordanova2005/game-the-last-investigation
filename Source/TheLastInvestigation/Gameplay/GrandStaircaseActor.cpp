@@ -2,6 +2,7 @@
 #include "RoomBuildLibrary.h"
 #include "HallDoorActor.h"
 #include "LivingRoomActor.h"
+#include "KitchenActor.h"
 #include "ClueActor.h"
 #include "StormWindowActor.h"
 #include "DustMotesComponent.h"
@@ -176,7 +177,7 @@ void AGrandStaircaseActor::Configure(const FStairHallSetup& InSetup, AStormWindo
 		{ EWall::East, Setup.CenterY, Setup.OpeningWidth * 0.5f, 0.f, Setup.OpeningHeight },
 		// The front door, below it.
 		{ EWall::East, Setup.CenterY, 60.f, GroundZ, GroundZ + 250.f },
-		// The dining room door, and opposite it the open way into the living room.
+		// The kitchen door, and opposite it the open way into the living room.
 		{ EWall::North, SideDoorX(), SideDoorHalf, GroundZ, GroundZ + SideDoorHeight },
 		{ EWall::South, SideDoorX(), ParlourHalf, GroundZ, GroundZ + ParlourHeight },
 		// The window over the landing.
@@ -210,6 +211,7 @@ void AGrandStaircaseActor::BeginPlay()
 	SpawnDoors();
 	SpawnWindow();
 	SpawnLivingRoom();
+	SpawnKitchen();
 	BuildClues();
 }
 
@@ -413,9 +415,10 @@ void AGrandStaircaseActor::BuildShell(FRoomBuilder& Build)
 	Build.Box(FVector(Middle.X, Middle.Y, GroundZ - 12.f), FRotator::ZeroRotator, Span, MatShell);
 	Build.Box(FVector(Middle.X, Middle.Y, CeilingZ + 10.f), FRotator::ZeroRotator, Span, MatShell);
 
-	// Behind the dining room door and the front door, rooms the hall never lets you into, as in the
-	// corridor: a floor that goes on and a wall a long way off, both nearly black. The opening in
-	// the south wall has the living room behind it (SpawnLivingRoom).
+	// Behind the front door, a vestibule the hall never lets you into, as in the corridor: a floor
+	// that goes on and a wall a long way off, both nearly black. The opening in the south wall has
+	// the living room behind it (SpawnLivingRoom), and the door in the north wall the kitchen
+	// (SpawnKitchen).
 	auto BackRoom = [&](const FVector& Front, const FVector& Into, float HalfWidth, float Depth, float Height)
 	{
 		const FVector Across(-Into.Y, Into.X, 0.f);
@@ -433,7 +436,6 @@ void AGrandStaircaseActor::BuildShell(FRoomBuilder& Build)
 			Build.Box(FVector(At.X, At.Y, GroundZ + Height * 0.5f), FRotator::ZeroRotator, Side, MatBackRoom);
 		}
 	};
-	BackRoom(FVector(SideDoorX(), NorthY() - T, 0.f), FVector(0.f, -1.f, 0.f), 170.f, 300.f, 300.f);
 	// The vestibule behind the front door is only ever seen through the gaps in the boards.
 	BackRoom(FVector(EastX() + T, Setup.CenterY, 0.f), FVector(1.f, 0.f, 0.f), 110.f, 160.f, 270.f);
 
@@ -1092,7 +1094,7 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 		WallBox(Build, EWall::East, Setup.CenterY, H + 22.f, Half * 2.f + 50.f, 8.f, 7.f, 0.f, MatOak);
 	}
 
-	// The casings of the dining room door and of the open way into the living room.
+	// The casings of the kitchen door and of the open way into the living room.
 	for (const EWall Wall : { EWall::North, EWall::South })
 	{
 		const float U = SideDoorX();
@@ -1432,9 +1434,13 @@ void AGrandStaircaseActor::BuildFurniture(FRoomBuilder& Build)
 	// A dust sheet over an armchair against the north wall between the door and the corner: the
 	// house was being shut up properly once. Above it, the clean rectangle where a mirror hung.
 	// The sheet is whole — a ragged hem cut on the grid came out as a staircase down the fall.
+	// It must stay on this side of the wall: at 150 deep about the chair its back third came
+	// through into the kitchen, which is behind this wall now, as a grey flap at the skirting. At
+	// 120 deep and 30 into the hall, the corner turned furthest back (85 x 60 at -12 degrees:
+	// 76cm) stops 9cm short of the plaster; the front falls about where it used to.
 	const FVector ChairSeat(EastX() - 130.f, NorthY() + 55.f, GroundZ);
 	Build.PropSeated(RoomProps::Armchair, ChairSeat, FRotator(0.f, -12.f, 0.f), 0.f);
-	Build.Cloth(ChairSeat + FVector(0.f, 0.f, 104.f), FRotator(0.f, -12.f, 0.f), FVector2D(170.f, 150.f), 5.5f, 70.f, 2203,
+	Build.Cloth(ChairSeat + FVector(0.f, 30.f, 104.f), FRotator(0.f, -12.f, 0.f), FVector2D(170.f, 120.f), 5.5f, 70.f, 2203,
 		Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.20f, 0.15f, 0.11f)), 34.f, /*bWorn*/ false);
 	// The mirror's ghost: the one place a hard edge is right, the wall the dirt never reached.
 	Build.Mark(WallPoint(EWall::North, ChairSeat.X, GroundZ + 200.f, 0.8f), FRotator(0.f, 0.f, 90.f), FVector2D(90.f, 110.f), MatWallpaper);
@@ -1540,7 +1546,7 @@ void AGrandStaircaseActor::BuildDebris(FRoomBuilder& Build)
 			const float DoorHalf = Spot.Y > Setup.CenterY ? ParlourHalf : SideDoorHalf;
 			if (S.Z == GroundZ && FMath::Abs(Spot.X - SideDoorX()) < DoorHalf + 10.f)
 			{
-				continue; // nor across the dining room door or the way into the living room
+				continue; // nor across the kitchen door or the way into the living room
 			}
 			Build.Box(FVector(Spot.X, Spot.Y, S.Z + Size * 0.35f), Rot, Scale, MatRubble, false);
 		}
@@ -1708,14 +1714,14 @@ void AGrandStaircaseActor::Tick(float DeltaTime)
 
 void AGrandStaircaseActor::SpawnDoors()
 {
-	struct FDoorSpec { FVector Hinge; float Yaw; float Width; float Height; float Ajar; float Open; FLinearColor Tint; bool bSix; const TCHAR* Prompt; };
+	struct FDoorSpec { FVector Hinge; float Yaw; float Width; float Height; float Ajar; float Open; FLinearColor Tint; bool bSix; };
 	const float Half = SideDoorHalf;
 	const FDoorSpec Specs[] = {
 		// The front door. Local +X is the hall side: yaw 180 on the east wall.
-		{ FVector(EastX() + 2.6f, Setup.CenterY + 60.f - 2.f, GroundZ), 180.f, 116.f, 248.f, 0.f, 0.f, FLinearColor(0.20f, 0.20f, 0.20f), true,
-			TEXT("The front door. It does not so much as rattle — the boards across it are nailed deep into the frame.") },
-		{ FVector(SideDoorX() + Half - 2.f, NorthY() - 2.6f, GroundZ), 90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 0.f, 0.f, FLinearColor(0.26f, 0.27f, 0.28f), true,
-			TEXT("Locked. Through the keyhole, the long shape of a table under a sheet, and a place laid at the end of it.") },
+		{ FVector(EastX() + 2.6f, Setup.CenterY + 60.f - 2.f, GroundZ), 180.f, 116.f, 248.f, 0.f, 0.f, FLinearColor(0.20f, 0.20f, 0.20f), true },
+		// The kitchen: swollen in its frame and standing a hand's width open, and it goes the rest of
+		// the way when pushed.
+		{ FVector(SideDoorX() + Half - 2.f, NorthY() - 2.6f, GroundZ), 90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 14.f, 100.f, FLinearColor(0.26f, 0.27f, 0.28f), true },
 	};
 
 	int32 Seed = 5101;
@@ -1729,7 +1735,6 @@ void AGrandStaircaseActor::SpawnDoors()
 		DoorSetup.Seed = Seed++;
 		DoorSetup.WoodTint = Spec.Tint;
 		DoorSetup.bSixPanel = Spec.bSix;
-		DoorSetup.Prompt = Spec.Prompt;
 
 		const FTransform Transform(FRotator(0.f, Spec.Yaw, 0.f), GetActorTransform().TransformPosition(Spec.Hinge));
 		if (AHallDoorActor* Door = GetWorld()->SpawnActorDeferred<AHallDoorActor>(AHallDoorActor::StaticClass(), Transform, this))
@@ -1792,7 +1797,29 @@ void AGrandStaircaseActor::SpawnLivingRoom()
 	}
 }
 
-AClueActor* AGrandStaircaseActor::SpawnClue(const FVector& LocalLocation, const FRotator& Rotation, const FString& ShortName, const FString& Description)
+void AGrandStaircaseActor::SpawnKitchen()
+{
+	// Through the door across the hall from the living room: the kitchen, about seven metres by six,
+	// its east wall in line with the hall's, on the hall's floor, in the same frame.
+	const FTransform Transform = GetActorTransform();
+	Kitchen = GetWorld()->SpawnActorDeferred<AKitchenActor>(AKitchenActor::StaticClass(), Transform, this);
+	if (Kitchen)
+	{
+		FKitchenSetup RoomSetup;
+		RoomSetup.SouthFace = NorthY() - Setup.WallThickness;
+		RoomSetup.WestX = EastX() - AKitchenActor::RoomWidth;
+		RoomSetup.EastX = EastX();
+		RoomSetup.FloorZ = GroundZ;
+		RoomSetup.WallThickness = Setup.WallThickness;
+		RoomSetup.DoorX = SideDoorX();
+		RoomSetup.DoorHalf = SideDoorHalf;
+		RoomSetup.DoorHeight = SideDoorHeight;
+		Kitchen->Configure(RoomSetup, LeadStorm);
+		Kitchen->FinishSpawning(Transform);
+	}
+}
+
+AClueActor* AGrandStaircaseActor::SpawnClue(const FVector& LocalLocation, const FRotator& Rotation)
 {
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
@@ -1800,7 +1827,6 @@ AClueActor* AGrandStaircaseActor::SpawnClue(const FVector& LocalLocation, const 
 	AClueActor* Clue = GetWorld()->SpawnActor<AClueActor>(AClueActor::StaticClass(), GetActorTransform().TransformPosition(LocalLocation), Rotation, SpawnParams);
 	if (Clue)
 	{
-		Clue->Configure(FText::FromString(ShortName), FText::FromString(Description));
 		Clues.Add(Clue);
 	}
 	return Clue;
@@ -1808,21 +1834,10 @@ AClueActor* AGrandStaircaseActor::SpawnClue(const FVector& LocalLocation, const 
 
 void AGrandStaircaseActor::BuildClues()
 {
-	auto HitVolume = [&](FRoomBuilder& B, const FVector& At, const FVector& Size, const FRotator& Rotation = FRotator::ZeroRotator)
-	{
-		if (UStaticMeshComponent* Hit = B.Box(At, Rotation, Size, MatVoid))
-		{
-			Hit->SetHiddenInGame(true);
-			Hit->SetCastShadow(false);
-			Hit->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-		}
-	};
 
 	// The front door, boarded from the inside. These are the boards that used to be across the
 	// stairs upstairs, and the line goes with them: whoever nailed them was on this side.
-	if (AClueActor* Boards = SpawnClue(FVector(EastX() - 5.f, Setup.CenterY, GroundZ + 125.f), FRotator::ZeroRotator,
-		TEXT("Examine the boards"),
-		TEXT("The front door, boarded over from the inside. The nails were driven from this side. Whoever did it meant to stay in.")))
+	if (AClueActor* Boards = SpawnClue(FVector(EastX() - 5.f, Setup.CenterY, GroundZ + 125.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Boards, Boards->GetRootScene());
 		// In the plane of the door only — roll about the wall's normal, which is X here — or a
@@ -1837,10 +1852,7 @@ void AGrandStaircaseActor::BuildClues()
 			const FPlank& P = Planks[i];
 			const float X = -1.8f - (i % 2) * 2.2f;
 			B.Box(FVector(X, (i % 3 - 1) * 4.f, P.Z), FRotator(0.f, 0.f, P.Roll), FVector(2.2f, P.Length, P.Height), (i % 3 == 0) ? MatOakDark.Get() : MatOak.Get(), false);
-			// What is examined is each board, not the doorway: one volume over the whole door put the
-			// boards in front of the door's own prompt everywhere, and it never showed. Between the
-			// boards the trace goes through to the door.
-			HitVolume(B, FVector(X - 1.f, (i % 3 - 1) * 4.f, P.Z), FVector(4.f, P.Length, P.Height + 2.f), FRotator(0.f, 0.f, P.Roll));
+			// Between the boards the interaction trace goes through to the door behind them.
 			const float Reach = P.Length * 0.5f - 9.f;
 			const float R = FMath::DegreesToRadians(P.Roll);
 			for (const float Side : { -1.f, 1.f })
@@ -1852,23 +1864,18 @@ void AGrandStaircaseActor::BuildClues()
 
 	// The cases, by the door, ready to go. vintage_suitcase is two cases standing side by side along
 	// its local X, with their faces on Y; yaw 90 stands them along the east wall.
-	if (AClueActor* Cases = SpawnClue(FVector(EastX() - 22.f, Setup.CenterY + 170.f, GroundZ), FRotator::ZeroRotator,
-		TEXT("Examine the cases"),
-		TEXT("Two cases, packed, strapped and set down by the door, ready to go. The dust on the handles says nobody ever came down for them.")))
+	if (AClueActor* Cases = SpawnClue(FVector(EastX() - 22.f, Setup.CenterY + 170.f, GroundZ), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Cases, Cases->GetRootScene());
 		if (UStaticMeshComponent* Mesh = B.PropSeated(RoomProps::Suitcases, FVector::ZeroVector, FRotator(0.f, 94.f, 0.f), 0.f))
 		{
 			FRoomShapes::TintSlots(Mesh, FLinearColor(0.52f, 0.48f, 0.42f));
 		}
-		HitVolume(B, FVector(0.f, 0.f, 28.f), FVector(26.f, 160.f, 56.f));
 	}
 
 	// The umbrella stand, on the other side of the door: iron, rusted through at the foot, three
 	// black umbrellas and one small yellow one.
-	if (AClueActor* Stand = SpawnClue(FVector(EastX() - 26.f, Setup.CenterY - 130.f, GroundZ), FRotator::ZeroRotator,
-		TEXT("Examine the umbrellas"),
-		TEXT("Three black umbrellas, and a small yellow one with a duck's head for a handle. All of them bone dry, on a night like this.")))
+	if (AClueActor* Stand = SpawnClue(FVector(EastX() - 26.f, Setup.CenterY - 130.f, GroundZ), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Stand, Stand->GetRootScene());
 		// The stand: a drip tray on the floor, six uprights, and two open hoops — hoops, not discs,
@@ -1966,15 +1973,12 @@ void AGrandStaircaseActor::BuildClues()
 				Previous = Next;
 			}
 		}
-		HitVolume(B, FVector(0.f, 0.f, 55.f), FVector(36.f, 36.f, 110.f));
 	}
 
 	// The family, on the landing wall beside the window: gone brown under its varnish, and the
 	// man's face scraped off it. The frame is the gilt one; its canvas is darkened past reading.
 	const float PortraitY = PortraitCenterY();
-	if (AClueActor* Portrait = SpawnClue(FVector(WestX() + 2.f, PortraitY, LandingZ + 190.f), FRotator::ZeroRotator,
-		TEXT("Examine the portrait"),
-		TEXT("A street by a canal, gone brown under the varnish. Three small figures at the water's edge — a man, a woman, a little girl. The man's face has been scraped away to the canvas.")))
+	if (AClueActor* Portrait = SpawnClue(FVector(WestX() + 2.f, PortraitY, LandingZ + 190.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Portrait, Portrait->GetRootScene());
 		// fancy_picture_frame_02 is 66 x 9 x 77 with its back at local Y = 0 and its face towards
@@ -1988,15 +1992,12 @@ void AGrandStaircaseActor::BuildClues()
 		B.Stain(RoomSurfaces::Substrate, FVector(12.f, 4.f, -18.f), FRotator(0.f, 180.f, 0.f), FVector2D(6.f, 8.f), FLinearColor(0.34f, 0.30f, 0.24f), 0.95f, 0.8f);
 		B.Crack(FVector(12.f, 4.f, -18.f), FRotator(0.f, 180.f, 0.f), FVector2D(9.f, 11.f), 1.f, 46.f);
 		B.Sph(FVector(1.f, 0.f, 72.f), 1.8f, MatIron);
-		HitVolume(B, FVector(6.f, 0.f, 0.f), FVector(4.f, 100.f, 118.f));
 	}
 
 	// The long-case clock, face down in the south alcove. vintage_grandfather_clock_01 faces its
 	// local +Y; roll 90 puts that face on the tiles, and yaw lays it along the alcove.
 	const FVector ClockAt((FlightEastX() + LandingEdgeX()) * 0.5f, (SouthInnerY() + CentralSouthY()) * 0.5f, GroundZ);
-	if (AClueActor* Clock = SpawnClue(ClockAt, FRotator::ZeroRotator,
-		TEXT("Examine the clock"),
-		TEXT("It came down on its face, and nobody stood it up again. The pendulum is under it, and the glass of the dial is in pieces on the tiles.")))
+	if (AClueActor* Clock = SpawnClue(ClockAt, FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Clock, Clock->GetRootScene());
 		if (UStaticMeshComponent* Mesh = B.PropSeated(RoomProps::LongcaseClock, FVector::ZeroVector, FRotator(0.f, -86.f, 90.f), 0.f))
@@ -2010,19 +2011,15 @@ void AGrandStaircaseActor::BuildClues()
 		}
 		B.Cyl(FVector(-40.f, 46.f, 1.2f), FRotator(90.f, 10.f, 0.f), FVector(1.2f, 1.2f, 80.f), MatBrass, false);
 		B.Cyl(FVector(-82.f, 52.f, 1.6f), FRotator::ZeroRotator, FVector(17.f, 17.f, 2.4f), MatBrass, false);
-		HitVolume(B, FVector(0.f, 0.f, 22.f), FVector(230.f, 70.f, 44.f));
 	}
 
 	// A card on the central flight, trodden flat.
 	const int32 CardStep = 6;
 	if (AClueActor* Card = SpawnClue(FVector(FlightEastX() - Going * (CardStep + 0.5f), Setup.CenterY + 70.f, GroundZ + (CardStep + 1) * Rise + 1.2f),
-		FRotator(0.f, 20.f, 0.f),
-		TEXT("Examine the card"),
-		TEXT("A birthday card, trodden into the stair. Inside, in crayon, a house with too many windows and three people holding hands in front of it. \"Me, Mummy and Daddy.\"")))
+		FRotator(0.f, 20.f, 0.f)))
 	{
 		FRoomBuilder B(Card, Card->GetRootScene());
 		B.Box(FVector(0.f, 0.f, 0.2f), FRotator::ZeroRotator, FVector(15.f, 21.f, 0.4f), MatPaper, false);
 		B.Box(FVector(0.4f, 10.5f, 0.6f), FRotator(0.f, 0.f, 8.f), FVector(15.f, 21.f, 0.3f), MatPaperDamp, false);
-		HitVolume(B, FVector(0.f, 4.f, 2.f), FVector(22.f, 34.f, 4.f));
 	}
 }

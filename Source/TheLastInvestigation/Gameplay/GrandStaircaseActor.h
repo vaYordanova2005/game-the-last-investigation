@@ -13,6 +13,7 @@ class AStormWindowActor;
 class AHallDoorActor;
 class AClueActor;
 class ALivingRoomActor;
+class AKitchenActor;
 
 /** Where the stair hall meets the corridor, handed over by the corridor that spawns it. */
 struct FStairHallSetup
@@ -127,7 +128,7 @@ private:
 	float CentralSouthY() const { return Setup.CenterY + CentralWidth * 0.5f; }
 	float ChandelierX() const { return (GalleryEdgeX() + FlightEastX()) * 0.5f; }
 	/**
-	 * The dining room and parlour doors, facing each other across the entrance hall: under the side
+	 * The kitchen door and the way into the living room, facing each other across the entrance hall: under the side
 	 * galleries, ninety in from the gallery's edge, so they stay clear of the return flights and
 	 * the end walls under them whatever the hall's size.
 	 */
@@ -136,7 +137,7 @@ private:
 	static constexpr float SideDoorHalf = 50.f;
 	static constexpr float SideDoorHeight = 212.f;
 	/**
-	 * The way into the living room, opposite the dining room door: no door in it, a cased opening
+	 * The way into the living room, opposite the kitchen door: no door in it, a cased opening
 	 * the width of a pair of doors, so the room opens straight off the hall.
 	 */
 	static constexpr float ParlourHalf = 100.f;
@@ -162,6 +163,8 @@ private:
 	void SpawnWindow();
 	/** The living room behind the parlour door (ALivingRoomActor), in the same frame as the hall. */
 	void SpawnLivingRoom();
+	/** The kitchen behind the door in the north wall (AKitchenActor), in the same frame as the hall. */
+	void SpawnKitchen();
 
 	/** One flight: treads, risers, runner, stringers, and the invisible ramp that is walked on. */
 	void BuildFlight(FRoomBuilder& Build, const FVector& FootNosing, const FVector& Up, float Width, int32 Seed, bool bRunner);
@@ -186,7 +189,7 @@ private:
 	FVector WallNormal(EWall Wall) const;
 	FVector WallPoint(EWall Wall, float U, float Z, float Proud) const;
 
-	AClueActor* SpawnClue(const FVector& LocalLocation, const FRotator& Rotation, const FString& ShortName, const FString& Description);
+	AClueActor* SpawnClue(const FVector& LocalLocation, const FRotator& Rotation);
 
 	UPROPERTY(VisibleAnywhere, Category = "Stair Hall")
 	TObjectPtr<USceneComponent> HallRoot;
@@ -208,6 +211,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ALivingRoomActor> LivingRoom;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AKitchenActor> Kitchen;
 
 	/** The chandelier hangs from this, and this is what the wind moves. */
 	UPROPERTY(Transient)

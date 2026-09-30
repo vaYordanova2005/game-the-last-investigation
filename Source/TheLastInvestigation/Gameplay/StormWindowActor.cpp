@@ -443,8 +443,15 @@ void AStormWindowActor::BuildWindow()
 
 		// The inner sill, projecting into the room and tilted a degree to shed water it has not had
 		// to shed in years. Deep enough to stand things on: it is where the key sits.
-		Build.Box(FVector(InnerX - 10.f, 0.f, Setup.SillHeight - 3.f), FRotator(-1.5f, 0.f, 0.f), FVector(Setup.WallThickness + 26.f, Setup.OpeningWidth + 24.f, 6.f), PaintMat);
-		Build.Box(FVector(InnerX - 20.f, 0.f, Setup.SillHeight - 9.f), FRotator::ZeroRotator, FVector(4.f, Setup.OpeningWidth + 18.f, 7.f), PaintWornMat, /*bBlockingCollision*/ false);
+		// Its back edge is 3 past the wall's middle, under the sash; its front is InnerSillProud
+		// into the room (the default is the 33 it always had).
+		const float SillBack = 3.f;
+		const float SillFront = InnerX - Setup.InnerSillProud;
+		Build.Box(FVector((SillBack + SillFront) * 0.5f, 0.f, Setup.SillHeight - 3.f), FRotator(-1.5f, 0.f, 0.f), FVector(SillBack - SillFront, Setup.OpeningWidth + 24.f, 6.f), PaintMat);
+		if (Setup.InnerSillProud >= 20.f)
+		{
+			Build.Box(FVector(InnerX - 20.f, 0.f, Setup.SillHeight - 9.f), FRotator::ZeroRotator, FVector(4.f, Setup.OpeningWidth + 18.f, 7.f), PaintWornMat, /*bBlockingCollision*/ false);
+		}
 
 		// Sash: the perimeter, then the muntin grid that divides it into small panes. The grid is the
 		// point of the whole assembly — it is the pattern the storm prints across the far wall.

@@ -40,9 +40,9 @@ struct FRoomDressingSetup
  * have different lifetimes — the shell is fixed geometry from the constructor, this is a seeded
  * random layout built at BeginPlay. The seed is fixed, so it is the same room every time.
  *
- * The clue objects are AClueActors, not props: examining them is how the detective reads the
- * house. Nothing is highlighted — they are placed to be found, by sitting where a searching
- * lantern beam naturally sweeps.
+ * The objects that will be clues are AClueActors rather than loose props, so that where the clues
+ * go stays marked while they carry no text (see AClueActor). Nothing is highlighted — they are
+ * placed to be found, by sitting where a searching lantern beam naturally sweeps.
  */
 UCLASS()
 class ARoomDressingActor : public AActor
@@ -91,7 +91,7 @@ private:
 	void BuildClues();
 
 	/** Spawns a clue actor and returns it ready for its body to be built under GetRootScene(). */
-	AClueActor* SpawnClue(const FVector& LocalLocation, const FRotator& Rotation, const FString& ShortName, const FString& Description);
+	AClueActor* SpawnClue(const FVector& LocalLocation, const FRotator& Rotation);
 
 	/** True if a point is far enough from the door, the window and the player's spawn to drop a prop on. */
 	bool IsFloorSpotClear(const FVector2D& Point, float Radius) const;

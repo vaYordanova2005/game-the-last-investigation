@@ -1480,7 +1480,7 @@ void ALivingRoomActor::SpawnWindows()
 	}
 }
 
-AClueActor* ALivingRoomActor::SpawnClue(const FVector& LocalLocation, const FRotator& Rotation, const FString& ShortName, const FString& Description)
+AClueActor* ALivingRoomActor::SpawnClue(const FVector& LocalLocation, const FRotator& Rotation)
 {
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
@@ -1488,7 +1488,6 @@ AClueActor* ALivingRoomActor::SpawnClue(const FVector& LocalLocation, const FRot
 	AClueActor* Clue = GetWorld()->SpawnActor<AClueActor>(AClueActor::StaticClass(), GetActorTransform().TransformPosition(LocalLocation), Rotation, SpawnParams);
 	if (Clue)
 	{
-		Clue->Configure(FText::FromString(ShortName), FText::FromString(Description));
 		Clues.Add(Clue);
 	}
 	return Clue;
@@ -1496,33 +1495,19 @@ AClueActor* ALivingRoomActor::SpawnClue(const FVector& LocalLocation, const FRot
 
 void ALivingRoomActor::BuildClues()
 {
-	auto HitVolume = [&](FRoomBuilder& B, const FVector& At, const FVector& Size, const FRotator& Rotation = FRotator::ZeroRotator)
-	{
-		if (UStaticMeshComponent* Hit = B.Box(At, Rotation, Size, MatVoid))
-		{
-			Hit->SetHiddenInGame(true);
-			Hit->SetCastShadow(false);
-			Hit->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-		}
-	};
 	const float F = FloorZ();
 	const float H = HearthY();
 
 	// The television. The finale is when it speaks; until then, the one thing it says is that
 	// somebody has been keeping it clean.
-	if (AClueActor* Set = SpawnClue(FVector(BreastX() + 9.f, H, F + 235.f), FRotator::ZeroRotator,
-		TEXT("Examine the television"),
-		TEXT("A flat screen, the newest thing in the house by forty years. It is switched off at the wall — and its glass is the one surface in this room with no dust on it.")))
+	if (AClueActor* Set = SpawnClue(FVector(BreastX() + 9.f, H, F + 235.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Set, Set->GetRootScene());
-		HitVolume(B, FVector::ZeroVector, FVector(4.f, 170.f, 98.f));
 	}
 
 	// The photographs on the commode: every one of them a happy day.
 	const FVector Commode = CommodeSeat();
-	if (AClueActor* Photos = SpawnClue(FVector(Commode.X, Commode.Y, F + CommodeHeight), FRotator::ZeroRotator,
-		TEXT("Examine the photographs"),
-		TEXT("A wedding. A baby asleep on a rug. A little girl on a man's shoulders at the seaside, both of them laughing. Every one of them is a happy day.")))
+	if (AClueActor* Photos = SpawnClue(FVector(Commode.X, Commode.Y, F + CommodeHeight), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Photos, Photos->GetRootScene());
 		// Both frames face their local +Y, which from the north wall is the room. Slots, read off
@@ -1556,16 +1541,13 @@ void ALivingRoomActor::BuildClues()
 			Frame->SetMaterial(0, PhotoGlass);
 			FRoomShapes::TintSlots(Frame, FLinearColor(0.35f, 0.32f, 0.30f), 2);
 		}
-		HitVolume(B, FVector(0.f, 0.f, 14.f), FVector(60.f, 30.f, 30.f));
 	}
 
 	// The sheet music on the piano's desk.
 	{
 		const FRotator Turn(0.f, PianoYaw, 0.f);
 		const FVector Desk = PianoOrigin() + Turn.RotateVector(PianoDeskCentre());
-		if (AClueActor* Music = SpawnClue(Desk, Turn,
-			TEXT("Examine the sheet music"),
-			TEXT("A child's piece, in big round notes. Over every one of them the fingering is pencilled in, in an adult's careful hand.")))
+		if (AClueActor* Music = SpawnClue(Desk, Turn))
 		{
 			FRoomBuilder B(Music, Music->GetRootScene());
 			// Open like a book on the desk: two pages, each turned a few degrees off the desk's face
@@ -1577,14 +1559,11 @@ void ALivingRoomActor::BuildClues()
 				B.Box(Front * 1.1f + Lean.RotateVector(FVector(0.f, S * 11.2f, 1.f)), Lean + FRotator(0.f, S * 4.f, 0.f), FVector(0.15f, 22.f, 29.f),
 					S < 0.f ? MatPaper.Get() : MatPaperDamp.Get(), false);
 			}
-			HitVolume(B, Front * 2.f, FVector(4.f, 48.f, 32.f), Lean);
 		}
 	}
 
 	// The mantel clock, face down on the hearth where it fell.
-	if (AClueActor* Clock = SpawnClue(FVector(BreastX() + 36.f, H + 34.f, F + 4.f), FRotator::ZeroRotator,
-		TEXT("Examine the clock"),
-		TEXT("The mantel clock, face down on the hearth where it fell. Whatever time it stopped at, it is keeping to itself.")))
+	if (AClueActor* Clock = SpawnClue(FVector(BreastX() + 36.f, H + 34.f, F + 4.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Clock, Clock->GetRootScene());
 		// mantel_clock_01 faces its local +Y; roll 90 puts that face on the marble.
@@ -1599,14 +1578,11 @@ void ALivingRoomActor::BuildClues()
 			B.Box(FVector(Shards.FRandRange(-26.f, 26.f), Shards.FRandRange(-26.f, 26.f), 0.3f), FRotator(0.f, Shards.FRandRange(0.f, 360.f), 0.f),
 				FVector(Shards.FRandRange(1.5f, 5.f), Shards.FRandRange(1.f, 3.5f), 0.4f), MatGlass, false);
 		}
-		HitVolume(B, FVector(0.f, 0.f, 7.f), FVector(40.f, 40.f, 14.f));
 	}
 
 	// The keys, on the lamp table beside the lamp.
 	const FVector LampTable = LampTableSeat();
-	if (AClueActor* Keys = SpawnClue(LampTable + FVector(14.f, 14.f, LampTableHeight), FRotator(0.f, 30.f, 0.f),
-		TEXT("Examine the keys"),
-		TEXT("A ring of keys, dropped beside the lamp: the front door, something small and brass, and a car key, its rubber worn through where a thumb pressed it.")))
+	if (AClueActor* Keys = SpawnClue(LampTable + FVector(14.f, 14.f, LampTableHeight), FRotator(0.f, 30.f, 0.f)))
 	{
 		FRoomBuilder B(Keys, Keys->GetRootScene());
 		for (int32 i = 0; i < 12; ++i)
@@ -1626,13 +1602,10 @@ void ALivingRoomActor::BuildClues()
 		// The car key: a black plastic head and a steel blade.
 		B.Box(FVector(-3.4f, -2.6f, 0.6f), FRotator(0.f, -35.f, 0.f), FVector(3.4f, 2.2f, 1.1f), MatPlastic, false);
 		B.Box(FVector(-6.4f, -4.7f, 0.35f), FRotator(0.f, -35.f, 0.f), FVector(4.f, 0.8f, 0.3f), MatIron, false);
-		HitVolume(B, FVector(0.f, 0.f, 1.f), FVector(20.f, 18.f, 4.f));
 	}
 
 	// The newspapers, stacked on the floor at the end of the small sofa.
-	if (AClueActor* Papers = SpawnClue(FVector(LoungeX() + 165.f, H + 160.f, F), FRotator(0.f, 8.f, 0.f),
-		TEXT("Examine the newspapers"),
-		TEXT("Weeks of newspapers, never unfolded. The top one has had a column cut out of its front page — neatly, with scissors.")))
+	if (AClueActor* Papers = SpawnClue(FVector(LoungeX() + 165.f, H + 160.f, F), FRotator(0.f, 8.f, 0.f)))
 	{
 		FRoomBuilder B(Papers, Papers->GetRootScene());
 		FRandomStream Stack(1955);
@@ -1648,6 +1621,5 @@ void ALivingRoomActor::BuildClues()
 		B.Box(FVector(0.f, 0.f, Top * 0.5f), FRotator::ZeroRotator, FVector(0.4f, 40.6f, Top + 0.4f), MatOakDark, false);
 		// The hole in the front page shows the page under it, darker.
 		B.Mark(FVector(7.f, -6.f, Top - 0.55f), FRotator::ZeroRotator, FVector2D(6.f, 14.f), MatPaperDamp);
-		HitVolume(B, FVector(0.f, 0.f, Top * 0.5f), FVector(34.f, 44.f, Top + 2.f));
 	}
 }
