@@ -1760,6 +1760,9 @@ void AKitchenActor::SpawnWindows()
 		WindowSetup.SillHeight = WindowSill;
 		WindowSetup.TopHeight = WindowTop;
 		WindowSetup.WallThickness = Setup.WallThickness;
+		// The sill board in front is this room's own (BuildWallFinish); the window's deep one hung
+		// over the worktop and the sink, and the taps stood up through it.
+		WindowSetup.InnerSillProud = 0.f;
 		WindowSetup.bOwnView = (i == 0);
 		WindowSetup.PortalScale = 0.45f;
 		// Every window its own seed, and none shared with another room's.
