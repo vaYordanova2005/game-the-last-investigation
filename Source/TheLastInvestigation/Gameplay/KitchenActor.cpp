@@ -1,4 +1,4 @@
-#include "KitchenActor.h"
+﻿#include "KitchenActor.h"
 #include "RoomBuildLibrary.h"
 #include "ClueActor.h"
 #include "StormWindowActor.h"
@@ -497,17 +497,23 @@ void AKitchenActor::BuildWallFinish(FRoomBuilder& Build)
 			}
 		}
 
-		// Wallpaper over the rail on the two walls with nothing high against them, and only where it
-		// has held: one run on each, never the whole wall (the bedroom's 09-18 note). Kitchens were
-		// papered last and stripped first; what is left is the odd width by the door.
+		// Wallpaper over the rail on the south wall and on the east wall's one bare stretch, between
+		// the dresser and the larder, and only where it has held: one run on each, never the whole
+		// wall (the bedroom's 09-18 note). Kitchens were papered last and stripped first; what is
+		// left is the odd width by the door.
 		if (R.Wall == EWall::South || R.Wall == EWall::East)
 		{
 			const float StripWidth = 53.f;
-			const float RunStart = R.Wall == EWall::South ? Setup.DoorX + 90.f : SouthY() - 20.f - 4.f * StripWidth;
+			// On the east wall the run starts clear of the dresser's cornice (it overhangs the carcass
+			// by 6) and stops short of the larder: paper laid behind either sat a millimetre off its
+			// back and flickered through it.
+			const bool bEast = R.Wall == EWall::East;
+			const float RunStart = bEast ? DresserY() + DresserWidth * 0.5f + 12.f : Setup.DoorX + 90.f;
+			const float RunEnd = bEast ? LarderY() - LarderWidth * 0.5f - 6.f : R.U1 - 5.f;
 			for (int32 Strip = 0; Strip < 4; ++Strip)
 			{
 				const float A = RunStart + Strip * StripWidth;
-				if (A + StripWidth > R.U1 - 5.f)
+				if (A + StripWidth > RunEnd)
 				{
 					break;
 				}
@@ -524,7 +530,9 @@ void AKitchenActor::BuildWallFinish(FRoomBuilder& Build)
 		}
 	}
 
-	// The door from the hall, cased on this side.
+	// The door from the hall, cased on this side. Nothing is thrown on the floor it swings over:
+	// it opens to 100 degrees, a leaf's width into the room.
+	Footprints.Add(FBox2D(FVector2D(Setup.DoorX - Setup.DoorHalf - 20.f, SouthY() - Setup.DoorHalf * 2.f - 20.f), FVector2D(Setup.DoorX + Setup.DoorHalf + 20.f, SouthY())));
 	{
 		const float U = Setup.DoorX;
 		const float H = Z0 + Setup.DoorHeight;
@@ -864,7 +872,9 @@ void AKitchenActor::BuildCounters(FRoomBuilder& Build)
 		WallBox(Build, EWall::North, RackU, Z + 1.f, RackW - 6.f, 2.f, 24.f, 0.f, MatPaint);
 		// A rail across the front to keep the plates in.
 		WallBox(Build, EWall::North, RackU, Z + 7.f, RackW - 6.f, 1.4f, 1.4f, 22.f, MatPaint);
-		const int32 Plates = 8 - Row * 2;
+		// Few enough that no two plates meet and the end ones stand clear of the sides: 26cm plates
+		// at 20cm centres cut through each other.
+		const int32 Plates = 6 - Row;
 		for (int32 p = 0; p < Plates; ++p)
 		{
 			// Gaps where a plate has gone, and plates of two sizes.
@@ -873,7 +883,7 @@ void AKitchenActor::BuildCounters(FRoomBuilder& Build)
 				continue;
 			}
 			const float Dia = Row == 0 ? 26.f : (Row == 1 ? 22.f : 18.f);
-			const float U = RackU - RackW * 0.5f + 14.f + p * (RackW - 28.f) / FMath::Max(1, Plates - 1);
+			const float U = RackU - RackW * 0.5f + 18.f + p * (RackW - 36.f) / FMath::Max(1, Plates - 1);
 			StandingPlate(Build, WallPoint(EWall::North, U, Z + 2.f, 12.f), FVector(0.f, 1.f, 0.f), Dia, 14.f + (p % 3) * 2.f, p % 4 == 0 ? MatChinaDusty.Get() : MatChina.Get(),
 				(p + Row) % 3 == 1 ? nullptr : MatChinaBand.Get());
 		}
@@ -901,14 +911,15 @@ void AKitchenActor::BuildCounters(FRoomBuilder& Build)
 		// a finger's width, so it hangs a degree out of its frame.
 		CupboardDoor(Build, WallPoint(EWall::North, U1 - 2.f, (Z0 + Z1) * 0.5f - 1.5f, Depth), FVector(-1.f, 0.f, 0.f), FVector(0.f, 1.f, 0.f), U1 - U0 - 4.f, Z1 - Z0 - 4.f, 78.f);
 		const float Mid = (Z0 + Z1) * 0.5f - 1.f;
-		for (int32 i = 0; i < 4; ++i)
-		{
-			Jar(Build, WallPoint(EWall::North, U0 + 22.f + i * 26.f, Z0 + 2.f, Depth * 0.5f), 10.f, 15.f + (i % 2) * 4.f, i == 2 ? 0.f : 0.25f + i * 0.15f, i % 2 ? MatPreserve.Get() : MatRot.Get());
-		}
+		// The cupboard is 65 wide inside its sides: three jars and two cups are what it holds.
 		for (int32 i = 0; i < 3; ++i)
 		{
+			Jar(Build, WallPoint(EWall::North, U0 + 13.f + i * 19.5f, Z0 + 2.f, Depth * 0.5f), 10.f, 15.f + (i % 2) * 4.f, i == 2 ? 0.f : 0.25f + i * 0.15f, i % 2 ? MatPreserve.Get() : MatRot.Get());
+		}
+		for (int32 i = 0; i < 2; ++i)
+		{
 			// Cups on the upper shelf, one on its side.
-			const FVector Cup = WallPoint(EWall::North, U0 + 30.f + i * 40.f, Mid + 0.8f, Depth * 0.5f);
+			const FVector Cup = WallPoint(EWall::North, U0 + 16.f + i * 28.f, Mid + 0.8f, Depth * 0.5f);
 			if (i == 1)
 			{
 				Build.Cyl(Cup + FVector(0.f, 0.f, 4.f), FRotator(0.f, 0.f, 90.f), FVector(8.f, 8.f, 7.f), MatChina, false);
@@ -999,13 +1010,14 @@ void AKitchenActor::BuildSink(FRoomBuilder& Build)
 	// The taps: two brass pillars off the supply pipes, rising behind the sink.
 	for (const float S : { -1.f, 1.f })
 	{
-		const FVector Tap(U + S * 16.f, NorthY() + 4.f, Rim);
+		// On the back of the rim, clear of the sill board (0..6 off the wall).
+		const FVector Tap(U + S * 16.f, NorthY() + 8.f, Rim);
 		Build.Cyl(Tap + FVector(0.f, 0.f, 9.f), FRotator::ZeroRotator, FVector(3.2f, 3.2f, 18.f), MatBrass, false);
 		KitchenRod(Build, Tap + FVector(0.f, 0.f, 16.f), Tap + FVector(0.f, 14.f, 12.f), 2.4f, MatBrass);
 		Build.Box(Tap + FVector(0.f, 0.f, 20.f), FRotator(0.f, S * 20.f, 0.f), FVector(9.f, 1.4f, 1.4f), MatBrass, false);
 		Build.Box(Tap + FVector(0.f, 0.f, 20.f), FRotator(0.f, S * 20.f + 90.f, 0.f), FVector(9.f, 1.4f, 1.4f), MatBrass, false);
 		// The supply pipe, down the wall under the sink and into the floor.
-		KitchenRod(Build, FVector(Tap.X, NorthY() + 4.f, F), FVector(Tap.X, NorthY() + 4.f, Rim), 2.6f, MatIron);
+		KitchenRod(Build, FVector(Tap.X, Tap.Y, F), FVector(Tap.X, Tap.Y, Rim), 2.6f, MatIron);
 	}
 	// The waste: out of the bottom of the sink, down, a trap — and the lower pipe come away from it
 	// and lying on the tiles in the stain it left.
@@ -1171,7 +1183,7 @@ void AKitchenActor::BuildLarder(FRoomBuilder& Build)
 	// a crock of flour gone solid, a sack slumped on the floor of it.
 	const float F = FloorZ();
 	const float Y = LarderY();
-	const float W = 110.f;
+	const float W = LarderWidth;
 	const float Depth = 55.f;
 	const float H = 232.f;
 	const float Y0 = Y - W * 0.5f;
@@ -1428,19 +1440,22 @@ void AKitchenActor::BuildPanRack(FRoomBuilder& Build)
 	// An iron rack on chains from the beams over the table, hung with what would not fit on the
 	// range's rail: the big pans, a colander, a fish kettle. The draught through the broken glass
 	// sets it swinging, a little, and the pans knock together without a sound.
+	// Centred on the room across, so both chains come down from a beam: the beams stand at 120
+	// centres from the west wall, and MidX() +-60 is the pair either side of the middle.
 	const FVector C = TableCentre();
-	RackPivot = KitchenPivot(this, RoomRoot, FVector(C.X, C.Y, CeilingZ() - 22.f), FRotator::ZeroRotator, TEXT("PanRack"));
+	RackPivot = KitchenPivot(this, RoomRoot, FVector(MidX(), C.Y, CeilingZ() - 22.f), FRotator::ZeroRotator, TEXT("PanRack"));
 	FRoomBuilder R(this, RackPivot);
 	const float Drop = 120.f;
 	const float HalfL = 95.f;
 	const float HalfW = 24.f;
+	const float ChainX = 60.f;
 
 	for (const float SX : { -1.f, 1.f })
 	{
 		for (const float SY : { -1.f, 1.f })
 		{
-			const FVector Top(SX * (HalfL - 10.f), SY * 4.f, 0.f);
-			const FVector Bottom(SX * (HalfL - 10.f), SY * HalfW, -Drop);
+			const FVector Top(SX * ChainX, SY * 4.f, 0.f);
+			const FVector Bottom(SX * ChainX, SY * HalfW, -Drop);
 			const int32 Links = FMath::FloorToInt(Drop / 5.f);
 			for (int32 l = 0; l < Links; ++l)
 			{
@@ -1448,7 +1463,7 @@ void AKitchenActor::BuildPanRack(FRoomBuilder& Build)
 				R.Box(At, FRotator(0.f, (l % 2) * 90.f, 0.f), FVector(0.8f, 2.6f, 5.6f), MatIron, false);
 			}
 		}
-		R.Box(FVector(SX * (HalfL - 10.f), 0.f, 1.5f), FRotator::ZeroRotator, FVector(4.f, 12.f, 3.f), MatIron, false);
+		R.Box(FVector(SX * ChainX, 0.f, 1.5f), FRotator::ZeroRotator, FVector(4.f, 12.f, 3.f), MatIron, false);
 	}
 	for (const float SY : { -1.f, 1.f })
 	{
@@ -1644,7 +1659,8 @@ void AKitchenActor::BuildDebris(FRoomBuilder& Build)
 
 	// A plate that went off the dresser's rack — the gap it left is on the middle shelf — in pieces
 	// on the tiles in front of it.
-	const FVector Smash(EastX() - DresserDepth - 44.f, DresserY() - 24.f, F);
+	// The gap is the seventh of ten plates on the middle shelf: 43 south of the dresser's middle.
+	const FVector Smash(EastX() - DresserDepth - 44.f, DresserY() - DresserWidth * 0.5f + 20.f + 6.f * (DresserWidth - 40.f) / 9.f, F);
 	FRandomStream Pieces(4411);
 	for (int32 i = 0; i < 9; ++i)
 	{
@@ -1859,7 +1875,7 @@ void AKitchenActor::BuildClues()
 	// The calendar and the grocery list, on the wall over the south worktop.
 	const float CalU = WestX() + 150.f;
 	const float CalZ = F + 170.f;
-	if (AClueActor* Calendar = SpawnClue(WallPoint(EWall::South, CalU, CalZ, 0.4f), FRotator::ZeroRotator,
+	if (AClueActor* Calendar = SpawnClue(WallPoint(EWall::South, CalU, CalZ, 0.8f), FRotator::ZeroRotator,
 		TEXT("Examine the calendar"),
 		TEXT("A calendar for a year a long way gone, still on the same month. One square is ringed in red, with a cake drawn in it and a 7. Nothing is written on any day after the one before it.")))
 	{
@@ -1869,38 +1885,51 @@ void AKitchenActor::BuildClues()
 		B.Mark(FVector(0.f, 0.f, 0.f), Flat, FVector2D(32.f, 46.f), MatPaper);
 		// The picture at the top, a faded landscape gone to one brown.
 		B.Mark(FVector(0.f, -0.1f, 12.f), Flat, FVector2D(28.f, 18.f), MatPaperDamp);
-		// The grid of days: six rules across, six down.
+		// The printing is flat strokes on the paper, not Marks (the recipe book's 09-29 note): a
+		// Sheet in the paper's plane, whose local Y runs up or down the wall by UpZ.
+		const FTransform Sheet(Flat, FVector(0.f, -0.25f, 0.f));
+		const float UpZ = Sheet.GetUnitAxis(EAxis::Y).Z;
+		auto Ink = [&](float X, float Z, float W, float H, UMaterialInterface* Mat)
+		{
+			Word(B, Sheet, X, Z * UpZ, W, H, Mat);
+		};
+		// The grid of days: six rules across, eight down.
 		for (int32 i = 0; i < 6; ++i)
 		{
-			B.Mark(FVector(0.f, -0.12f, 1.5f - i * 4.f), Flat, FVector2D(28.f, 0.25f), MatInk);
+			Ink(0.f, 1.5f - i * 4.f, 28.f, 0.25f, MatInk);
 		}
 		for (int32 i = 0; i < 8; ++i)
 		{
-			B.Mark(FVector(-14.f + i * 4.f, -0.12f, -8.5f), Flat, FVector2D(0.25f, 20.f), MatInk);
+			Ink(-14.f + i * 4.f, -8.5f, 0.25f, 20.f, MatInk);
 		}
 		// The ringed day: a loop of red around one square, drawn in short strokes.
-		const FVector Day(4.f, -0.14f, -4.5f);
 		for (int32 i = 0; i < 12; ++i)
 		{
 			const float A = 2.f * PI * i / 12.f;
-			B.Mark(Day + FVector(FMath::Cos(A) * 2.6f, 0.f, FMath::Sin(A) * 2.2f), Flat, FVector2D(1.4f, 0.4f), MatRedInk);
+			const FTransform Stroke(FRotator(0.f, 0.f, 0.f), FVector(4.f + FMath::Cos(A) * 2.6f, (-4.5f + FMath::Sin(A) * 2.2f) * UpZ, 0.f));
+			Word(B, FTransform(FRotator(0.f, FMath::RadiansToDegrees(A) * UpZ + 90.f, 0.f)) * Stroke * Sheet, 0.f, 0.f, 1.4f, 0.4f, MatRedInk);
 		}
 		B.Sph(FVector(0.f, -0.8f, 23.5f), 1.4f, MatIron);
+		// The pin through its bottom corner, which is what holds the list up under it.
+		B.Sph(FVector(14.f, -0.8f, -21.5f), 1.1f, MatBrass);
 		HitVolume(B, FVector(0.f, -1.f, 0.f), FVector(34.f, 2.f, 48.f));
 	}
-	if (AClueActor* List = SpawnClue(WallPoint(EWall::South, CalU + 36.f, CalZ + 6.f, 0.4f), FRotator::ZeroRotator,
+	if (AClueActor* List = SpawnClue(WallPoint(EWall::South, CalU + 13.f, CalZ - 29.f, 0.3f), FRotator::ZeroRotator,
 		TEXT("Examine the list"),
 		TEXT("A shopping list on the back of an envelope, pinned under the calendar's corner. Icing sugar. Candles (7). Sprinkles — the coloured ones. And last, underlined twice: coffee for him — the strong one.")))
 	{
 		FRoomBuilder B(List, List->GetRootScene());
-		B.Mark(FVector(0.f, 0.f, 0.f), FRotator(0.f, 4.f, -90.f), FVector2D(11.f, 17.f), MatPaperDamp);
-		for (int32 l = 0; l < 6; ++l)
-		{
-			B.Mark(FVector(-1.f + (l % 2) * 0.6f, -0.12f, 6.f - l * 2.3f), FRotator(0.f, 0.f, -90.f), FVector2D(5.f + (l % 3) * 1.4f, 0.3f), MatInk);
-		}
-		B.Mark(FVector(0.f, -0.14f, -7.4f), FRotator(0.f, 0.f, -90.f), FVector2D(6.f, 0.25f), MatInk);
-		B.Sph(FVector(0.f, -0.8f, 7.5f), 1.2f, MatBrass);
-		HitVolume(B, FVector(0.f, -1.f, 0.f), FVector(14.f, 2.f, 20.f));
+		// Behind the calendar (0.3 off the wall against its 0.8), its top two centimetres under the
+		// calendar's bottom corner and the pin there.
+		const FRotator Flat(0.f, 4.f, -90.f);
+		B.Mark(FVector(0.f, 0.f, 0.f), Flat, FVector2D(11.f, 17.f), MatPaperDamp);
+		const FTransform Sheet(Flat, FVector(0.f, -0.25f, 0.f));
+		const float UpZ = Sheet.GetUnitAxis(EAxis::Y).Z;
+		Writing(B, FTransform(FVector(0.f, -0.5f * UpZ, 0.f)) * Sheet, 8.f, 13.f, 6, 47);
+		// Underlined twice, under the last line.
+		Word(B, Sheet, 0.f, -7.4f * UpZ, 6.f, 0.25f, MatInk);
+		Word(B, Sheet, 0.3f, -7.9f * UpZ, 5.4f, 0.25f, MatInk);
+		HitVolume(B, FVector(0.f, -1.f, -2.f), FVector(14.f, 2.f, 16.f));
 	}
 
 	// The clock over the worktop, high on the south wall: a plain round kitchen clock, stopped, its
@@ -1946,7 +1975,9 @@ void AKitchenActor::BuildClues()
 			if (UStaticMeshComponent* Frame = B.PropSeated(RoomProps::PhotoFrame, FVector::ZeroVector, FRotator(0.f, -90.f + 12.f, 0.f), 22.f, false))
 			{
 				Frame->SetMaterial(0, PhotoGlass);
-				FRoomShapes::TintSlots(Frame, FLinearColor(0.15f, 0.12f, 0.085f), 1);
+				// The asset's artwork is a canal, not a woman and a girl at this table: the print is
+				// faded to one brown instead, and the clue text carries what it once showed.
+				Frame->SetMaterial(1, MatPaperDamp);
 				FRoomShapes::TintSlots(Frame, FLinearColor(0.35f, 0.32f, 0.30f), 2);
 			}
 			HitVolume(B, FVector(0.f, 0.f, 12.f), FVector(20.f, 26.f, 24.f));

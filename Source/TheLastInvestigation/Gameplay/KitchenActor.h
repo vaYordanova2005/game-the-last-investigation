@@ -106,7 +106,7 @@ public:
 private:
 	enum class EWall : uint8 { North, South, East, West };
 
-	/** A hole in one wall вЂ” or, if not through the wall, something standing against it that the finish goes round. */
+	/** A hole in one wall — or, if not through the wall, something standing against it that the finish goes round. */
 	struct FOpening
 	{
 		EWall Wall;
@@ -140,6 +140,7 @@ private:
 	float DresserY() const { return MidY() - 50.f; }
 	/** The larder cupboard in the south-east corner, past the end of the dresser. */
 	float LarderY() const { return SouthY() - 130.f; }
+	static constexpr float LarderWidth = 110.f;
 
 	void CacheMaterials(FRoomBuilder& Build);
 	void BuildShell(FRoomBuilder& Build);
@@ -170,7 +171,7 @@ private:
 	float WallFace(EWall Wall) const;
 	FVector WallNormal(EWall Wall) const;
 	FVector WallPoint(EWall Wall, float U, float Z, float Proud) const;
-	/** The yaw that turns a prop's local +Y вЂ” the way every Poly Haven prop here faces вЂ” out of a wall. */
+	/** The yaw that turns a prop's local +Y — the way every Poly Haven prop here faces — out of a wall. */
 	static float FacingYaw(EWall Wall);
 
 	/**
