@@ -306,13 +306,13 @@ FText ADoorActor::GetInteractPrompt(const AActor* Interactor) const
 {
 	if (bIsLocked)
 	{
-		// The same test Interact makes. Without it the player picks the key off the sill, walks
-		// back to the door and is told it is locked — the one moment in this room where the way
-		// out has been found, and nothing on screen admits it.
+		// The same test Interact makes, so the prompt appears the moment the key is in his pocket.
+		// Without the key the door says nothing: no words on the doors while the house is being
+		// designed.
 		const ADetectiveCharacter* Detective = Cast<const ADetectiveCharacter>(Interactor);
 		if (!Detective || !Detective->bHasRoomKey)
 		{
-			return FText::FromString(TEXT("Locked. The iron has rusted into the frame."));
+			return FText::GetEmpty();
 		}
 		return FText::FromString(TEXT("[E] Unlock the door"));
 	}

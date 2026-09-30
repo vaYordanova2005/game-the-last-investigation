@@ -222,6 +222,8 @@ void AHallDoorActor::Interact(AActor* /*Interactor*/)
 
 FText AHallDoorActor::GetInteractPrompt(const AActor* /*Interactor*/) const
 {
-	// Once it is open there is nothing more to be told about it: the room is the answer.
-	return bOpened ? FText::GetEmpty() : FText::FromString(Setup.Prompt);
+	// No words on the doors while the house is being designed: only a door that will open says
+	// so, and only until it has.
+	const bool bCanOpen = !bOpened && Setup.OpenYaw > Setup.AjarYaw;
+	return bCanOpen ? FText::FromString(TEXT("[E] Open door")) : FText::GetEmpty();
 }

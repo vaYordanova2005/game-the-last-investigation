@@ -1161,18 +1161,13 @@ void ACorridorActor::Tick(float DeltaTime)
 
 void ACorridorActor::SpawnDoors()
 {
-	struct FDoorSpec { bool bNorth; float U; float Ajar; FLinearColor Tint; bool bSix; bool bHole; const TCHAR* Prompt; };
+	struct FDoorSpec { bool bNorth; float U; float Ajar; FLinearColor Tint; bool bSix; bool bHole; };
 	const FDoorSpec Specs[] = {
-		{ true,  -690.f,  0.f,  FLinearColor(0.255f, 0.279f, 0.295f), true,  false,
-			TEXT("Locked. It gives a little at the top and not at all at the bottom, as if something heavy is standing against it.") },
-		{ true,  -1060.f, 24.f, FLinearColor(0.215f, 0.232f, 0.245f), false, false,
-			TEXT("It will not open any further. Something on the other side is holding it.") },
-		{ false, -40.f,   0.f,  FLinearColor(0.300f, 0.300f, 0.290f), false, true,
-			TEXT("Locked. The brass round the keyhole is scratched bright — somebody tried a great many keys in it.") },
-		{ false, -470.f,  17.f, FLinearColor(0.240f, 0.250f, 0.262f), true,  false,
-			TEXT("It moves a finger's width and stops. It is too dark in there to see what stops it.") },
-		{ false, -880.f,  0.f,  FLinearColor(0.330f, 0.330f, 0.320f), false, false,
-			TEXT("Locked. A small door, painted once; the handle is set lower than the others.") },
+		{ true,  -690.f,  0.f,  FLinearColor(0.255f, 0.279f, 0.295f), true,  false },
+		{ true,  -1060.f, 24.f, FLinearColor(0.215f, 0.232f, 0.245f), false, false },
+		{ false, -40.f,   0.f,  FLinearColor(0.300f, 0.300f, 0.290f), false, true },
+		{ false, -470.f,  17.f, FLinearColor(0.240f, 0.250f, 0.262f), true,  false },
+		{ false, -880.f,  0.f,  FLinearColor(0.330f, 0.330f, 0.320f), false, false },
 	};
 
 	int32 Seed = 4101;
@@ -1186,7 +1181,6 @@ void ACorridorActor::SpawnDoors()
 		DoorSetup.WoodTint = Spec.Tint;
 		DoorSetup.bSixPanel = Spec.bSix;
 		DoorSetup.bRotHole = Spec.bHole;
-		DoorSetup.Prompt = Spec.Prompt;
 
 		// Hinge on the corridor face, 2cm inside the opening so the reveal lining clears the leaf.
 		// Local +X is the corridor side: yaw 90 on the north wall, -90 on the south.

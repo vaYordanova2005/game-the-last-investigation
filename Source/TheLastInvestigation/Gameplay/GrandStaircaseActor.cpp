@@ -1714,16 +1714,14 @@ void AGrandStaircaseActor::Tick(float DeltaTime)
 
 void AGrandStaircaseActor::SpawnDoors()
 {
-	struct FDoorSpec { FVector Hinge; float Yaw; float Width; float Height; float Ajar; float Open; FLinearColor Tint; bool bSix; const TCHAR* Prompt; };
+	struct FDoorSpec { FVector Hinge; float Yaw; float Width; float Height; float Ajar; float Open; FLinearColor Tint; bool bSix; };
 	const float Half = SideDoorHalf;
 	const FDoorSpec Specs[] = {
 		// The front door. Local +X is the hall side: yaw 180 on the east wall.
-		{ FVector(EastX() + 2.6f, Setup.CenterY + 60.f - 2.f, GroundZ), 180.f, 116.f, 248.f, 0.f, 0.f, FLinearColor(0.20f, 0.20f, 0.20f), true,
-			TEXT("The front door. It does not so much as rattle — the boards across it are nailed deep into the frame.") },
+		{ FVector(EastX() + 2.6f, Setup.CenterY + 60.f - 2.f, GroundZ), 180.f, 116.f, 248.f, 0.f, 0.f, FLinearColor(0.20f, 0.20f, 0.20f), true },
 		// The kitchen: swollen in its frame and standing a hand's width open, and it goes the rest of
 		// the way when pushed.
-		{ FVector(SideDoorX() + Half - 2.f, NorthY() - 2.6f, GroundZ), 90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 14.f, 100.f, FLinearColor(0.26f, 0.27f, 0.28f), true,
-			TEXT("It has swollen in its frame and stands a hand's width open. Beyond it, a smell of old damp — and, very faintly, of something that was baking.") },
+		{ FVector(SideDoorX() + Half - 2.f, NorthY() - 2.6f, GroundZ), 90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 14.f, 100.f, FLinearColor(0.26f, 0.27f, 0.28f), true },
 	};
 
 	int32 Seed = 5101;
@@ -1737,7 +1735,6 @@ void AGrandStaircaseActor::SpawnDoors()
 		DoorSetup.Seed = Seed++;
 		DoorSetup.WoodTint = Spec.Tint;
 		DoorSetup.bSixPanel = Spec.bSix;
-		DoorSetup.Prompt = Spec.Prompt;
 
 		const FTransform Transform(FRotator(0.f, Spec.Yaw, 0.f), GetActorTransform().TransformPosition(Spec.Hinge));
 		if (AHallDoorActor* Door = GetWorld()->SpawnActorDeferred<AHallDoorActor>(AHallDoorActor::StaticClass(), Transform, this))
