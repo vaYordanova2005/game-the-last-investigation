@@ -1774,7 +1774,7 @@ void AKitchenActor::SpawnWindows()
 	}
 }
 
-AClueActor* AKitchenActor::SpawnClue(const FVector& LocalLocation, const FRotator& Rotation, const FString& ShortName, const FString& Description)
+AClueActor* AKitchenActor::SpawnClue(const FVector& LocalLocation, const FRotator& Rotation)
 {
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
@@ -1782,7 +1782,6 @@ AClueActor* AKitchenActor::SpawnClue(const FVector& LocalLocation, const FRotato
 	AClueActor* Clue = GetWorld()->SpawnActor<AClueActor>(AClueActor::StaticClass(), GetActorTransform().TransformPosition(LocalLocation), Rotation, SpawnParams);
 	if (Clue)
 	{
-		Clue->Configure(FText::FromString(ShortName), FText::FromString(Description));
 		Clues.Add(Clue);
 	}
 	return Clue;
@@ -1790,15 +1789,6 @@ AClueActor* AKitchenActor::SpawnClue(const FVector& LocalLocation, const FRotato
 
 void AKitchenActor::BuildClues()
 {
-	auto HitVolume = [&](FRoomBuilder& B, const FVector& At, const FVector& Size, const FRotator& Rotation = FRotator::ZeroRotator)
-	{
-		if (UStaticMeshComponent* Hit = B.Box(At, Rotation, Size, MatVoid))
-		{
-			Hit->SetHiddenInGame(true);
-			Hit->SetCastShadow(false);
-			Hit->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-		}
-	};
 	// One word of handwriting: a flat stroke in the plane of the sheet. A plane rather than a Mark,
 	// and casting no shadow: a Mark is a box four millimetres thick, and on a page under a lantern a
 	// row of them stood up off the paper, each throwing its own shadow, and read as the slats of a
@@ -1842,9 +1832,7 @@ void AKitchenActor::BuildClues()
 	// The recipe book, open on the south worktop.
 	{
 		const FVector At(WestX() + 250.f, SouthY() - CounterDepth * 0.5f + 4.f, F + CounterHeight);
-		if (AClueActor* Book = SpawnClue(At, FRotator::ZeroRotator,
-			TEXT("Examine the recipe book"),
-			TEXT("The family's recipe book, split at the spine from use, open at a birthday cake. In the margin, in a child's big letters: MORE SPRINKLES. And under it, in her mother's hand: \"We'll see.\"")))
+		if (AClueActor* Book = SpawnClue(At, FRotator::ZeroRotator))
 		{
 			FRoomBuilder B(Book, Book->GetRootScene());
 			UMaterialInterface* Boards = B.Flat(FLinearColor(0.035f, 0.018f, 0.012f), 0.85f);
@@ -1881,16 +1869,13 @@ void AKitchenActor::BuildClues()
 			B.Box(FRotator(0.f, Yaw, 0.f).RotateVector(FVector(0.2f, -4.f, 2.2f)), FRotator(0.f, Yaw + 1.5f, 0.f), FVector(0.8f, 19.f, 0.1f), MatRedInk, false);
 			// A fat thumbprint of butter gone brown on the left-hand page.
 			B.Stain(RoomSurfaces::Damp, FVector(13.f, -6.f, 6.f), FRotator(-90.f, 0.f, 0.f), FVector2D(6.f, 5.f), FLinearColor(0.08f, 0.05f, 0.02f), 0.7f, 1.f);
-			HitVolume(B, FVector(0.f, 0.f, 3.f), FVector(48.f, 34.f, 6.f));
 		}
 	}
 
 	// The calendar and the grocery list, on the wall over the south worktop.
 	const float CalU = WestX() + 150.f;
 	const float CalZ = F + 170.f;
-	if (AClueActor* Calendar = SpawnClue(WallPoint(EWall::South, CalU, CalZ, 0.8f), FRotator::ZeroRotator,
-		TEXT("Examine the calendar"),
-		TEXT("A calendar for a year a long way gone, still on the same month. One square is ringed in red, with a cake drawn in it and a 7. Nothing is written on any day after the one before it.")))
+	if (AClueActor* Calendar = SpawnClue(WallPoint(EWall::South, CalU, CalZ, 0.8f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Calendar, Calendar->GetRootScene());
 		// On the south wall a Mark rolled -90 lies flat on it, its first size along world X.
@@ -1927,12 +1912,9 @@ void AKitchenActor::BuildClues()
 		B.Sph(FVector(0.f, -0.8f, 23.5f), 1.4f, MatIron);
 		// The pin through its bottom corner, which is what holds the list up under it.
 		B.Sph(FVector(14.f, -0.8f, -21.5f), 1.1f, MatBrass);
-		HitVolume(B, FVector(0.f, -1.f, 0.f), FVector(34.f, 2.f, 48.f));
 		KitchenNoDecals(Calendar);
 	}
-	if (AClueActor* List = SpawnClue(WallPoint(EWall::South, CalU + 13.f, CalZ - 29.f, 0.3f), FRotator::ZeroRotator,
-		TEXT("Examine the list"),
-		TEXT("A shopping list on the back of an envelope, pinned under the calendar's corner. Icing sugar. Candles (7). Sprinkles — the coloured ones. And last, underlined twice: coffee for him — the strong one.")))
+	if (AClueActor* List = SpawnClue(WallPoint(EWall::South, CalU + 13.f, CalZ - 29.f, 0.3f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(List, List->GetRootScene());
 		// Behind the calendar (0.3 off the wall against its 0.8), its top two centimetres under the
@@ -1948,15 +1930,12 @@ void AKitchenActor::BuildClues()
 		// Underlined twice, under the last line.
 		Word(B, Sheet, 0.f, -7.4f * UpZ, 6.f, 0.25f, MatInk);
 		Word(B, Sheet, 0.3f, -7.9f * UpZ, 5.4f, 0.25f, MatInk);
-		HitVolume(B, FVector(0.f, -1.f, -2.f), FVector(14.f, 2.f, 16.f));
 		KitchenNoDecals(List);
 	}
 
 	// The clock over the worktop, high on the south wall: a plain round kitchen clock, stopped, its
 	// hands fallen off inside the glass.
-	if (AClueActor* Clock = SpawnClue(WallPoint(EWall::South, WestX() + 240.f, F + 238.f, 0.f), FRotator::ZeroRotator,
-		TEXT("Examine the clock"),
-		TEXT("The kitchen clock, stopped. Both its hands have come off the spindle and lie in the bottom of the case, behind the glass — so whatever time it stopped at is anybody's guess.")))
+	if (AClueActor* Clock = SpawnClue(WallPoint(EWall::South, WestX() + 240.f, F + 238.f, 0.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Clock, Clock->GetRootScene());
 		// A disc on the south wall faces -Y: its axis is world Y.
@@ -1978,15 +1957,12 @@ void AKitchenActor::BuildClues()
 		B.Box(FVector(2.f, -6.7f, -11.6f), FRotator(0.f, 0.f, 0.f), FVector(7.f, 0.3f, 1.1f), MatInk, false);
 		B.Cyl(FVector(0.f, -6.9f, 0.f), OnWall, FVector(29.f, 29.f, 0.4f), B.Glass(RoomPalette::GlassShard, 0.035f, 0.06f), false);
 		B.Crack(FVector(4.f, -12.f, 5.f), FRotator(0.f, 90.f, 30.f), FVector2D(18.f, 14.f), 0.9f, 36.f);
-		HitVolume(B, FVector(0.f, -4.f, 0.f), FVector(36.f, 8.f, 36.f));
 	}
 
 	// The photograph, tucked in a frame on the range's mantel shelf.
 	{
 		const FVector At(BreastX() + 12.f, HearthY() - 40.f, F + ShelfHeight);
-		if (AClueActor* Photo = SpawnClue(At, FRotator::ZeroRotator,
-			TEXT("Examine the photograph"),
-			TEXT("A snapshot, gone brown: a woman and a little girl at this table, flour to the elbows, both laughing at whoever held the camera. On the back, in pencil: \"Our helper, aged 6.\"")))
+		if (AClueActor* Photo = SpawnClue(At, FRotator::ZeroRotator))
 		{
 			FRoomBuilder B(Photo, Photo->GetRootScene());
 			UMaterialInterface* PhotoGlass = B.Glass(RoomPalette::GlassShard, 0.035f, 0.06f);
@@ -2000,16 +1976,13 @@ void AKitchenActor::BuildClues()
 				Frame->SetMaterial(1, MatPaperDamp);
 				FRoomShapes::TintSlots(Frame, FLinearColor(0.35f, 0.32f, 0.30f), 2);
 			}
-			HitVolume(B, FVector(0.f, 0.f, 12.f), FVector(20.f, 26.f, 24.f));
 		}
 	}
 
 	// The coffee cup, at the east end of the table, in front of the chair that was pushed back.
 	{
 		const FVector At(T.X + TableLength * 0.5f - 22.f, T.Y + 12.f, TopZ);
-		if (AClueActor* Cup = SpawnClue(At, FRotator::ZeroRotator,
-			TEXT("Examine the cup"),
-			TEXT("A cup of coffee, poured and not drunk. What was left in it dried to a black crust years ago, and the dust has laid a grey skin over that. It is a man's cup, a big one, chipped where he always held it.")))
+		if (AClueActor* Cup = SpawnClue(At, FRotator::ZeroRotator))
 		{
 			FRoomBuilder B(Cup, Cup->GetRootScene());
 			B.Cyl(FVector(0.f, 0.f, 0.45f), FRotator::ZeroRotator, FVector(15.f, 15.f, 0.9f), MatChinaDusty, false);
@@ -2017,16 +1990,13 @@ void AKitchenActor::BuildClues()
 			B.Cyl(FVector(1.f, -0.6f, 9.95f), FRotator::ZeroRotator, FVector(8.4f, 8.4f, 0.1f), MatRotDark, false);
 			B.Box(FVector(1.f - 5.4f, -0.6f + 1.6f, 5.6f), FRotator(0.f, 160.f, 0.f), FVector(2.2f, 0.9f, 5.f), MatChina, false);
 			B.Stain(RoomSurfaces::Damp, FVector(0.f, 0.f, 16.f), FRotator(-90.f, 0.f, 0.f), FVector2D(18.f, 18.f), FLinearColor(0.42f, 0.40f, 0.36f), 0.55f, 1.3f);
-			HitVolume(B, FVector(0.f, 0.f, 5.f), FVector(18.f, 18.f, 11.f));
 		}
 	}
 
 	// The note under the salt cellar, at the middle of the table.
 	{
 		const FVector At(T.X + 30.f, T.Y + 30.f, TopZ);
-		if (AClueActor* Note = SpawnClue(At, FRotator::ZeroRotator,
-			TEXT("Read the note"),
-			TEXT("A note in a woman's hand, weighted under the salt: \"Gone to fetch her from dance — the rain's too heavy for her to walk. Back by eight. Keep an eye on the oven. x\"")))
+		if (AClueActor* Note = SpawnClue(At, FRotator::ZeroRotator))
 		{
 			FRoomBuilder B(Note, Note->GetRootScene());
 			B.Mark(FVector(0.f, 0.f, 0.1f), FRotator(0.f, 14.f, 0.f), FVector2D(15.f, 20.f), MatPaper);
@@ -2037,7 +2007,6 @@ void AKitchenActor::BuildClues()
 			B.Cyl(FVector(4.f, -4.f, 3.6f), FRotator::ZeroRotator, FVector(5.f, 5.f, 3.2f), MatChina, false);
 			B.Cyl(FVector(4.f, -4.f, 3.5f), FRotator::ZeroRotator, FVector(6.2f, 6.2f, 7.f), MatGlass, false);
 			B.Cyl(FVector(4.f, -4.f, 7.6f), FRotator::ZeroRotator, FVector(5.6f, 5.6f, 1.6f), MatIron, false);
-			HitVolume(B, FVector(0.f, 0.f, 3.f), FVector(22.f, 24.f, 7.f));
 		}
 	}
 }

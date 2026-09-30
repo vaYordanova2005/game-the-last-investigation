@@ -1388,7 +1388,7 @@ void ARoomDressingActor::BuildTraces(FRoomBuilder& Build)
 	}
 }
 
-AClueActor* ARoomDressingActor::SpawnClue(const FVector& LocalLocation, const FRotator& Rotation, const FString& ShortName, const FString& Description)
+AClueActor* ARoomDressingActor::SpawnClue(const FVector& LocalLocation, const FRotator& Rotation)
 {
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
@@ -1397,7 +1397,6 @@ AClueActor* ARoomDressingActor::SpawnClue(const FVector& LocalLocation, const FR
 	AClueActor* Clue = GetWorld()->SpawnActor<AClueActor>(AClueActor::StaticClass(), GetActorLocation() + LocalLocation, Rotation, SpawnParams);
 	if (Clue)
 	{
-		Clue->Configure(FText::FromString(ShortName), FText::FromString(Description));
 		SpawnedClues.Add(Clue);
 	}
 	return Clue;
@@ -1437,7 +1436,7 @@ void ARoomDressingActor::PruneBodilessClues()
 		if (!bHasBody)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("Clue '%s' has no body — its prop mesh is missing. Removing it."),
-				*Clue->GetInteractPrompt(nullptr).ToString());
+				*Clue->GetName());
 			Clue->Destroy();
 			SpawnedClues.RemoveAt(i);
 		}
@@ -1459,8 +1458,7 @@ void ARoomDressingActor::BuildClues()
 	//
 	// The far side of the collapse, too: the hook is directly over the hole, and there is no floor
 	// under it to stand a chair on.
-	if (AClueActor* Chair = SpawnClue(FVector(178.f, 6.f, 0.f), FRotator(0.f, 34.f, 0.f), TEXT("Examine the chair"),
-		TEXT("A kitchen chair, on its side. The dust has settled evenly over it — it went over a very long time ago.")))
+	if (AClueActor* Chair = SpawnClue(FVector(178.f, 6.f, 0.f), FRotator(0.f, 34.f, 0.f)))
 	{
 		FRoomBuilder ChairBuild(Chair, Chair->GetRootScene());
 		// Tipped onto its back: rolled 88 degrees and lifted so it rests on the floor rather than
@@ -1483,8 +1481,7 @@ void ARoomDressingActor::BuildClues()
 	// to it says who was sitting there — two things at the head of the bed rather than one thing
 	// on a nightstand and one thing nobody can see.
 	const FVector PhotoSpot = NightstandSeat() + FVector(3.f, -15.f, NightstandTopZ);
-	if (AClueActor* Photograph = SpawnClue(PhotoSpot, FRotator(0.f, -82.f, 0.f), TEXT("Examine the photograph"),
-		TEXT("A woman and two children on a doorstep, squinting into the sun. Somebody wiped the dust off this one. Recently is impossible. But somebody did.")))
+	if (AClueActor* Photograph = SpawnClue(PhotoSpot, FRotator(0.f, -82.f, 0.f)))
 	{
 		FRoomBuilder PhotoBuild(Photograph, Photograph->GetRootScene());
 		// Seventeen by twenty-three, not twenty-eight by thirty-six: that was most of the width of
@@ -1499,8 +1496,7 @@ void ARoomDressingActor::BuildClues()
 	}
 
 	// A letter on the floor near the window, the ink half gone where the rain has reached it.
-	if (AClueActor* Letter = SpawnClue(FVector(WidthHalf - 95.f, 105.f, 5.f), FRotator(0.f, 61.f, 0.f), TEXT("Examine the letter"),
-		TEXT("Handwriting, pressed hard into the paper. The rain has taken most of it. What is left reads: '...you would have loved the house in summer.'")))
+	if (AClueActor* Letter = SpawnClue(FVector(WidthHalf - 95.f, 105.f, 5.f), FRotator(0.f, 61.f, 0.f)))
 	{
 		FRoomBuilder LetterBuild(Letter, Letter->GetRootScene());
 		LetterBuild.Box(FVector(0.f, 0.f, 0.6f), FRotator::ZeroRotator, FVector(24.f, 30.f, 1.2f), MatPaper);
@@ -1508,8 +1504,7 @@ void ARoomDressingActor::BuildClues()
 	}
 
 	// A picture frame that came off the wall, glass-side down.
-	if (AClueActor* Frame = SpawnClue(FVector(-95.f, 45.f, 4.f), FRotator(0.f, -18.f, 0.f), TEXT("Examine the broken frame"),
-		TEXT("The frame is face down in its own glass. Turning it over takes nothing: the picture inside has been removed. The backing pins are bent outward — it was opened in a hurry.")))
+	if (AClueActor* Frame = SpawnClue(FVector(-95.f, 45.f, 4.f), FRotator(0.f, -18.f, 0.f)))
 	{
 		FRoomBuilder FrameBuild(Frame, Frame->GetRootScene());
 		// Face down is ROLL, not pitch. hanging_picture_frame_01 is 59 x 1.6 x 84 and faces its
@@ -1562,8 +1557,7 @@ void ARoomDressingActor::BuildClues()
 	// Which is also why the whole clue is pitched rather than rolled: a roll tips the top of the
 	// case away from the wall, and what a clock hung on one nail for fifty winters actually does
 	// is sit crooked against it.
-	if (AClueActor* Clock = SpawnClue(FVector(-40.f, DepthHalf + Setup.WallThickness * 0.5f, 215.f), FRotator(-3.f, 0.f, 0.f), TEXT("Examine the clock"),
-		TEXT("Walnut gone black with the damp, and a brass bezel nobody has polished in fifty years. The pendulum hangs dead still behind its glass. It stopped at four minutes past eleven — and a clock this size runs eight days on a winding, so somebody was here to wind it, right up until they were not.")))
+	if (AClueActor* Clock = SpawnClue(FVector(-40.f, DepthHalf + Setup.WallThickness * 0.5f, 215.f), FRotator(-3.f, 0.f, 0.f)))
 	{
 		FRoomBuilder ClockBuild(Clock, Clock->GetRootScene());
 
@@ -1837,8 +1831,7 @@ void ARoomDressingActor::BuildClues()
 	//
 	// Same frame as the clock: the face looks along -Y into the room, Y = 0 is the plaster, and
 	// the crooked hang is pitch, which is rotation about the axis the mirror faces along.
-	if (AClueActor* Mirror = SpawnClue(FVector(48.f, DepthHalf + Setup.WallThickness * 0.5f, 168.f), FRotator(-2.2f, 0.f, 0.f), TEXT("Examine the mirror"),
-		TEXT("A mirror, in a frame somebody once thought a great deal of, and broken — struck once, low and off centre, and left. The silver behind what is left of the glass has gone black: it gives back no lantern, no room, and no detective. Only the dark. He holds the light closer, and the dark does not move.")))
+	if (AClueActor* Mirror = SpawnClue(FVector(48.f, DepthHalf + Setup.WallThickness * 0.5f, 168.f), FRotator(-2.2f, 0.f, 0.f)))
 	{
 		FRoomBuilder MirrorBuild(Mirror, Mirror->GetRootScene());
 
@@ -1950,8 +1943,7 @@ void ARoomDressingActor::BuildClues()
 	}
 
 	// Rusted tools spilled out of a box by the door. Somebody was working on this room.
-	if (AClueActor* Tools = SpawnClue(FVector(Setup.DoorOpeningCenterX - 105.f, DepthHalf - 45.f, 5.f), FRotator::ZeroRotator, TEXT("Examine the tools"),
-		TEXT("A claw hammer and a handful of bent nails, rusted into one another. They are on this side of the door. Whatever was being fixed, it was being fixed from in here.")))
+	if (AClueActor* Tools = SpawnClue(FVector(Setup.DoorOpeningCenterX - 105.f, DepthHalf - 45.f, 5.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder ToolBuild(Tools, Tools->GetRootScene());
 		ToolBuild.Box(FVector(0.f, 0.f, 3.f), FRotator(0.f, 18.f, 0.f), FVector(52.f, 16.f, 6.f), MatRust);
@@ -1974,8 +1966,7 @@ void ARoomDressingActor::BuildClues()
 	// was inside the carcass, so six translucent bottles showed through the bottom of the shelves
 	// like something half-materialised. This stretch of wall is the only one long enough for them
 	// — the wardrobe takes everything left of 175 and the bookcase everything right of 327.
-	if (AClueActor* Bottles = SpawnClue(FVector(240.f, -DepthHalf + 26.f, 0.f), FRotator(0.f, 90.f, 0.f), TEXT("Examine the bottles"),
-		TEXT("Six empty bottles, stood up in a row against the skirting. Not thrown, not knocked over. Placed. Somebody spent a great many evenings in this room alone.")))
+	if (AClueActor* Bottles = SpawnClue(FVector(240.f, -DepthHalf + 26.f, 0.f), FRotator(0.f, 90.f, 0.f)))
 	{
 		FRoomBuilder BottleBuild(Bottles, Bottles->GetRootScene());
 		for (int32 i = 0; i < 6; ++i)
@@ -2000,8 +1991,7 @@ void ARoomDressingActor::BuildClues()
 	// boxes, and the leaves have to be left showing on the other three edges, because a single
 	// box wrapped round them is a brick. Cloth and dusty page edges are both already in the room:
 	// the linen photograph, tinted the way the curtains and the loose papers are.
-	if (AClueActor* Books = SpawnClue(FVector(WidthHalf - 78.f, -186.f, 4.f), FRotator(0.f, 27.f, 0.f), TEXT("Examine the books"),
-		TEXT("Ledgers, not novels — columns of dates and figures in the same tight hand as the letter. The dust on top is thick enough to write in. Nobody has.")))
+	if (AClueActor* Books = SpawnClue(FVector(WidthHalf - 78.f, -186.f, 4.f), FRotator(0.f, 27.f, 0.f)))
 	{
 		FRoomBuilder BookBuild(Books, Books->GetRootScene());
 
@@ -2037,13 +2027,8 @@ void ARoomDressingActor::BuildClues()
 		Ledger(FVector(19.f, -8.f, 12.f), FRotator(0.f, 58.f, 76.f), 23.f, 33.f, 5.4f, /*bBlocks*/ false);
 	}
 
-	// The half-open drawer, a clue in its own right rather than only furniture.
-	SpawnClue(FVector(68.f, -DepthHalf + 76.f, 62.f), FRotator::ZeroRotator, TEXT("Search the drawer"),
-		TEXT("Empty, except for the shape of what used to be in it, printed in the dust. Something flat and rectangular. A frame, or a photograph."));
-
-	// The footprint trail. The prompt sits over the last print, where the trail simply stops.
-	if (AClueActor* Footprints = SpawnClue(FVector(-WidthHalf + 40.f, 170.f, 6.f), FRotator::ZeroRotator, TEXT("Examine the footprints"),
-		TEXT("Bare feet, pressed into dust that has not been disturbed in decades. They cross the room and stop here, at the wall. There is no set going the other way.")))
+	// The footprint trail, which simply stops.
+	if (AClueActor* Footprints = SpawnClue(FVector(-WidthHalf + 40.f, 170.f, 6.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder PrintBuild(Footprints, Footprints->GetRootScene());
 		// Invisible collision volume over the last prints: the trail itself is painted on the
@@ -2055,8 +2040,7 @@ void ARoomDressingActor::BuildClues()
 	}
 
 	// The scratch marks by the door.
-	if (AClueActor* Scratches = SpawnClue(FVector(Setup.DoorOpeningCenterX - Setup.DoorOpeningWidth * 0.5f - 45.f, DepthHalf + Setup.WallThickness * 0.5f - 12.f, 108.f), FRotator::ZeroRotator, TEXT("Examine the marks"),
-		TEXT("Grooves cut into the plaster, four of them, side by side. They are at the height of a man's hand, and they run toward the door.")))
+	if (AClueActor* Scratches = SpawnClue(FVector(Setup.DoorOpeningCenterX - Setup.DoorOpeningWidth * 0.5f - 45.f, DepthHalf + Setup.WallThickness * 0.5f - 12.f, 108.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder ScratchBuild(Scratches, Scratches->GetRootScene());
 		if (UStaticMeshComponent* Volume = ScratchBuild.Box(FVector::ZeroVector, FRotator::ZeroRotator, FVector(70.f, 10.f, 60.f), nullptr))
@@ -2066,8 +2050,7 @@ void ARoomDressingActor::BuildClues()
 	}
 
 	// The stain on the boards.
-	if (AClueActor* Stain = SpawnClue(FVector(-WidthHalf + 150.f, 55.f, 6.f), FRotator::ZeroRotator, TEXT("Examine the stain"),
-		TEXT("Dark, soaked deep into the grain, spread the way a pool spreads rather than a splash. Old enough that it has stopped being red. Not old enough to mean nothing.")))
+	if (AClueActor* Stain = SpawnClue(FVector(-WidthHalf + 150.f, 55.f, 6.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder StainBuild(Stain, Stain->GetRootScene());
 		if (UStaticMeshComponent* Volume = StainBuild.Box(FVector(0.f, 0.f, 6.f), FRotator::ZeroRotator, FVector(90.f, 90.f, 12.f), nullptr))

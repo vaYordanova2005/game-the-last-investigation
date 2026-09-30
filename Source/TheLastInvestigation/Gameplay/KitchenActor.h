@@ -191,7 +191,7 @@ private:
 	/** A free-standing floor spot the scattered debris may use: off the furniture and out of the paths. */
 	bool IsFloorSpotClear(float X, float Y, float Radius) const;
 
-	AClueActor* SpawnClue(const FVector& LocalLocation, const FRotator& Rotation, const FString& ShortName, const FString& Description);
+	AClueActor* SpawnClue(const FVector& LocalLocation, const FRotator& Rotation);
 
 	UPROPERTY(VisibleAnywhere, Category = "Kitchen")
 	TObjectPtr<USceneComponent> RoomRoot;

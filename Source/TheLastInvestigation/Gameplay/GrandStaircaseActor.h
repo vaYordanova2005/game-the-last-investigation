@@ -189,7 +189,7 @@ private:
 	FVector WallNormal(EWall Wall) const;
 	FVector WallPoint(EWall Wall, float U, float Z, float Proud) const;
 
-	AClueActor* SpawnClue(const FVector& LocalLocation, const FRotator& Rotation, const FString& ShortName, const FString& Description);
+	AClueActor* SpawnClue(const FVector& LocalLocation, const FRotator& Rotation);
 
 	UPROPERTY(VisibleAnywhere, Category = "Stair Hall")
 	TObjectPtr<USceneComponent> HallRoot;

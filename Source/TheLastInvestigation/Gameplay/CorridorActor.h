@@ -119,7 +119,7 @@ private:
 	/** Along-wall extent of a side, between its end walls. */
 	void SideRange(ESide Side, float& OutU0, float& OutU1) const;
 
-	AClueActor* SpawnClue(const FVector& LocalLocation, const FRotator& Rotation, const FString& ShortName, const FString& Description);
+	AClueActor* SpawnClue(const FVector& LocalLocation, const FRotator& Rotation);
 
 	UPROPERTY(VisibleAnywhere, Category = "Corridor")
 	TObjectPtr<USceneComponent> CorridorRoot;

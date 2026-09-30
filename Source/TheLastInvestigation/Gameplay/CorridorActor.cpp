@@ -1243,7 +1243,7 @@ void ACorridorActor::SpawnStairHall()
 	}
 }
 
-AClueActor* ACorridorActor::SpawnClue(const FVector& LocalLocation, const FRotator& Rotation, const FString& ShortName, const FString& Description)
+AClueActor* ACorridorActor::SpawnClue(const FVector& LocalLocation, const FRotator& Rotation)
 {
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
@@ -1251,7 +1251,6 @@ AClueActor* ACorridorActor::SpawnClue(const FVector& LocalLocation, const FRotat
 	AClueActor* Clue = GetWorld()->SpawnActor<AClueActor>(AClueActor::StaticClass(), GetActorTransform().TransformPosition(LocalLocation), Rotation, SpawnParams);
 	if (Clue)
 	{
-		Clue->Configure(FText::FromString(ShortName), FText::FromString(Description));
 		Clues.Add(Clue);
 	}
 	return Clue;
@@ -1261,9 +1260,7 @@ void ACorridorActor::BuildClues()
 {
 	// Flowers at the bedroom door, on the corridor side: somebody left them for whoever was in
 	// there, and nobody came to the door. A dozen stems gone to straw, tied with a ribbon.
-	if (AClueActor* Flowers = SpawnClue(FVector(Setup.StartDoorCenterX - 20.f, NorthFace() + 26.f, 4.f), FRotator(0.f, 14.f, 0.f),
-		TEXT("Examine the flowers"),
-		TEXT("Roses, dried to paper, tied with a black ribbon and laid at the door. Laid, not dropped — for whoever was on the other side.")))
+	if (AClueActor* Flowers = SpawnClue(FVector(Setup.StartDoorCenterX - 20.f, NorthFace() + 26.f, 4.f), FRotator(0.f, 14.f, 0.f)))
 	{
 		FRoomBuilder B(Flowers, Flowers->GetRootScene());
 		FRandomStream Stems(77);
@@ -1280,13 +1277,6 @@ void ACorridorActor::BuildClues()
 			}
 		}
 		B.Cyl(FVector(4.f, 0.f, 1.2f), FRotator(0.f, 0.f, 90.f), FVector(4.f, 4.f, 6.f), MatShadow, false);
-		// The hit volume: a thin invisible slab over the bunch, so the trace finds the flowers
-		// rather than the floor between the stems.
-		if (UStaticMeshComponent* Hit = B.Box(FVector(0.f, 0.f, 3.f), FRotator::ZeroRotator, FVector(50.f, 22.f, 5.f), MatVoid))
-		{
-			Hit->SetHiddenInGame(true);
-			Hit->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-		}
 		// A few petals fallen off onto the boards.
 		for (int32 i = 0; i < 5; ++i)
 		{
@@ -1296,9 +1286,7 @@ void ACorridorActor::BuildClues()
 
 	// The mirror, on the south wall, square to the bedroom door. What it gives back is the door —
 	// and, through the dust, the shape of a man standing in front of it.
-	if (AClueActor* Mirror = SpawnClue(FVector(Setup.StartDoorCenterX, SouthFace(), 158.f), FRotator::ZeroRotator,
-		TEXT("Examine the mirror"),
-		TEXT("Too much dust to see a face in it — only the shape of a man, and the door behind him. It would take a hand to wipe it clean.")))
+	if (AClueActor* Mirror = SpawnClue(FVector(Setup.StartDoorCenterX, SouthFace(), 158.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Mirror, Mirror->GetRootScene());
 		const float W = 72.f;
@@ -1322,9 +1310,7 @@ void ACorridorActor::BuildClues()
 
 	// The long-case clock, broken: pendulum on the floor, trunk door hanging open, the hood glass
 	// gone. The hands at four minutes past eleven, the time the whole house is stopped at.
-	if (AClueActor* Clock = SpawnClue(FVector(ClockU, SouthFace(), 0.f), FRotator::ZeroRotator,
-		TEXT("Examine the clock"),
-		TEXT("The pendulum has been torn off and dropped. The hands say four minutes past eleven — the same as the clock in the bedroom.")))
+	if (AClueActor* Clock = SpawnClue(FVector(ClockU, SouthFace(), 0.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Clock, Clock->GetRootScene());
 		UMaterialInstanceDynamic* Case = B.Surface(RoomSurfaces::RoughWood, FLinearColor(0.20f, 0.19f, 0.19f));
@@ -1378,9 +1364,7 @@ void ACorridorActor::BuildClues()
 
 	// The portrait turned to face the wall. From the corridor, the back of a frame: brown board,
 	// the hanging wire, a torn label.
-	if (AClueActor* Turned = SpawnClue(FVector(-520.f, NorthFace() + 3.f, 170.f), FRotator::ZeroRotator,
-		TEXT("Examine the portrait"),
-		TEXT("Turned to face the wall, and the nail bent to hold it there. Somebody could not stand to be looked at by it.")))
+	if (AClueActor* Turned = SpawnClue(FVector(-520.f, NorthFace() + 3.f, 170.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Turned, Turned->GetRootScene());
 		if (UStaticMeshComponent* Frame = B.Prop(RoomProps::PictureFrame, FVector::ZeroVector, FRotator(-2.f, 180.f, 0.f), 70.f))
@@ -1398,9 +1382,7 @@ void ACorridorActor::BuildClues()
 	}
 
 	// Keys, on a nail beside the door with the scratched keyhole.
-	if (AClueActor* Keys = SpawnClue(FVector(-40.f + 78.f, SouthFace() - 1.f, 146.f), FRotator::ZeroRotator,
-		TEXT("Examine the keys"),
-		TEXT("A ring of old keys on a nail. Every one of them has been tried in the door beside it. None of them turned.")))
+	if (AClueActor* Keys = SpawnClue(FVector(-40.f + 78.f, SouthFace() - 1.f, 146.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Keys, Keys->GetRootScene());
 		B.Cyl(FVector(0.f, -1.5f, 0.f), FRotator(0.f, 0.f, 90.f), FVector(0.5f, 0.5f, 4.f), MatIron, false);
@@ -1420,18 +1402,11 @@ void ACorridorActor::BuildClues()
 			B.Box(Top + Hang.RotateVector(FVector(0.f, 0.f, -Length * 0.5f)), Hang, FVector(0.6f, 0.4f, Length), KeyIndex % 2 ? MatBrass.Get() : MatIron.Get(), false);
 			B.Box(Top + Hang.RotateVector(FVector(0.9f, 0.f, -Length + 1.f)), Hang, FVector(1.6f, 0.4f, 1.2f), MatIron, false);
 		}
-		if (UStaticMeshComponent* Hit = B.Box(FVector(0.f, -3.f, -8.f), FRotator::ZeroRotator, FVector(12.f, 4.f, 16.f), MatVoid))
-		{
-			Hit->SetHiddenInGame(true);
-			Hit->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-		}
 	}
 
 	// The small door's frame: pencil lines up the hinge-side casing, a child measured year after
 	// year, stopping a little over a metre up.
-	if (AClueActor* Chart = SpawnClue(FVector(-880.f - HallDoorWidth * 0.5f - 5.5f, SouthFace() - 3.f, 0.f), FRotator::ZeroRotator,
-		TEXT("Examine the door frame"),
-		TEXT("Pencil lines up the frame, a child measured against it year after year. They stop a little over a metre up.")))
+	if (AClueActor* Chart = SpawnClue(FVector(-880.f - HallDoorWidth * 0.5f - 5.5f, SouthFace() - 3.f, 0.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Chart, Chart->GetRootScene());
 		const float Heights[] = { 74.f, 83.f, 91.f, 98.f, 104.f, 111.f };
@@ -1439,11 +1414,6 @@ void ACorridorActor::BuildClues()
 		{
 			B.Box(FVector(0.f, -0.3f, Z), FRotator(Random.FRandRange(-4.f, 4.f), 0.f, 0.f), FVector(7.f, 0.4f, 0.45f), MatShadow, false);
 			B.Box(FVector(2.2f, -0.3f, Z + 1.6f), FRotator::ZeroRotator, FVector(1.4f, 0.4f, 1.6f), MatShadow, false);
-		}
-		if (UStaticMeshComponent* Hit = B.Box(FVector(0.f, 0.5f, 92.f), FRotator::ZeroRotator, FVector(11.f, 2.f, 50.f), MatVoid))
-		{
-			Hit->SetHiddenInGame(true);
-			Hit->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 		}
 	}
 }
