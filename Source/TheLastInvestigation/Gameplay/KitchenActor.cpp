@@ -1,4 +1,4 @@
-﻿#include "KitchenActor.h"
+#include "KitchenActor.h"
 #include "RoomBuildLibrary.h"
 #include "ClueActor.h"
 #include "StormWindowActor.h"
@@ -497,19 +497,15 @@ void AKitchenActor::BuildWallFinish(FRoomBuilder& Build)
 			}
 		}
 
-		// Wallpaper over the rail on the south wall and on the east wall's one bare stretch, between
-		// the dresser and the larder, and only where it has held: one run on each, never the whole
-		// wall (the bedroom's 09-18 note). Kitchens were papered last and stripped first; what is
-		// left is the odd width by the door.
-		if (R.Wall == EWall::South || R.Wall == EWall::East)
+		// Wallpaper over the rail on the south wall, the one wall with nothing high against it, and
+		// only where it has held: one run, never the whole wall (the bedroom's 09-18 note). Kitchens
+		// were papered last and stripped first; what is left is the odd width by the door. The east
+		// wall has none: the dresser and the larder leave 25cm of it between them.
+		if (R.Wall == EWall::South)
 		{
 			const float StripWidth = 53.f;
-			// On the east wall the run starts clear of the dresser's cornice (it overhangs the carcass
-			// by 6) and stops short of the larder: paper laid behind either sat a millimetre off its
-			// back and flickered through it.
-			const bool bEast = R.Wall == EWall::East;
-			const float RunStart = bEast ? DresserY() + DresserWidth * 0.5f + 12.f : Setup.DoorX + 90.f;
-			const float RunEnd = bEast ? LarderY() - LarderWidth * 0.5f - 6.f : R.U1 - 5.f;
+			const float RunStart = Setup.DoorX + 90.f;
+			const float RunEnd = R.U1 - 5.f;
 			for (int32 Strip = 0; Strip < 4; ++Strip)
 			{
 				const float A = RunStart + Strip * StripWidth;
@@ -1886,8 +1882,10 @@ void AKitchenActor::BuildClues()
 		// The picture at the top, a faded landscape gone to one brown.
 		B.Mark(FVector(0.f, -0.1f, 12.f), Flat, FVector2D(28.f, 18.f), MatPaperDamp);
 		// The printing is flat strokes on the paper, not Marks (the recipe book's 09-29 note): a
-		// Sheet in the paper's plane, whose local Y runs up or down the wall by UpZ.
-		const FTransform Sheet(Flat, FVector(0.f, -0.25f, 0.f));
+		// Sheet in the paper's plane, whose local Y runs up or down the wall by UpZ. A Mark's face
+		// stands 0.8 proud of where it is put, so the strokes go at 0.85, just in front of it; and
+		// the sheet is turned half round in its own plane, since Flat alone reads right to left.
+		const FTransform Sheet = FTransform(FRotator(0.f, 180.f, 0.f)) * FTransform(Flat, FVector(0.f, -0.85f, 0.f));
 		const float UpZ = Sheet.GetUnitAxis(EAxis::Y).Z;
 		auto Ink = [&](float X, float Z, float W, float H, UMaterialInterface* Mat)
 		{
@@ -1921,9 +1919,10 @@ void AKitchenActor::BuildClues()
 		FRoomBuilder B(List, List->GetRootScene());
 		// Behind the calendar (0.3 off the wall against its 0.8), its top two centimetres under the
 		// calendar's bottom corner and the pin there.
-		const FRotator Flat(0.f, 4.f, -90.f);
+		// Tilted in the wall's plane: that is pitch here; yaw swung one edge out through the calendar.
+		const FRotator Flat(4.f, 0.f, -90.f);
 		B.Mark(FVector(0.f, 0.f, 0.f), Flat, FVector2D(11.f, 17.f), MatPaperDamp);
-		const FTransform Sheet(Flat, FVector(0.f, -0.25f, 0.f));
+		const FTransform Sheet = FTransform(FRotator(0.f, 180.f, 0.f)) * FTransform(Flat, FVector(0.f, -0.85f, 0.f));
 		const float UpZ = Sheet.GetUnitAxis(EAxis::Y).Z;
 		Writing(B, FTransform(FVector(0.f, -0.5f * UpZ, 0.f)) * Sheet, 8.f, 13.f, 6, 47);
 		// Underlined twice, under the last line.
