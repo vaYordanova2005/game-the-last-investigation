@@ -13,6 +13,7 @@ class AStormWindowActor;
 class AHallDoorActor;
 class AClueActor;
 class AGrandStaircaseActor;
+class ANurseryActor;
 
 /** The bedroom this corridor runs past, handed over by the room that spawns it. */
 struct FCorridorSetup
@@ -68,6 +69,11 @@ public:
 	/** The archway onto the stair hall's gallery. Wider than a door: it is the way to the stairs. */
 	static constexpr float StairOpeningWidth = 180.f;
 	static constexpr float StairOpeningHeight = 246.f;
+	/**
+	 * The south door a few steps along from the bedroom's, almost opposite it: the girl's room
+	 * (ANurseryActor), the one door upstairs that opens.
+	 */
+	static constexpr float NurseryDoorU = -40.f;
 
 private:
 	enum class ESide : uint8 { North, South, East, West };
@@ -106,6 +112,7 @@ private:
 	void SpawnDoors();
 	void SpawnWindow();
 	void SpawnStairHall();
+	void SpawnNursery();
 
 	/** Places a thin panel on a wall's corridor face. */
 	void FacePanel(FRoomBuilder& Build, ESide Side, float U, float V, float SizeU, float SizeV, UMaterialInterface* Mat) const;
@@ -141,6 +148,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<AGrandStaircaseActor> StairHall;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ANurseryActor> Nursery;
 
 	/** The two shapes at the far end of the corridor that are only there while the sky is lit. */
 	UPROPERTY(Transient)

@@ -114,6 +114,12 @@ MODELS = {
     "horse_statue_01": "the porcelain horse on the commode",
     # The kitchen.
     "painted_wooden_chair_02": "the painted ladder-back chairs round the kitchen table",
+    # The girl's bedroom. Its furniture, toys and her own things are generated in Blender
+    # (Tools/make_nursery.py); these are the few that Poly Haven has and that are hers.
+    "Ukulele_01": "the ukulele she was learning, on the bed",
+    "stationery_supplies": "pens, pencils and an eraser on her desk",
+    "alarm_clock_01": "the alarm clock on her bedside table",
+    "wicker_basket_02": "the basket of soft toys by the toy shelf",
 }
 
 

@@ -5,6 +5,7 @@
 #include "StormWindowActor.h"
 #include "DustMotesComponent.h"
 #include "GrandStaircaseActor.h"
+#include "NurseryActor.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -78,7 +79,7 @@ void ACorridorActor::Configure(const FCorridorSetup& InSetup, AStormWindowActor*
 		{ ESide::North, Setup.StartDoorCenterX, Setup.StartDoorWidth * 0.5f, Setup.StartDoorHeight },
 		{ ESide::North, -690.f, DoorHalf, HallDoorHeight },
 		{ ESide::North, -1060.f, DoorHalf, HallDoorHeight },
-		{ ESide::South, -40.f, DoorHalf, HallDoorHeight },
+		{ ESide::South, NurseryDoorU, DoorHalf, HallDoorHeight },
 		{ ESide::South, -470.f, DoorHalf, HallDoorHeight },
 		{ ESide::South, -880.f, DoorHalf, HallDoorHeight },
 		{ ESide::East, CenterY(), WindowWidth * 0.5f, WindowTop, WindowSill },
@@ -114,6 +115,7 @@ void ACorridorActor::BeginPlay()
 	SpawnDoors();
 	SpawnWindow();
 	SpawnStairHall();
+	SpawnNursery();
 	BuildClues();
 }
 
@@ -355,7 +357,9 @@ void ACorridorActor::BuildBackRooms(FRoomBuilder& Build)
 	const float H = Setup.Height;
 	for (const FOpening& Opening : Openings)
 	{
-		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || Opening.CenterU == Setup.StartDoorCenterX)
+		// The girl's room is a real room (ANurseryActor), not a black box.
+		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || Opening.CenterU == Setup.StartDoorCenterX
+			|| (Opening.Side == ESide::South && Opening.CenterU == NurseryDoorU))
 		{
 			continue;
 		}
@@ -366,11 +370,19 @@ void ACorridorActor::BuildBackRooms(FRoomBuilder& Build)
 		const float Back = Front + Dir * Depth;
 		const float MidY = (Front + Back) * 0.5f;
 		const float X0 = Opening.CenterU - 170.f;
-		const float X1 = Opening.CenterU + 170.f;
+		// On the south side the girl's room is behind the wall now, and the back room behind the next
+		// door along stood its east wall ten centimetres into hers, the full height of it: a slab of
+		// near-black plaster over her wallpaper from the corner to the bookcase. Stopped short of her
+		// west wall, as everything built "behind" a wall has to be once the house grows a room there.
+		const float NurseryWestOuter = EastFace() - ANurseryActor::RoomWidth - T;
+		const float X1 = Opening.Side == ESide::South
+			? FMath::Min(Opening.CenterU + 170.f, NurseryWestOuter - 10.f)
+			: Opening.CenterU + 170.f;
 
-		Build.Box(FVector(Opening.CenterU, MidY, -5.f), FRotator::ZeroRotator, FVector(X1 - X0, Depth, 10.f), MatFloorboardsWorn);
-		Build.Box(FVector(Opening.CenterU, MidY, H + 5.f), FRotator::ZeroRotator, FVector(X1 - X0, Depth, 10.f), MatBackRoom);
-		Build.Box(FVector(Opening.CenterU, Back + Dir * 5.f, H * 0.5f), FRotator::ZeroRotator, FVector(X1 - X0, 10.f, H), MatBackRoom);
+		const float MidX = (X0 + X1) * 0.5f;
+		Build.Box(FVector(MidX, MidY, -5.f), FRotator::ZeroRotator, FVector(X1 - X0, Depth, 10.f), MatFloorboardsWorn);
+		Build.Box(FVector(MidX, MidY, H + 5.f), FRotator::ZeroRotator, FVector(X1 - X0, Depth, 10.f), MatBackRoom);
+		Build.Box(FVector(MidX, Back + Dir * 5.f, H * 0.5f), FRotator::ZeroRotator, FVector(X1 - X0, 10.f, H), MatBackRoom);
 		Build.Box(FVector(X0 - 5.f, MidY, H * 0.5f), FRotator::ZeroRotator, FVector(10.f, Depth, H), MatBackRoom);
 		Build.Box(FVector(X1 + 5.f, MidY, H * 0.5f), FRotator::ZeroRotator, FVector(10.f, Depth, H), MatBackRoom);
 	}
@@ -1161,13 +1173,15 @@ void ACorridorActor::Tick(float DeltaTime)
 
 void ACorridorActor::SpawnDoors()
 {
-	struct FDoorSpec { bool bNorth; float U; float Ajar; FLinearColor Tint; bool bSix; bool bHole; };
+	// OpenYaw: how far a door goes when pushed. Only the girl's door has a room behind it; it stands
+	// ajar a few degrees, enough to show a line of dark and no more.
+	struct FDoorSpec { bool bNorth; float U; float Ajar; FLinearColor Tint; bool bSix; bool bHole; float OpenYaw; };
 	const FDoorSpec Specs[] = {
-		{ true,  -690.f,  0.f,  FLinearColor(0.255f, 0.279f, 0.295f), true,  false },
-		{ true,  -1060.f, 24.f, FLinearColor(0.215f, 0.232f, 0.245f), false, false },
-		{ false, -40.f,   0.f,  FLinearColor(0.300f, 0.300f, 0.290f), false, true },
-		{ false, -470.f,  17.f, FLinearColor(0.240f, 0.250f, 0.262f), true,  false },
-		{ false, -880.f,  0.f,  FLinearColor(0.330f, 0.330f, 0.320f), false, false },
+		{ true,  -690.f,  0.f,  FLinearColor(0.255f, 0.279f, 0.295f), true,  false, 0.f },
+		{ true,  -1060.f, 24.f, FLinearColor(0.215f, 0.232f, 0.245f), false, false, 0.f },
+		{ false, NurseryDoorU, 6.f, FLinearColor(0.300f, 0.300f, 0.290f), false, true, 100.f },
+		{ false, -470.f,  17.f, FLinearColor(0.240f, 0.250f, 0.262f), true,  false, 0.f },
+		{ false, -880.f,  0.f,  FLinearColor(0.330f, 0.330f, 0.320f), false, false, 0.f },
 	};
 
 	int32 Seed = 4101;
@@ -1181,6 +1195,7 @@ void ACorridorActor::SpawnDoors()
 		DoorSetup.WoodTint = Spec.Tint;
 		DoorSetup.bSixPanel = Spec.bSix;
 		DoorSetup.bRotHole = Spec.bHole;
+		DoorSetup.OpenYaw = Spec.OpenYaw;
 
 		// Hinge on the corridor face, 2cm inside the opening so the reveal lining clears the leaf.
 		// Local +X is the corridor side: yaw 90 on the north wall, -90 on the south.
@@ -1234,6 +1249,27 @@ void ACorridorActor::SpawnStairHall()
 		HallSetup.OpeningHeight = StairOpeningHeight;
 		StairHall->Configure(HallSetup, LeadStorm);
 		StairHall->FinishSpawning(Transform);
+	}
+}
+
+void ACorridorActor::SpawnNursery()
+{
+	// The girl's room, behind the south door almost opposite the bedroom's. Same frame as the
+	// corridor; its north face is the far side of the corridor's south wall, and its east wall is
+	// on the façade the bedroom's and the corridor's windows are in.
+	const FTransform Transform = GetActorTransform();
+	Nursery = GetWorld()->SpawnActorDeferred<ANurseryActor>(ANurseryActor::StaticClass(), Transform, this);
+	if (Nursery)
+	{
+		FNurserySetup NurserySetup;
+		NurserySetup.NorthFace = SouthFace() + Setup.WallThickness;
+		NurserySetup.EastX = EastFace();
+		NurserySetup.WallThickness = Setup.WallThickness;
+		NurserySetup.DoorX = NurseryDoorU;
+		NurserySetup.DoorHalf = HallDoorWidth * 0.5f;
+		NurserySetup.DoorHeight = HallDoorHeight;
+		Nursery->Configure(NurserySetup, LeadStorm);
+		Nursery->FinishSpawning(Transform);
 	}
 }
 
@@ -1376,7 +1412,7 @@ void ACorridorActor::BuildClues()
 	}
 
 	// Keys, on a nail beside the door with the scratched keyhole.
-	if (AClueActor* Keys = SpawnClue(FVector(-40.f + 78.f, SouthFace() - 1.f, 146.f), FRotator::ZeroRotator))
+	if (AClueActor* Keys = SpawnClue(FVector(NurseryDoorU + 78.f, SouthFace() - 1.f, 146.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Keys, Keys->GetRootScene());
 		B.Cyl(FVector(0.f, -1.5f, 0.f), FRotator(0.f, 0.f, 90.f), FVector(0.5f, 0.5f, 4.f), MatIron, false);

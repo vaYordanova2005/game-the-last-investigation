@@ -11,6 +11,7 @@ class UDirectionalLightComponent;
 class UPointLightComponent;
 class URectLightComponent;
 class UMaterialInstanceDynamic;
+struct FRoomSurface;
 
 /** Geometry of the wall opening this storm is seen through, handed over by the room that spawns it. */
 struct FStormWindowSetup
@@ -54,6 +55,14 @@ struct FStormWindowSetup
 	 * so every follower past the first needs its own, or it is the first one's window again.
 	 */
 	int32 Seed = 0;
+
+	/**
+	 * What the curtains are made of. Null is the house's grey linen; the girl's room hangs a pink
+	 * rose print. The surface must tile at Drapery's 34cm, since the drapes' UVs are laid out in it.
+	 */
+	const FRoomSurface* CurtainSurface = nullptr;
+	/** The curtains' tint on that surface; the default is the house's grey worked out for linen. */
+	FLinearColor CurtainTint = FLinearColor(0.268f, 0.184f, 0.118f);
 };
 
 /**
