@@ -50,7 +50,6 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | Asset ID | Kind | Used for |
 |---|---|---|
 | `Ukulele_01` | model | her ukulele, against the west wall |
-| `stationery_supplies` | model | pens, pencils and an eraser on her desk |
 | `alarm_clock_01` | model | the alarm clock on her bedside table |
 | `wicker_basket_02` | model | the basket of soft toys in the corner |
 

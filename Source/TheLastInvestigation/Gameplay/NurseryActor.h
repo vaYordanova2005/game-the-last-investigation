@@ -115,6 +115,14 @@ private:
 	FVector BookcaseSeat() const { return FVector(WestX() + 15.f, NorthY() + 300.f, 0.f); }
 	FVector ToyShelfSeat() const { return FVector(WestX() + 145.f, SouthY() - 18.f, 0.f); }
 	FVector ToyChestSeat() const { return FVector(BedX() - 6.f, SouthY() - BedLength - 38.f, 0.f); }
+	/** The chest of drawers, on the south wall between the bed and the toy shelf. */
+	FVector DresserSeat() const { return FVector(8.f, SouthY() - 24.f, 0.f); }
+	/** Her television on its low cabinet, against the north wall to the right of the door as you come in. */
+	FVector TVStandSeat() const { return FVector(150.f, NorthY() + 21.f, 0.f); }
+	/** The hook rail behind the door, on the north wall the open leaf swings towards. */
+	float CoatRackX() const { return Setup.DoorX - Setup.DoorHalf - 80.f; }
+	/** The standing mirror, in the corner past the nightstand and the window. */
+	FVector MirrorSeat() const { return FVector(EastX() - 54.f, SouthY() - 50.f, 0.f); }
 
 	void CacheMaterials(FRoomBuilder& Build);
 	void BuildShell(FRoomBuilder& Build);
@@ -130,6 +138,10 @@ private:
 	void BuildToys(FRoomBuilder& Build);
 	void BuildDrawings(FRoomBuilder& Build);
 	void BuildFloorThings(FRoomBuilder& Build);
+	void BuildDresser(FRoomBuilder& Build);
+	void BuildTelevision(FRoomBuilder& Build);
+	void BuildCoatRack(FRoomBuilder& Build);
+	void BuildMirror(FRoomBuilder& Build);
 	void BuildClues();
 	void SpawnWindow();
 
@@ -213,6 +225,9 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPajamas;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatGarment;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatGarmentDark;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatJacket;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatScarf;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatGymBag;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBrass;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatIron;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPaper;

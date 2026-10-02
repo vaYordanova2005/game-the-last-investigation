@@ -117,6 +117,10 @@ void ANurseryActor::BeginPlay()
 	BuildToys(Build);
 	BuildDrawings(Build);
 	BuildFloorThings(Build);
+	BuildDresser(Build);
+	BuildTelevision(Build);
+	BuildCoatRack(Build);
+	BuildMirror(Build);
 
 	SpawnWindow();
 	BuildClues();
@@ -171,9 +175,15 @@ void ANurseryActor::CacheMaterials(FRoomBuilder& Build)
 	MatPajamas = Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.36f, 0.20f, 0.19f), 1.1f);
 	MatGarment = Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.10f, 0.08f, 0.09f), 1.2f);
 	MatGarmentDark = Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.20f, 0.12f, 0.10f), 1.2f);
+	// A mustard raincoat, a berry scarf and a mint gym bag by the door: the colours a twelve-year-old
+	// picks for herself, gone to dust like everything else.
+	MatJacket = Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.44f, 0.24f, 0.055f), 1.2f);
+	MatScarf = Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.36f, 0.10f, 0.10f), 1.2f);
+	MatGymBag = Build.Surface(RoomSurfaces::Drapery, FLinearColor(0.12f, 0.20f, 0.14f), 1.1f);
 	for (UMaterialInstanceDynamic* Sheet : { MatPink.Get(), MatPinkInside.Get(), MatWhite.Get(), MatMattress.Get(), MatSheet.Get(),
 		MatQuilt.Get(), MatRug.Get(), MatBearFur.Get(), MatRabbitFur.Get(), MatPad.Get(), MatDollSkin.Get(),
 		MatDollDress.Get(), MatDollHair.Get(), MatBackpack.Get(), MatPajamas.Get(), MatGarment.Get(), MatGarmentDark.Get(),
+		MatJacket.Get(), MatScarf.Get(), MatGymBag.Get(),
 		MatWallpaperPeel.Get() })
 	{
 		NurserySheet(Sheet);
@@ -251,6 +261,11 @@ void ANurseryActor::CacheMaterials(FRoomBuilder& Build)
 		{ TEXT("Juice"), FLinearColor(0.200f, 0.090f, 0.020f), 0.5f, 0.f },
 		{ TEXT("Card"), FLinearColor(0.240f, 0.120f, 0.150f), 0.8f, 0.f },
 		{ TEXT("Bead"), FLinearColor(0.240f, 0.200f, 0.220f), 0.3f, 0.f },
+		// Her laptop's rose-gold aluminium, its keys, the television's black plastic, a glazed pot.
+		{ TEXT("LaptopCase"), FLinearColor(0.300f, 0.200f, 0.190f), 0.35f, 0.8f },
+		{ TEXT("Keys"), FLinearColor(0.012f, 0.012f, 0.014f), 0.5f, 0.f },
+		{ TEXT("TVPlastic"), FLinearColor(0.008f, 0.008f, 0.009f), 0.4f, 0.f },
+		{ TEXT("Pot"), FLinearColor(0.150f, 0.050f, 0.085f), 0.3f, 0.f },
 	};
 	for (const FFlat& Flat : FlatList)
 	{
@@ -937,7 +952,7 @@ void ANurseryActor::BuildBed(FRoomBuilder& Build)
 
 	// The other pillow, on the floor between the bed and the toy shelf, and her trainers beside the
 	// bed, kicked off, one on its side.
-	Dress(Build.Prop(RoomProps::Pillow, FVector(Centre.X - BedHalfWidth - 34.f, HeadY - 58.f, 0.5f), FRotator(0.f, 64.f, 6.f), 0.f, false), { { TEXT("Fabric"), MatQuilt } });
+	Dress(Build.Prop(RoomProps::Pillow, FVector(Centre.X - BedHalfWidth - 32.f, HeadY - 86.f, 0.5f), FRotator(0.f, 64.f, 6.f), 0.f, false), { { TEXT("Fabric"), MatQuilt } });
 	const TMap<FName, UMaterialInterface*> ShoeSlots = { { TEXT("Canvas"), F(TEXT("Canvas")) }, { TEXT("Sole"), F(TEXT("Sole")) }, { TEXT("Lace"), F(TEXT("Lace")) }, { TEXT("Shadow"), MatShadow } };
 	Dress(Build.Prop(RoomProps::Sneaker, FVector(Centre.X - BedHalfWidth - 18.f, Centre.Y - 34.f, 0.f), FRotator(0.f, 168.f, 0.f), 0.f, false), ShoeSlots);
 	if (UStaticMeshComponent* Right = Build.Prop(RoomProps::Sneaker, FVector(Centre.X - BedHalfWidth - 32.f, Centre.Y - 60.f, 4.2f), FRotator(0.f, 214.f, 82.f), 0.f, false))
@@ -1009,24 +1024,22 @@ void ANurseryActor::BuildWardrobe(FRoomBuilder& Build)
 	Dress(Build.Prop(RoomProps::NurseryWardrobeDoor, Seat + Turn.RotateVector(FVector(48.f, 26.f, 0.f)), FRotator(0.f, Turn.Yaw - Open, 0.f), 0.f, false),
 		{ { TEXT("Paint"), MatPink }, { TEXT("Inside"), MatPinkInside }, { TEXT("Brass"), MatBrass } });
 
-	// Three things on hangers on the rail, edge on to the open door: a school cardigan, a dress, a
-	// coat. Each a hanging cloth turned upright (pitch 90 lays the cloth's X down the drop).
+	// Her clothes on hangers on the rail: the school cardigan, the rose-print summer dress, and
+	// another in plain cotton. Generated garments (make_nursery.py) — they were flat hanging cloths,
+	// and a rectangle on a hanger is a towel. Hung square to the rail as clothes hang, then turned a
+	// little each way, as they settle, so the door shows their shape rather than their edges.
+	// Fanned like cards: twelve centimetres apart along the rail at thirty degrees puts six between
+	// their planes, the thickness of a garment. Turned further and seen from the door they were a
+	// row of pale bolsters, edge on.
 	USceneComponent* Inside = NurseryPivot(this, RoomRoot, Seat, Turn, TEXT("WardrobeInside"));
 	FRoomBuilder W(this, Inside);
-	struct FGarment { float X; float Length; float Width; UMaterialInterface* Mat; int32 Seed; };
-	const FGarment Garments[] = {
-		{ 12.f, 64.f, 40.f, MatGarment, 7201 },
-		{ 24.f, 92.f, 38.f, MatQuilt, 7202 },
-		{ 36.f, 84.f, 44.f, MatGarmentDark, 7203 },
-	};
-	for (const FGarment& G : Garments)
-	{
-		const float Rail = 152.f;
-		W.Cloth(FVector(G.X, -3.f, Rail - 6.f - G.Length * 0.5f), FRotator(90.f, 0.f, 0.f), FVector2D(G.Length, G.Width), 1.6f, 0.f, G.Seed, G.Mat, 34.f);
-		// The hanger: a hook over the rail and the bar.
-		W.Box(FVector(G.X, -3.f, Rail - 5.f), FRotator::ZeroRotator, FVector(0.6f, 38.f, 1.2f), MatBareWood, false);
-		W.Cyl(FVector(G.X, -3.f, Rail - 1.2f), FRotator(0.f, 0.f, 90.f), FVector(3.f, 3.f, 0.4f), MatIron, false);
-	}
+	const float RailTop = 153.f;
+	Dress(W.Prop(RoomProps::SummerDress, FVector(6.f, -3.f, RailTop), FRotator(0.f, 30.f, 0.f), 0.f, false),
+		{ { TEXT("Fabric"), MatGarmentDark }, { TEXT("Wood"), MatBareWood }, { TEXT("Brass"), MatIron } });
+	Dress(W.Prop(RoomProps::SummerDress, FVector(18.f, -3.f, RailTop), FRotator(0.f, 30.f, 0.f), 0.f, false),
+		{ { TEXT("Fabric"), MatQuilt }, { TEXT("Wood"), MatBareWood }, { TEXT("Brass"), MatIron } });
+	Dress(W.Prop(RoomProps::Cardigan, FVector(32.f, -3.f, RailTop), FRotator(0.f, 52.f, 0.f), 0.f, false),
+		{ { TEXT("Fabric"), MatGarment }, { TEXT("Wood"), MatBareWood }, { TEXT("Brass"), MatIron }, { TEXT("Button"), F(TEXT("Button")) } });
 	// Two pairs of shoes on the floor of it.
 	W.Box(FVector(28.f, 6.f, 39.f), FRotator(0.f, 8.f, 0.f), FVector(8.f, 20.f, 5.f), F(TEXT("Shoe")), false);
 	W.Box(FVector(38.f, 4.f, 39.f), FRotator(0.f, -4.f, 0.f), FVector(8.f, 20.f, 5.f), F(TEXT("Shoe")), false);
@@ -1102,10 +1115,27 @@ void ANurseryActor::BuildDesk(FRoomBuilder& Build)
 
 	// The exercise book is her homework, a clue (BuildClues).
 
-	// Pens and pencils, an eraser, a sharpener (Poly Haven's stationery set), at the back.
-	if (UStaticMeshComponent* Pens = D.PropSeated(RoomProps::Stationery, FVector(-28.f, -21.f, 0.f), FRotator(0.f, 6.f, 0.f), 0.f, false))
+	// A glazed pot of pens and pencils at the back, an eraser and a sharpener beside it. Poly Haven's
+	// stationery set stood here first, and it is a catalogue: its pencils are laid out one above
+	// another in the air, as for a photograph, and on her desk they hung in a stack off the gallery.
 	{
-		FRoomShapes::TintSlots(Pens, FLinearColor(0.55f, 0.50f, 0.46f));
+		const FVector Pot(-28.f, -19.f, 0.f);
+		const TArray<FVector2D> Profile = { { 0.f, 0.f }, { 4.2f, 0.f }, { 4.5f, 10.5f }, { 4.0f, 10.5f }, { 3.7f, 0.8f }, { 0.f, 0.8f } };
+		D.Lathe(Pot, FRotator::ZeroRotator, Profile, 24, F(TEXT("Pot")), 34.f);
+		const TCHAR* Colours[] = { TEXT("Red"), TEXT("Blue"), TEXT("Yellow"), TEXT("Green"), TEXT("Purple"), TEXT("Pink"), TEXT("Orange"), TEXT("Blue") };
+		for (int32 i = 0; i < 8; ++i)
+		{
+			const float A = 2.f * PI * i / 8.f;
+			const bool bPen = i % 3 == 1;
+			const float Length = bPen ? 14.f : Random.FRandRange(15.f, 18.f);
+			const FVector Foot = Pot + FVector(FMath::Cos(A) * 2.2f, FMath::Sin(A) * 2.2f, 0.8f);
+			// Leaning out from the middle against the rim: pitch and roll by the side it is on.
+			const FRotator Lean(FMath::Cos(A) * -9.f, 0.f, FMath::Sin(A) * 9.f);
+			D.Cyl(Foot + Lean.RotateVector(FVector(0.f, 0.f, Length * 0.5f)), Lean, FVector(bPen ? 1.1f : 0.75f, bPen ? 1.1f : 0.75f, Length),
+				bPen ? F(TEXT("TVPlastic")) : F(Colours[i]), false);
+		}
+		D.Box(FVector(-17.f, -22.f, 0.6f), FRotator(0.f, 24.f, 0.f), FVector(4.f, 2.f, 1.2f), F(TEXT("Pink")), false);
+		D.Box(FVector(-14.f, -18.f, 0.8f), FRotator(0.f, -10.f, 0.f), FVector(2.6f, 1.8f, 1.6f), F(TEXT("Blue")), false);
 	}
 	// Her pencil case, and coloured pencils come out of it along the front of the top.
 	Dress(D.Prop(RoomProps::PencilCase, FVector(-45.f, 17.f, 0.f), FRotator(0.f, 22.f, 0.f), 0.f, false),
@@ -1371,8 +1401,8 @@ void ANurseryActor::BuildDrawings(FRoomBuilder& Build)
 	// Her drawings, taped up over the years and never taken down: the ones from when she was small
 	// low on the walls, where she could reach. Atlas order: 0 flowers, 1 house, 2 cat, 3 hearts,
 	// 4 rainbow, 5 the family, 6 the pencil sketch (on the desk), 7 the sea.
-	WallDrawing(Build, EWall::North, WestX() + 70.f, 150.f, 2, -4.f, false);
-	WallDrawing(Build, EWall::North, WestX() + 140.f, 172.f, 4, 3.f, true);
+	WallDrawing(Build, EWall::South, DresserSeat().X - 26.f, 168.f, 2, -4.f, false);
+	WallDrawing(Build, EWall::South, DresserSeat().X + 24.f, 150.f, 4, 3.f, true);
 	WallDrawing(Build, EWall::South, BedX() - 34.f, 160.f, 1, 2.f, false);
 	WallDrawing(Build, EWall::South, BedX() + 30.f, 176.f, 3, -6.f, false);
 	WallDrawing(Build, EWall::South, ToyShelfSeat().X - 38.f, 178.f, 5, -2.f, true);
@@ -1383,9 +1413,9 @@ void ANurseryActor::BuildDrawings(FRoomBuilder& Build)
 	// still on the wall. And it on the floor below, face up, the tape still on one corner.
 	{
 		UMaterialInterface* Clean = Build.Surface(RoomSurfaces::NurseryWallpaper, FLinearColor(0.205f, 0.212f, 0.211f));
-		const float U = EastX() - 46.f;
+		const float U = NightstandSeat().X + 42.f;
 		Build.Mark(WallPoint(EWall::South, U, 150.f, 0.5f), FRotator(0.f, 0.f, -90.f + 4.f), FVector2D(21.f, 29.7f), Clean);
-		Drawing(Build, 1, FVector(U - 6.f, SouthY() - 40.f, 0.65f), FVector::UpVector, FVector(0.7f, 0.7f, 0.f).GetSafeNormal());
+		Drawing(Build, 1, FVector(U - 10.f, SouthY() - 66.f, 0.65f), FVector::UpVector, FVector(0.7f, 0.7f, 0.f).GetSafeNormal());
 	}
 	Drawing(Build, 2, FVector(WestX() + 90.f, NorthY() + 30.f, 0.65f), FVector::UpVector, FVector(-0.3f, -1.f, 0.f).GetSafeNormal());
 	Drawing(Build, 0, FVector(ToyShelfSeat().X + 70.f, SouthY() - 50.f, 0.7f), FVector::UpVector, FVector(1.f, 0.2f, 0.f).GetSafeNormal());
@@ -1442,6 +1472,131 @@ void ANurseryActor::BuildFloorThings(FRoomBuilder& Build)
 	}
 }
 
+
+// ---------------------------------------------------------------------------------------------
+// Second pass, on the user's walk-through.
+// ---------------------------------------------------------------------------------------------
+
+void ANurseryActor::BuildDresser(FRoomBuilder& Build)
+{
+	// A chest of drawers on the south wall between the bed and the toy shelf, where the wall was
+	// a stretch of nothing. On it the things a twelve-year-old keeps out: her laptop (a clue, in
+	// BuildClues), a can of body spray, a jewellery box, hair ties, two instant photographs.
+	const FVector Seat = DresserSeat();
+	const FRotator Turn(0.f, FacingYaw(EWall::South), 0.f);
+	Dress(Build.Prop(RoomProps::NurseryDresser, Seat, Turn, 0.f, false), { { TEXT("Paint"), MatPink }, { TEXT("Brass"), MatBrass }, { TEXT("Shadow"), MatShadow } });
+	NurseryPawnOnly(Build.Box(Seat + FVector(0.f, 0.f, 46.f), Turn, FVector(94.f, 47.f, 92.f), MatVoid));
+	Footprints.Add(FBox2D(FVector2D(Seat.X - 48.f, Seat.Y - 26.f), FVector2D(Seat.X + 48.f, Seat.Y + 26.f)));
+
+	USceneComponent* Pivot = NurseryPivot(this, RoomRoot, Seat + FVector(0.f, 0.f, 92.f), Turn, TEXT("DresserTop"));
+	FRoomBuilder T(this, Pivot);
+	// The jewellery box, its lid not quite down.
+	T.Box(FVector(28.f, -8.f, 3.f), FRotator(0.f, 6.f, 0.f), FVector(16.f, 10.f, 6.f), F(TEXT("Card")), false);
+	T.Box(FVector(28.f, -8.4f, 6.7f), FRotator(0.f, 6.f, -5.f), FVector(16.4f, 10.4f, 1.2f), F(TEXT("Card")), false);
+	// The body spray, its cap beside it.
+	T.Cyl(FVector(37.f, 8.f, 7.5f), FRotator::ZeroRotator, FVector(4.6f, 4.6f, 15.f), F(TEXT("Pink")), false);
+	T.Cyl(FVector(31.f, 12.f, 1.2f), FRotator(90.f, 30.f, 0.f), FVector(4.8f, 4.8f, 2.4f), F(TEXT("Plastic")), false);
+	// Hair ties, a couple of rings of elastic.
+	for (int32 i = 0; i < 3; ++i)
+	{
+		T.Cyl(FVector(16.f + i * 3.5f, 12.f - i * 1.5f, 0.3f + i * 0.4f), FRotator(i * 4.f, 0.f, 0.f), FVector(3.2f, 3.2f, 0.5f), F(i == 1 ? TEXT("Purple") : TEXT("TVPlastic")), false);
+	}
+	// Two instant photographs lying face up near the edge: her and a friend, too small to make out.
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const FRotator Lay(0.f, 18.f - i * 26.f, 0.f);
+		const FVector At(-38.f + i * 9.f, 12.f - i * 3.f, 0.1f + i * 0.2f);
+		T.Box(At, Lay, FVector(8.8f, 10.6f, 0.15f), MatPaper, false);
+		T.Box(At + Lay.RotateVector(FVector(0.f, -0.9f, 0.1f)), Lay, FVector(7.6f, 7.6f, 0.06f), MatPaperDamp, false);
+	}
+	Dust(Build, Seat + FVector(0.f, 0.f, 92.f), FVector2D(50.f, 96.f), 0.4f);
+
+	// Chips on the drawer edges.
+	const FVector Into = Turn.RotateVector(FVector(0.f, -1.f, 0.f));
+	for (const FVector& Local : { FVector(-30.f, 24.f, 42.f), FVector(25.f, 24.f, 18.f), FVector(-6.f, 24.f, 80.f) })
+	{
+		Build.Stain(RoomSurfaces::RoughWood, Seat + Turn.RotateVector(Local) - Into * 3.f, FRotationMatrix::MakeFromX(Into).Rotator(),
+			FVector2D(Random.FRandRange(5.f, 12.f), Random.FRandRange(3.f, 6.f)), FLinearColor(1.1f, 1.0f, 0.95f), 0.95f, 0.8f);
+	}
+}
+
+void ANurseryActor::BuildTelevision(FRoomBuilder& Build)
+{
+	// Her television, a flat forty-inch, on a low cabinet against the north wall to the right of the
+	// door: the other screen in the house besides the one downstairs, and dark like it.
+	const FVector Seat = TVStandSeat();
+	const FRotator Turn(0.f, FacingYaw(EWall::North), 0.f);
+	Dress(Build.Prop(RoomProps::NurseryTVStand, Seat, Turn, 0.f, false),
+		{ { TEXT("Paint"), MatPink }, { TEXT("Inside"), MatPinkInside }, { TEXT("Brass"), MatBrass }, { TEXT("Shadow"), MatShadow } });
+	NurseryPawnOnly(Build.Box(Seat + FVector(0.f, 0.f, 26.f), Turn, FVector(112.f, 41.f, 52.f), MatVoid));
+	Footprints.Add(FBox2D(FVector2D(Seat.X - 57.f, Seat.Y - 21.f), FVector2D(Seat.X + 57.f, Seat.Y + 22.f)));
+
+	// Turned a little towards the bed, which is where it was watched from.
+	const FRotator Facing(0.f, -12.f, 0.f);
+	const FVector Base = Seat + FVector(0.f, -3.f, 52.f);
+	Dress(Build.Prop(RoomProps::Television, Base, Facing, 0.f, false),
+		{ { TEXT("Plastic"), F(TEXT("TVPlastic")) }, { TEXT("Screen"), F(TEXT("Screen")) }, { TEXT("Lens"), F(TEXT("Lens")) } });
+	// Dust on the black glass, the one place it shows best.
+	const FVector Front = Facing.RotateVector(FVector(0.f, 1.f, 0.f));
+	Build.Stain(RoomSurfaces::Damp, Base + FVector(0.f, 0.f, 34.f) + Front * 6.f, FRotationMatrix::MakeFromX(-Front).Rotator(), FVector2D(86.f, 50.f),
+		FLinearColor(0.42f, 0.40f, 0.36f), 0.22f, 1.4f);
+	// The remote, by it.
+	Build.Box(Seat + FVector(40.f, 9.f, 52.8f), FRotator(0.f, 14.f, 0.f), FVector(4.6f, 15.f, 1.6f), F(TEXT("TVPlastic")), false);
+	Dust(Build, Seat + FVector(0.f, 0.f, 52.f), FVector2D(41.f, 112.f), 0.38f);
+
+	// In the open shelf: a DVD player and a few films standing beside it.
+	USceneComponent* Pivot = NurseryPivot(this, RoomRoot, Seat, Turn, TEXT("TVStand"));
+	FRoomBuilder S(this, Pivot);
+	S.Box(FVector(-24.f, 0.f, 25.5f), FRotator(0.f, 2.f, 0.f), FVector(40.f, 26.f, 5.f), F(TEXT("TVPlastic")), false);
+	const TCHAR* Cases[] = { TEXT("NovelA"), TEXT("Pink"), TEXT("NovelC"), TEXT("Purple"), TEXT("NovelB") };
+	for (int32 i = 0; i < 5; ++i)
+	{
+		StandingBook(S, FVector(16.f + i * 1.7f, 2.f, 23.f), FVector(0.f, 1.f, 0.f), i == 4 ? -18.f : 0.f, FVector(1.4f, 13.5f, 19.f), F(Cases[i]));
+	}
+}
+
+void ANurseryActor::BuildCoatRack(FRoomBuilder& Build)
+{
+	// A hook rail behind the door, on the wall the open leaf swings back towards: her raincoat on
+	// one hook, a scarf over another, and her gym bag dropped on the floor under them, which is
+	// where a bag goes on the way in.
+	const float U = CoatRackX();
+	USceneComponent* Pivot = NurseryPivot(this, RoomRoot, WallPoint(EWall::North, U, 164.f, 1.2f), FRotator(0.f, FacingYaw(EWall::North), 0.f), TEXT("CoatRack"));
+	FRoomBuilder R(this, Pivot);
+	Dress(R.Prop(RoomProps::CoatRack, FVector::ZeroVector, FRotator::ZeroRotator, 0.f, false), { { TEXT("Paint"), MatWhite }, { TEXT("Brass"), MatBrass } });
+	// Hung from the bottom of each hook's curve, half a hand out from the board.
+	Dress(R.Prop(RoomProps::RainJacket, FVector(-9.f, 7.2f, 0.2f), FRotator(0.f, 4.f, 0.f), 0.f, false),
+		{ { TEXT("Fabric"), MatJacket }, { TEXT("Zip"), F(TEXT("Zip")) } });
+	Dress(R.Prop(RoomProps::Scarf, FVector(27.f, 7.4f, 0.6f), FRotator(0.f, -6.f, 0.f), 0.f, false), { { TEXT("Fabric"), MatScarf } });
+
+	Dress(Build.PropSeated(RoomProps::Backpack, FVector(U + 4.f, NorthY() + 15.f, 0.f), FRotator(0.f, FacingYaw(EWall::North) + 10.f, -12.f), 34.f, false),
+		{ { TEXT("Fabric"), MatGymBag }, { TEXT("Trim"), F(TEXT("Strap")) }, { TEXT("Zip"), F(TEXT("Zip")) }, { TEXT("Charm"), F(TEXT("Pink")) } });
+	Footprints.Add(FBox2D(FVector2D(U - 22.f, NorthY()), FVector2D(U + 26.f, NorthY() + 30.f)));
+}
+
+void ANurseryActor::BuildMirror(FRoomBuilder& Build)
+{
+	// A standing mirror in the corner past the nightstand, turned to the bed, its glass broken in a
+	// star round where something hit it and two pieces gone. Mirrors are what this story ends on;
+	// this one has already been struck once.
+	const FVector Seat = MirrorSeat();
+	const FRotator Turn(0.f, 135.f, 0.f);
+	Dress(Build.Prop(RoomProps::StandingMirror, Seat, Turn, 0.f, false),
+		{ { TEXT("PaintWhite"), MatWhite }, { TEXT("Wood"), MatBareWood }, { TEXT("Mirror"), F(TEXT("Mirror")) } });
+	NurseryPawnOnly(Build.Box(Seat + FVector(0.f, 0.f, 80.f), Turn, FVector(60.f, 40.f, 160.f), MatVoid));
+	Footprints.Add(FBox2D(FVector2D(Seat.X - 36.f, Seat.Y - 36.f), FVector2D(Seat.X + 36.f, Seat.Y + 36.f)));
+
+	// The two pieces that fell, broken again on the boards in front of it.
+	const FVector Front = Turn.RotateVector(FVector(0.f, 1.f, 0.f));
+	const FVector Side = Turn.RotateVector(FVector(1.f, 0.f, 0.f));
+	for (int32 i = 0; i < 7; ++i)
+	{
+		const FVector At = Seat + Front * Random.FRandRange(18.f, 50.f) + Side * Random.FRandRange(-22.f, 22.f) + FVector(0.f, 0.f, 0.7f);
+		Build.Box(At, FRotator(Random.FRandRange(-2.f, 2.f), Random.FRandRange(0.f, 360.f), Random.FRandRange(-2.f, 2.f)),
+			FVector(Random.FRandRange(3.f, 9.f), Random.FRandRange(2.f, 5.f), 0.3f), F(TEXT("Mirror")), false);
+	}
+}
+
 // ---------------------------------------------------------------------------------------------
 
 void ANurseryActor::SpawnWindow()
@@ -1462,6 +1617,9 @@ void ANurseryActor::SpawnWindow()
 		// The opening is a good deal more sky than the bedroom's, and it lit the desk beside it like
 		// a summer afternoon: at the kitchen's figure the storm is a cold grey on the wall again.
 		WindowSetup.PortalScale = 0.42f;
+		// Eight metres along the façade from the bedroom's window, past the end of the lead's band
+		// of trees and rain: through this one there was flat sky over flat ground and nothing in it.
+		WindowSetup.bOwnTrees = true;
 		// floral_fabric measures (0.771, 0.468, 0.485): this lands at about (0.11, 0.072, 0.070).
 		WindowSetup.CurtainSurface = &RoomSurfaces::FloralFabric;
 		WindowSetup.CurtainTint = FLinearColor(0.143f, 0.154f, 0.144f);
@@ -1563,6 +1721,19 @@ void ANurseryActor::BuildClues()
 			const float Lean = FMath::Tan(FMath::DegreesToRadians(22.f));
 			B.Add(FRoomShapes::Sphere(), FVector(1.5f, -3.9f + (10.f - 7.2f) * Lean, 10.f), FRotator(0.f, 0.f, -22.f), FVector(3.4f, 0.6f, 4.0f), F(TEXT("Red")), false);
 			B.Box(FVector(1.5f, -3.85f + (5.5f - 7.2f) * Lean, 5.5f), FRotator(0.f, 0.f, -22.f), FVector(0.15f, 0.1f, 4.6f), MatPencil, false);
+		}
+	}
+
+	// Her laptop, open on the chest of drawers, its screen dark.
+	{
+		const FVector Seat = DresserSeat();
+		const FRotator Turn(0.f, FacingYaw(EWall::South), 0.f);
+		if (AClueActor* Clue = SpawnClue(Seat + Turn.RotateVector(FVector(-8.f, -2.f, 92.f)), Turn + FRotator(0.f, -10.f, 0.f)))
+		{
+			FRoomBuilder B(Clue, Clue->GetRootScene());
+			Dress(B.Prop(RoomProps::Laptop, FVector::ZeroVector, FRotator::ZeroRotator, 0.f, false),
+				{ { TEXT("Case"), F(TEXT("LaptopCase")) }, { TEXT("Keys"), F(TEXT("Keys")) }, { TEXT("Screen"), F(TEXT("Screen")) } });
+			B.Stain(RoomSurfaces::Damp, FVector(0.f, 0.f, 6.f), FRotator(-90.f, 0.f, 0.f), FVector2D(24.f, 34.f), FLinearColor(0.42f, 0.40f, 0.36f), 0.3f, 1.4f);
 		}
 	}
 

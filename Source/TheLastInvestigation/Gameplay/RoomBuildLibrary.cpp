@@ -129,8 +129,17 @@ namespace RoomProps
 	const TCHAR* HairBow = TEXT("girl_hairbow");
 	const TCHAR* Pajamas = TEXT("girl_pajamas");
 	const TCHAR* Pillow = TEXT("girl_pillow");
+	const TCHAR* NurseryDresser = TEXT("nursery_dresser");
+	const TCHAR* NurseryTVStand = TEXT("nursery_tvstand");
+	const TCHAR* Television = TEXT("girl_tv");
+	const TCHAR* Laptop = TEXT("girl_laptop");
+	const TCHAR* StandingMirror = TEXT("girl_mirror");
+	const TCHAR* CoatRack = TEXT("nursery_coatrack");
+	const TCHAR* SummerDress = TEXT("girl_dress");
+	const TCHAR* Cardigan = TEXT("girl_cardigan");
+	const TCHAR* RainJacket = TEXT("girl_jacket");
+	const TCHAR* Scarf = TEXT("girl_scarf");
 	const TCHAR* Ukulele = TEXT("Ukulele_01");
-	const TCHAR* Stationery = TEXT("stationery_supplies");
 	const TCHAR* AlarmClock = TEXT("alarm_clock_01");
 	const TCHAR* WickerBasket = TEXT("wicker_basket_02");
 }

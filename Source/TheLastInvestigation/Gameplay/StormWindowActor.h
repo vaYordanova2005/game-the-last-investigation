@@ -46,6 +46,15 @@ struct FStormWindowSetup
 	 */
 	bool bOwnView = false;
 
+	/**
+	 * For a follower on the lead's side of the house but well along from it: its own trees and
+	 * rain, in front of the lead's sky and ground. The lead's trees and rain stand in a band in
+	 * front of the lead's window, and through a window eight metres along the same wall there was
+	 * nothing out there but the flat sky over the flat ground. A second sky and ground would stand
+	 * in the same place as the lead's, which is what bOwnView is for and this is not.
+	 */
+	bool bOwnTrees = false;
+
 	/** Multiplies the sky portal, for an opening whose glass lets through less than a clear pane. */
 	float PortalScale = 1.f;
 
@@ -125,6 +134,8 @@ public:
 private:
 	void BuildWindow();
 	void BuildOutsideWorld();
+	/** The trees outside, on their own: part of BuildOutsideWorld, and all of a bOwnTrees follower's. */
+	void BuildTreeline();
 	void BuildRain();
 	void BuildLightningBolts();
 	void TickCurtains(float DeltaTime);

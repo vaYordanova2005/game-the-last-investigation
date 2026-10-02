@@ -155,9 +155,19 @@ namespace RoomProps
 	extern const TCHAR* HairBow;
 	extern const TCHAR* Pajamas;
 	extern const TCHAR* Pillow;
+	extern const TCHAR* NurseryDresser;
+	extern const TCHAR* NurseryTVStand;
+	extern const TCHAR* Television;
+	extern const TCHAR* Laptop;
+	extern const TCHAR* StandingMirror;
+	extern const TCHAR* CoatRack;
+	/** Hanging clothes. The dress and the cardigan hang from a hanger whose hook top is the origin; the jacket and the scarf from their own loop. */
+	extern const TCHAR* SummerDress;
+	extern const TCHAR* Cardigan;
+	extern const TCHAR* RainJacket;
+	extern const TCHAR* Scarf;
 	/** And from Poly Haven (CC0). */
 	extern const TCHAR* Ukulele;
-	extern const TCHAR* Stationery;
 	extern const TCHAR* AlarmClock;
 	extern const TCHAR* WickerBasket;
 }

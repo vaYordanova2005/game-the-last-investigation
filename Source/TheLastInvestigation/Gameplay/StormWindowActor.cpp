@@ -311,6 +311,11 @@ void AStormWindowActor::BeginPlay()
 			BuildRain();
 			BuildLightningBolts();
 		}
+		else if (Setup.bOwnTrees)
+		{
+			BuildTreeline();
+			BuildRain();
+		}
 	}
 	else
 	{
@@ -692,8 +697,6 @@ void AStormWindowActor::BuildOutsideWorld()
 	// cut-out; a wood at two per cent albedo against a storm sky is a shape, and the shape is the
 	// whole of what a window at night has to show.
 	UMaterialInstanceDynamic* GroundMat = Build.Flat(FLinearColor(0.020f, 0.022f, 0.018f), 1.f);
-	UMaterialInstanceDynamic* TrunkMat = Build.Flat(FLinearColor(0.016f, 0.014f, 0.012f), 1.f);
-	UMaterialInstanceDynamic* LeafMat = Build.Flat(RoomPalette::Foliage, 1.f);
 
 	// A backdrop far enough out that it never enters the lantern's reach — it exists so the player
 	// sees storm-lit distance through the window instead of the empty void past the level.
@@ -717,6 +720,15 @@ void AStormWindowActor::BuildOutsideWorld()
 	{
 		Ground->SetCastShadow(false);
 	}
+
+	BuildTreeline();
+}
+
+void AStormWindowActor::BuildTreeline()
+{
+	FRoomBuilder Build(this, StormRoot);
+	UMaterialInstanceDynamic* TrunkMat = Build.Flat(FLinearColor(0.016f, 0.014f, 0.012f), 1.f);
+	UMaterialInstanceDynamic* LeafMat = Build.Flat(RoomPalette::Foliage, 1.f);
 
 	// Treeline. Dense and close: through a window this size the player sees a narrow cone, and it
 	// wants to be full of wet black branches rather than showing the gap between two of them.
