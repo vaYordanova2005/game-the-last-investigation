@@ -114,6 +114,7 @@ void ACellarActor::BeginPlay()
 		if (Room.bBedroom)
 		{
 			SpawnBedroom(Room);
+			BuildMaidsCorner(Build, Room);
 		}
 		else
 		{
@@ -170,6 +171,20 @@ void ACellarActor::CacheMaterials(FRoomBuilder& Build)
 	MatVoid = Build.Flat(RoomPalette::Void, 1.f);
 	MatWeb = Build.Cobweb(RoomPalette::Web);
 	MatRubble = Build.Surface(RoomSurfaces::Substrate, FLinearColor(0.120f, 0.104f, 0.090f));
+
+	// The maid's things. Straw and twig are the rough-wood photograph, whose grain stretched along
+	// a broom head reads as fibre; the straw gone the grey-ochre of anything kept in a cellar.
+	// Rough: at the photograph's own roughness a smooth broom head took a sheen and read as tin.
+	MatStraw = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.66f, 0.48f, 0.22f), 1.6f);
+	MatTwig = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.30f, 0.20f, 0.12f), 1.6f);
+	MatHandle = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.38f, 0.32f, 0.26f));
+	// Galvanised tin: the rusted-iron photograph on the tint that neutralises its green paint (see
+	// MatIron), a shade lighter, since zinc is the pale metal and iron the dark one. Two instances,
+	// because the turned bodies reset their instance's tiling and the boxes must not share it.
+	MatZinc = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(1.02f, 0.54f, 0.85f), 0.8f);
+	MatTin = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(1.02f, 0.54f, 0.851f), 0.8f);
+	MatGrime = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.07f, 0.058f, 0.045f), 1.3f);
+	MatBristle = Build.Flat(FLinearColor(0.030f, 0.026f, 0.022f), 0.95f);
 }
 
 void ACellarActor::BuildStairWell(FRoomBuilder& Build)
@@ -512,8 +527,271 @@ void ACellarActor::SpawnBedroom(const FCellarRoom& Room)
 		RoomSetup.bWindow = false;
 		RoomSetup.bHook = false;
 		RoomSetup.bContents = true;
+		// The maid's room: no chair lying near a hook that is not here, and her brooms and pails
+		// where the armchair stood (BuildMaidsCorner).
+		RoomSetup.bOverturnedChair = false;
+		RoomSetup.bArmchair = false;
 		Bedroom->Configure(RoomSetup);
 		Bedroom->FinishSpawning(Transform);
+	}
+}
+
+void ACellarActor::BuildMaidsCorner(FRoomBuilder& Build, const FCellarRoom& Room)
+{
+	// The corner where the west wall meets the door wall, where the armchair stood in Room01: two
+	// brooms leant into it, a galvanised pail standing in front of them with its bail dropped
+	// against its side, a second pail knocked over with the bail come off it, and a dustpan with
+	// the hand brush still in it. Everything is laid out in the dressing's frame (its origin is the
+	// room's centre on the floor): the west wall's inner face is at -Width/2 + T/2, the door wall's
+	// at +Depth/2 - T/2. Kept above Y 190, clear of where the footprints stop (-350, 170).
+	const FVector C = RoomCentre(Room);
+	const float WestFace = -Room.Width * 0.5f + WallThickness * 0.5f;
+	const float DoorFace = Room.Depth * 0.5f - WallThickness * 0.5f;
+	// The boards stand anywhere from flush to seven centimetres proud of the room's floor (each is
+	// lifted, pitched and warped on its own), so nothing here can rest at one fixed height: laid at
+	// the average, the dustpan and the loose bail went half under the higher boards. What a thing
+	// rests on is the highest board under its footprint, found by tracing down onto the dressing's
+	// boards, which the bedroom built (and gave collision) before this runs. Boards is the fallback.
+	const float Boards = 3.5f;
+	FRandomStream Random(1955);
+	auto RestOn = [&](const FVector2D& Spot, float Radius)
+	{
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(MaidsCorner), false, this);
+		float Top = -1.f;
+		// The middle, and two rings round it: the boards are 21cm strips, and a footprint that
+		// reaches a strip no sample lands on can go under it (the loose bail's far end did).
+		TArray<FVector2D, TInlineAllocator<17>> Samples = { FVector2D::ZeroVector };
+		for (int32 i = 0; i < 8; ++i)
+		{
+			const FVector2D Dir(FMath::Cos(i * PI / 4.f), FMath::Sin(i * PI / 4.f));
+			Samples.Add(Dir * Radius);
+			Samples.Add(Dir * Radius * 0.5f);
+		}
+		for (const FVector2D& Offset : Samples)
+		{
+			const FVector Local = C + FVector(Spot.X + Offset.X, Spot.Y + Offset.Y, 0.f);
+			FHitResult Hit;
+			if (GetWorld()->LineTraceSingleByChannel(Hit, GetActorTransform().TransformPosition(Local + FVector(0.f, 0.f, 40.f)),
+				GetActorTransform().TransformPosition(Local + FVector(0.f, 0.f, -10.f)), ECC_Visibility, Params))
+			{
+				Top = FMath::Max(Top, GetActorTransform().InverseTransformPosition(Hit.ImpactPoint).Z - C.Z);
+			}
+		}
+		return Top >= 0.f ? Top : Boards;
+	};
+
+	// A scene component to build a tilted thing in its own frame.
+	auto Pivot = [&](const FVector& Local, const FRotator& Rotation, const TCHAR* Name)
+	{
+		USceneComponent* P = NewObject<USceneComponent>(this, MakeUniqueObjectName(this, USceneComponent::StaticClass(), Name));
+		P->SetMobility(EComponentMobility::Movable);
+		P->AttachToComponent(CellarRoot, FAttachmentTransformRules::KeepRelativeTransform);
+		P->SetRelativeLocationAndRotation(C + Local, Rotation);
+		P->RegisterComponent();
+		AddInstanceComponent(P);
+		return P;
+	};
+	// A rod between two points.
+	auto Rod = [](FRoomBuilder& B, const FVector& From, const FVector& To, float Diameter, UMaterialInterface* Mat)
+	{
+		const FVector Span = To - From;
+		B.Cyl((From + To) * 0.5f, FRotationMatrix::MakeFromZ(Span).Rotator(), FVector(Diameter, Diameter, Span.Size()), Mat, /*bBlockingCollision*/ false);
+	};
+
+	// A broom leant on a wall: built standing on local Z from the middle of the bottom of its head,
+	// then tipped by Lean towards the wall that Yaw turns local +X onto. The edge of the head on
+	// the wall's side is the one left on the floor, so the pivot is raised by how far that edge
+	// would otherwise go under. The top of the handle touches the plaster.
+	auto Leant = [&](float Length, float Lean, float HeadHalfDepth, float Yaw, const FVector2D& WallPoint, float WallDistance, const TCHAR* Name)
+	{
+		const float S = FMath::Sin(FMath::DegreesToRadians(Lean));
+		const FVector Out = FRotator(0.f, Yaw, 0.f).RotateVector(FVector(1.f, 0.f, 0.f));
+		const FVector2D Foot = WallPoint - FVector2D(Out.X, Out.Y) * (Length * S + WallDistance);
+		return Pivot(FVector(Foot.X, Foot.Y, RestOn(Foot, 12.f) + HeadHalfDepth * S), FRotator(-Lean, Yaw, 0.f), Name);
+	};
+
+	// The corn broom, against the west wall: a flat fan of straw sewn into rows, tied hard round the
+	// handle at the shoulder, and splayed and broken along the edge it swept with.
+	{
+		const float Length = 150.f;
+		USceneComponent* P = Leant(Length, 14.f, 3.25f, 180.f, FVector2D(WestFace, DoorFace - 26.f), 1.4f, TEXT("CornBroom"));
+		FRoomBuilder B(this, P);
+		// The fan: a cone flattened to the head's thickness, the point lost inside the binding, and
+		// the straw laid over both faces of it. The cone alone was a smooth tin funnel: what says
+		// straw is the lines of it, running from the shoulder and spreading to the sweeping edge.
+		B.Add(FRoomShapes::Cone(), FVector(0.f, 0.f, 17.f), FRotator::ZeroRotator, FVector(6.5f, 30.f, 34.f), MatTwig, /*bBlockingCollision*/ false);
+		for (const float Face : { -1.f, 1.f })
+		{
+			const int32 Straws = 24;
+			for (int32 i = 0; i < Straws; ++i)
+			{
+				const float U = (i + 0.5f) / Straws * 2.f - 1.f + Random.FRandRange(-0.02f, 0.02f);
+				const float TopZ = Random.FRandRange(20.f, 24.f);
+				const float BottomZ = Random.FRandRange(0.2f, 1.6f);
+				const FVector Top(Face * (3.25f * (1.f - TopZ / 34.f) + 0.25f), U * 15.f * (1.f - TopZ / 34.f), TopZ);
+				const FVector Bottom(Face * (3.25f * (1.f - BottomZ / 34.f) + 0.25f), U * 15.f * (1.f - BottomZ / 34.f) + Random.FRandRange(-0.6f, 0.6f), BottomZ);
+				Rod(B, Top, Bottom, Random.FRandRange(0.45f, 0.7f), MatStraw);
+			}
+		}
+		// Two rows of stitching across it, each the width of the fan where it runs.
+		for (const float Z : { 9.f, 14.5f })
+		{
+			const float Taper = 1.f - Z / 34.f;
+			B.Cyl(FVector(0.f, 0.f, Z), FRotator::ZeroRotator, FVector(6.5f * Taper + 0.7f, 30.f * Taper + 0.7f, 0.9f), MatTwig, /*bBlockingCollision*/ false);
+		}
+		// The shoulder, wired tight round the handle.
+		B.Cyl(FVector(0.f, 0.f, 21.f), FRotator::ZeroRotator, FVector(4.4f, 13.f, 5.f), MatStraw, /*bBlockingCollision*/ false);
+		B.Cyl(FVector(0.f, 0.f, 25.5f), FRotator::ZeroRotator, FVector(3.8f, 8.f, 4.f), MatStraw, /*bBlockingCollision*/ false);
+		B.Cyl(FVector(0.f, 0.f, 27.8f), FRotator::ZeroRotator, FVector(3.6f, 3.6f, 1.6f), MatTin, /*bBlockingCollision*/ false);
+		Rod(B, FVector(0.f, 0.f, 22.f), FVector(0.f, 0.f, Length), 2.8f, MatHandle);
+		B.Sph(FVector(0.f, 0.f, Length), 3.f, MatHandle);
+		// Straws broken out of the sweeping edge, every one at its own angle.
+		for (int32 i = 0; i < 12; ++i)
+		{
+			const float Y = Random.FRandRange(-14.f, 14.f);
+			const FVector From(Random.FRandRange(-2.f, 2.f), Y, Random.FRandRange(2.f, 5.f));
+			const FVector To = From + FVector(Random.FRandRange(-5.f, 5.f), Y * 0.25f + Random.FRandRange(-3.f, 3.f), -Random.FRandRange(1.f, 2.5f));
+			Rod(B, From, To, 0.45f, MatStraw);
+		}
+	}
+
+	// The besom, against the door wall: twigs bound in a cone round the end of the handle, with
+	// the ones that have worked loose splaying out round the foot.
+	{
+		const float Length = 138.f;
+		USceneComponent* P = Leant(Length, 18.f, 12.f, 90.f, FVector2D(WestFace + 72.f, DoorFace), 1.5f, TEXT("Besom"));
+		FRoomBuilder B(this, P);
+		// A dark core under the twigs, then the twigs themselves: each its own line from the binding
+		// out to the foot, which is what reads as a bundle rather than as a cone.
+		B.Add(FRoomShapes::Cone(), FVector(0.f, 0.f, 23.f), FRotator::ZeroRotator, FVector(22.f, 22.f, 46.f), MatBristle, /*bBlockingCollision*/ false);
+		for (int32 i = 0; i < 44; ++i)
+		{
+			const float A = (i + Random.FRandRange(0.f, 0.8f)) / 44.f * 2.f * PI;
+			const FVector Dir(FMath::Cos(A), FMath::Sin(A), 0.f);
+			const float TopZ = Random.FRandRange(36.f, 40.f);
+			const float BottomZ = Random.FRandRange(0.3f, 2.5f);
+			const FVector Top = Dir * (11.f * (1.f - TopZ / 46.f) + 0.3f) + FVector(0.f, 0.f, TopZ);
+			const FVector Bottom = Dir * (11.f * (1.f - BottomZ / 46.f) + Random.FRandRange(0.3f, 1.6f)) + FVector(0.f, 0.f, BottomZ);
+			Rod(B, Top, Bottom, Random.FRandRange(0.6f, 0.95f), MatTwig);
+		}
+		for (const float Z : { 30.f, 37.f })
+		{
+			const float D = 24.f * (1.f - Z / 46.f) + 0.8f;
+			B.Cyl(FVector(0.f, 0.f, Z), FRotator::ZeroRotator, FVector(D, D, 1.4f), MatHandle, /*bBlockingCollision*/ false);
+		}
+		Rod(B, FVector(0.f, 0.f, 32.f), FVector(0.f, 0.f, Length), 3.f, MatHandle);
+		for (int32 i = 0; i < 18; ++i)
+		{
+			const float A = Random.FRandRange(0.f, 2.f * PI);
+			const FVector Dir(FMath::Cos(A), FMath::Sin(A), 0.f);
+			const float Start = Random.FRandRange(10.f, 18.f);
+			const FVector From = Dir * (12.f * (1.f - Start / 46.f) - 0.5f) + FVector(0.f, 0.f, Start);
+			const FVector To = Dir * Random.FRandRange(11.f, 15.f) + FVector(0.f, 0.f, Random.FRandRange(0.5f, 3.f));
+			Rod(B, From, To, Random.FRandRange(0.5f, 0.8f), MatTwig);
+		}
+	}
+
+	// The pail. Turned (FRoomBuilder::Lathe): a cylinder has no inside and no rim, and a bucket is
+	// little else. Tapered, two pressed beads round it, the top rolled over a wire.
+	const float PailHeight = 26.4f;
+	auto Wall = [PailHeight](float Z) { return 12.6f + 2.7f * Z / PailHeight; };
+	TArray<FVector2D> Pail = { { 0.f, 0.f }, { 12.2f, 0.f }, { 12.2f, 0.f }, { 12.6f, 0.7f } };
+	for (const float Bead : { 7.6f, 17.6f })
+	{
+		Pail.Add({ Wall(Bead - 0.6f), Bead - 0.6f });
+		Pail.Add({ Wall(Bead) + 0.35f, Bead });
+		Pail.Add({ Wall(Bead + 0.6f), Bead + 0.6f });
+	}
+	Pail.Append({ { Wall(PailHeight), PailHeight }, { 15.75f, 26.7f }, { 15.85f, 27.3f }, { 15.4f, 27.7f }, { 15.05f, 27.2f },
+		{ Wall(PailHeight) - 0.35f, 26.4f }, { Wall(1.2f) - 0.35f, 1.2f }, { 0.f, 1.0f } });
+	const float EarZ = 23.5f;
+	const float EarRadius = Wall(EarZ) + 0.9f;
+
+	// The bail: a wire arc between the ears, Fall degrees down from upright about the line through
+	// them. At 100 its grip rests against the side, which is where a bail goes when it is let go;
+	// at 90 it lies flat.
+	auto Bail = [&](FRoomBuilder& B, float Fall, const FVector& Centre)
+	{
+		const float SinF = FMath::Sin(FMath::DegreesToRadians(Fall));
+		const float CosF = FMath::Cos(FMath::DegreesToRadians(Fall));
+		auto At = [&](float T) { return Centre + FVector(EarRadius * FMath::Cos(T), -EarRadius * FMath::Sin(T) * SinF, EarRadius * FMath::Sin(T) * CosF); };
+		const int32 Steps = 16;
+		for (int32 i = 0; i < Steps; ++i)
+		{
+			Rod(B, At(PI * i / Steps), At(PI * (i + 1) / Steps), 0.8f, MatIron);
+		}
+		// The wooden grip in the middle of it.
+		Rod(B, At(PI * 0.5f) - FVector(4.5f, 0.f, 0.f), At(PI * 0.5f) + FVector(4.5f, 0.f, 0.f), 2.f, MatHandle);
+	};
+
+	// The one standing up, in front of the brooms, with what was left in it dried to a crust.
+	{
+		const FVector2D Spot(WestFace + 122.f, DoorFace - 37.f);
+		USceneComponent* P = Pivot(FVector(Spot.X, Spot.Y, RestOn(Spot, 11.f)), FRotator(0.f, 30.f, 0.f), TEXT("Pail"));
+		FRoomBuilder B(this, P);
+		B.Lathe(FVector::ZeroVector, FRotator::ZeroRotator, Pail, 36, MatZinc, RoomSurfaces::RustedIron.TexelSizeCm * 0.3f);
+		// Walked inwards so it faces up, shrunk off the tin all round.
+		const TArray<FVector2D> Crust = { { 12.4f, 2.4f }, { 11.6f, 3.0f }, { 6.f, 3.4f }, { 0.f, 3.5f } };
+		B.Lathe(FVector::ZeroVector, FRotator::ZeroRotator, Crust, 28, MatGrime, 30.f);
+		for (const float Side : { -1.f, 1.f })
+		{
+			B.Box(FVector(Side * (Wall(EarZ) + 0.4f), 0.f, EarZ), FRotator::ZeroRotator, FVector(1.2f, 2.6f, 3.4f), MatTin, /*bBlockingCollision*/ false);
+		}
+		Bail(B, 100.f, FVector(0.f, 0.f, EarZ));
+		CellarPawnOnly(Build.Box(C + FVector(Spot.X, Spot.Y, 15.f), FRotator::ZeroRotator, FVector(34.f, 34.f, 30.f), MatVoid));
+	}
+
+	// The one knocked over, its mouth to the room. Lying on its side a tapered pail rests on its rim
+	// and the edge of its bottom, so its axis rises towards the mouth by the taper.
+	{
+		const float Tilt = FMath::RadiansToDegrees(FMath::Atan2(15.85f - 12.6f, 27.3f));
+		const FVector2D Spot(WestFace + 18.f, DoorFace - 79.f);
+		const float Yaw = -20.f;
+		const FVector Axis = FRotator(0.f, Yaw, 0.f).RotateVector(FVector(1.f, 0.f, 0.f));
+		const float Floor = RestOn(Spot + FVector2D(Axis.X, Axis.Y) * 13.f, 12.f);
+		USceneComponent* P = Pivot(FVector(Spot.X, Spot.Y, Floor + 12.6f * FMath::Cos(FMath::DegreesToRadians(Tilt))), FRotator(Tilt - 90.f, Yaw, 0.f), TEXT("PailOver"));
+		FRoomBuilder B(this, P);
+		B.Lathe(FVector::ZeroVector, FRotator::ZeroRotator, Pail, 36, MatZinc, RoomSurfaces::RustedIron.TexelSizeCm * 0.3f);
+		// The ears on local Y, which stays level when the pail is tipped: on X one would be under it.
+		for (const float Side : { -1.f, 1.f })
+		{
+			B.Box(FVector(0.f, Side * (Wall(EarZ) + 0.4f), EarZ), FRotator::ZeroRotator, FVector(2.6f, 1.2f, 3.4f), MatTin, /*bBlockingCollision*/ false);
+		}
+		const FVector Mouth = C + FVector(Spot.X, Spot.Y, Floor) + Axis * 30.f;
+		CellarPawnOnly(Build.Box(C + FVector(Spot.X, Spot.Y, 16.f) + Axis * 13.f, FRotator(0.f, Yaw, 0.f), FVector(30.f, 34.f, 32.f), MatVoid));
+		// What ran out of it, long dried into the boards: far enough out from the mouth that the
+		// decal's reach stops short of the tin.
+		Build.Stain(RoomSurfaces::Damp, Mouth + Axis * 30.f + FVector(0.f, 0.f, 4.f), FRotator(-90.f, 0.f, Yaw + 90.f), FVector2D(44.f, 44.f),
+			FLinearColor(0.05f, 0.045f, 0.04f), 0.6f, 1.2f);
+	}
+
+	// Its bail, come off and lying on the boards beside it.
+	{
+		// Propped a hair off the boards by its grip.
+		const FVector2D Spot(WestFace + 160.f, DoorFace - 70.f);
+		USceneComponent* P = Pivot(FVector(Spot.X, Spot.Y, RestOn(Spot, 17.f) + 1.f), FRotator(0.f, 64.f, 0.f), TEXT("LooseBail"));
+		FRoomBuilder B(this, P);
+		Bail(B, 90.f, FVector::ZeroVector);
+	}
+
+	// A tin dustpan, the hand brush left in it.
+	{
+		const FVector2D Spot(WestFace + 155.f, DoorFace - 110.f);
+		USceneComponent* P = Pivot(FVector(Spot.X, Spot.Y, RestOn(Spot, 11.f)), FRotator(0.f, 152.f, 0.f), TEXT("Dustpan"));
+		FRoomBuilder B(this, P);
+		// Pan: a floor that runs out to a lip at the front (+X), a back, and sides falling to the lip.
+		B.Box(FVector(0.f, 0.f, 0.2f), FRotator::ZeroRotator, FVector(23.f, 25.f, 0.4f), MatTin, /*bBlockingCollision*/ false);
+		B.Box(FVector(-11.3f, 0.f, 3.6f), FRotator::ZeroRotator, FVector(0.5f, 25.f, 7.f), MatTin, /*bBlockingCollision*/ false);
+		const float SideSlope = FMath::RadiansToDegrees(FMath::Atan2(7.f, 23.f));
+		for (const float Side : { -1.f, 1.f })
+		{
+			B.Box(FVector(-1.f, Side * 12.3f, 1.4f), FRotator(-SideSlope, 0.f, 0.f), FVector(24.f, 0.5f, 3.6f), MatTin, /*bBlockingCollision*/ false);
+		}
+		Rod(B, FVector(-11.5f, 0.f, 4.5f), FVector(-24.f, 0.f, 7.5f), 1.8f, MatTin);
+		// The hand brush, lying in the pan bristles down.
+		B.Box(FVector(2.f, 1.5f, 2.f), FRotator(0.f, 12.f, 0.f), FVector(18.f, 4.2f, 3.2f), MatBristle, /*bBlockingCollision*/ false);
+		B.Box(FVector(2.f, 1.5f, 4.6f), FRotator(0.f, 12.f, 0.f), FVector(21.f, 5.f, 2.2f), MatHandle, /*bBlockingCollision*/ false);
+		B.Sph(FVector(-9.2f, -0.6f, 4.8f), 3.2f, MatHandle);
 	}
 }
 

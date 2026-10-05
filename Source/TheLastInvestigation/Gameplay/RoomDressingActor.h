@@ -41,6 +41,13 @@ struct FRoomDressingSetup
 	bool bWindow = true;
 	/** The hook in the beam and the collapsed boards under it. They stay upstairs. */
 	bool bHook = true;
+	/**
+	 * The chair lying on its back, a metre off the hook. It belongs with the hook: the cellar room,
+	 * which has no hook and is the maid's room now, leaves it out.
+	 */
+	bool bOverturnedChair = true;
+	/** The armchair in the corner off the foot of the bed. The maid's room has her brooms there. */
+	bool bArmchair = true;
 };
 
 /**

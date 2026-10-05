@@ -1148,7 +1148,13 @@ void ARoomDressingActor::BuildBedroom(FRoomBuilder& Build)
 	// +34.8 in Y, and the long end is the backrest and the curve behind it. So the chair faces its
 	// local **+Y**, not its local +X, and the yaw that points that out of the south-west corner is
 	// minus a hundred and thirty-five. At minus forty-five it sat with its back to the open room.
-	Build.PropSeated(RoomProps::Armchair, FVector(WestFace + 68.f, SouthFace - 76.f, 0.f), FRotator(0.f, -135.f, 0.f), 0.f);
+	//
+	// Not in the cellar: that room is the maid's, and her brooms and pails stand in this corner
+	// instead (ACellarActor::BuildMaidsCorner).
+	if (Setup.bArmchair)
+	{
+		Build.PropSeated(RoomProps::Armchair, FVector(WestFace + 68.f, SouthFace - 76.f, 0.f), FRotator(0.f, -135.f, 0.f), 0.f);
+	}
 
 	// The press, filling the corner past the head of the bed. That corner was the one piece of
 	// this room with nothing in it and nothing to say, and an empty corner in a room that is
@@ -1540,9 +1546,11 @@ void ARoomDressingActor::BuildClues()
 	// The far side of the collapse, too: the hook is directly over the hole, and there is no floor
 	// under it to stand a chair on.
 	//
-	// (Room01's contents are built in the cellar now, where there is neither hook nor collapse; the
-	// chair is where it was relative to the walls.)
-	if (AClueActor* Chair = SpawnClue(FVector(178.f, 6.f, 0.f), FRotator(0.f, 34.f, 0.f)))
+	// (Room01's contents are built in the cellar now, where there is neither hook nor collapse, and
+	// the room down there is the maid's: it leaves the chair out. Nothing here draws from Random, so
+	// leaving it out moves nothing built after it.)
+	AClueActor* Chair = Setup.bOverturnedChair ? SpawnClue(FVector(178.f, 6.f, 0.f), FRotator(0.f, 34.f, 0.f)) : nullptr;
+	if (Chair)
 	{
 		FRoomBuilder ChairBuild(Chair, Chair->GetRootScene());
 		// Tipped onto its back: rolled 88 degrees and lifted so it rests on the floor rather than

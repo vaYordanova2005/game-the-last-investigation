@@ -137,6 +137,8 @@ private:
 	void BuildRoomShell(FRoomBuilder& Build, const FCellarRoom& Room);
 	void BuildBareRoom(FRoomBuilder& Build, const FCellarRoom& Room);
 	void SpawnBedroom(const FCellarRoom& Room);
+	/** The maid's brooms and pails, against the bedroom's blind east wall (in the dressing's frame). */
+	void BuildMaidsCorner(FRoomBuilder& Build, const FCellarRoom& Room);
 	void SpawnDoor(const FCellarRoom& Room);
 
 	UPROPERTY(VisibleAnywhere, Category = "Cellar")
@@ -157,6 +159,16 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatVoid;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWeb;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatRubble;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatStraw;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatTwig;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatHandle;
+	/** Galvanised pail, for the turned bodies only: Lathe resets this instance's tiling. */
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatZinc;
+	/** The same tin, for the boxes and rods round the pails (tiled per part like everything else). */
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatTin;
+	/** What dried in the bottom of the standing pail; a turned crust, so an instance of its own. */
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatGrime;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBristle;
 
 	FCellarSetup Setup;
 };
