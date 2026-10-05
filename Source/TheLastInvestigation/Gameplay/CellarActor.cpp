@@ -7,6 +7,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+#include "Camera/PlayerCameraManager.h"
 
 namespace
 {
@@ -29,7 +31,8 @@ namespace
 
 ACellarActor::ACellarActor()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	// Ticks only to tell the storm whether the player is down here (see IsUnderground).
+	PrimaryActorTick.bCanEverTick = true;
 
 	CellarRoot = CreateDefaultSubobject<USceneComponent>(TEXT("CellarRoot"));
 	SetRootComponent(CellarRoot);
@@ -53,7 +56,7 @@ TArray<ACellarActor::FCellarRoom> ACellarActor::Rooms() const
 	const float SouthOneX = FootX() - 42.f - (640.f + WallThickness) * 0.5f;
 	const float SouthTwoX = SouthOneX - (640.f + WallThickness) * 0.5f - 10.f - (600.f + WallThickness) * 0.5f;
 	return {
-		{ BedCentreX, RoomWidth, RoomDepth, true, BedroomDoorX(), true, 0 },
+		{ BedCentreX, RoomWidth, RoomDepth, true, BedroomDoorX(), true, 6000 },
 		{ NorthTwoX, 600.f, 500.f, true, NorthTwoX - 110.f, false, 6101 },
 		{ SouthOneX, 640.f, 540.f, false, SouthOneX - 100.f, false, 6202 },
 		{ SouthTwoX, 600.f, 540.f, false, SouthTwoX + 90.f, false, 6303 },
@@ -97,9 +100,41 @@ void ACellarActor::BeginPlay()
 		else
 		{
 			BuildBareRoom(Build, Room);
-			SpawnDoor(Room);
 		}
+		SpawnDoor(Room);
 	}
+}
+
+bool ACellarActor::IsUnderground(const FVector& LocalPoint) const
+{
+	// Up in the well, between the door and the far end of the hole in the hall floor: the strip
+	// behind the end wall, and nowhere in the hall (the statue's alcove is south of it).
+	if (LocalPoint.X < Setup.DoorWallX && LocalPoint.X > Setup.WellWestX
+		&& LocalPoint.Y > Setup.ShaftNorthY && LocalPoint.Y < Setup.ShaftSouthY
+		&& LocalPoint.Z < Setup.GroundZ + 300.f)
+	{
+		return true;
+	}
+	// Anywhere below the hall's floor slab is the cellar: nothing else in the house is down there.
+	return LocalPoint.Z < Setup.GroundZ - 30.f && LocalPoint.X < Setup.DoorWallX;
+}
+
+void ACellarActor::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	if (PC && PC->PlayerCameraManager)
+	{
+		const FVector Eye = GetActorTransform().InverseTransformPosition(PC->PlayerCameraManager->GetCameraLocation());
+		AStormWindowActor::SetViewUnderground(IsUnderground(Eye));
+	}
+}
+
+void ACellarActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	AStormWindowActor::SetViewUnderground(false);
+	Super::EndPlay(EndPlayReason);
 }
 
 void ACellarActor::CacheMaterials(FRoomBuilder& Build)
@@ -438,7 +473,8 @@ void ACellarActor::SpawnBedroom(const FCellarRoom& Room)
 
 void ACellarActor::SpawnDoor(const FCellarRoom& Room)
 {
-	// A plank door standing a crack open, that goes the rest of the way when pushed. AHallDoorActor's
+	// A door standing a crack open, that goes the rest of the way when pushed — the bedroom's too,
+	// which is as wide and as tall as Room01's doorway. AHallDoorActor's
 	// local +X is the corridor side and its leaf runs along local +Y from the hinge: yaw 90 on a
 	// north room (hinge at the east jamb), -90 on a south one (hinge at the west jamb), and a
 	// positive swing takes it into the room.
@@ -457,6 +493,8 @@ void ACellarActor::SpawnDoor(const FCellarRoom& Room)
 		DoorSetup.OpenYaw = 84.f;
 		DoorSetup.Seed = Room.Seed;
 		DoorSetup.WoodTint = FLinearColor(0.20f, 0.20f, 0.19f);
+		// The bedroom's is a house door, panelled like the ones upstairs; the rest are cellar doors.
+		DoorSetup.bSixPanel = Room.bBedroom;
 		DoorSetup.bRotHole = (Room.Seed % 2) == 0;
 		Door->Configure(DoorSetup);
 		Door->FinishSpawning(Transform);

@@ -41,7 +41,7 @@ struct FCellarSetup
  * overturned chair and every clue marker. It is an ARoomDressingActor with its contents on;
  * Room01 upstairs keeps only its walls, its window and its hook, and is to be furnished another
  * way. What the cellar bedroom does not have is the window (there is no view from under the
- * ground) and the hook with the collapse beneath it. It has no door, only a timber-lined opening.
+ * ground) and the hook with the collapse beneath it. Its door is a panelled house door.
  *
  * The other three rooms are bare cellar rooms — brick, flags, joists, damp — behind plank doors
  * that stand a crack open and give when pushed. What goes in them is not decided yet.
@@ -74,6 +74,8 @@ public:
 	void Configure(const FCellarSetup& InSetup);
 
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Room01's shell, so its furniture stands where it stood against its walls. */
 	static constexpr float RoomWidth = 800.f;
@@ -123,6 +125,8 @@ private:
 	FVector RoomCentre(const FCellarRoom& Room) const;
 	float DoorHalf(const FCellarRoom& Room) const { return (Room.bBedroom ? DoorOpeningWidth : BareDoorWidth) * 0.5f; }
 	float DoorHeight(const FCellarRoom& Room) const { return Room.bBedroom ? DoorOpeningHeight : BareDoorHeight; }
+	/** Past the cellar door: in the well, on the stair, in the corridor or in a room. */
+	bool IsUnderground(const FVector& LocalPoint) const;
 
 	void CacheMaterials(FRoomBuilder& Build);
 	void BuildStairWell(FRoomBuilder& Build);

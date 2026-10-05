@@ -108,6 +108,21 @@ public:
 	/** Lux of the strike currently in progress, before FlashAlpha scales it. */
 	float GetStrikeIntensity() const { return StrikeIntensity; }
 
+private:
+	/** See SetViewUnderground. One player, one world: a plain static is enough. */
+	static inline bool bViewUnderground = false;
+
+public:
+
+	/**
+	 * Whether the player's eye is underground (set by ACellarActor every frame). The glows of the
+	 * windows without a view of their own are unshadowed fill, so they light everything within
+	 * their 24m whatever is in the way — which upstairs is nothing, and under the kitchen and the
+	 * living room was the cellar, flashing with every strike. While this is set they stay dark.
+	 * Every other storm light casts shadows and is stopped by the ground on its own.
+	 */
+	static void SetViewUnderground(bool bUnderground) { bViewUnderground = bUnderground; }
+
 	/** Counts strikes since BeginPlay, so a listener can tell one flash from the next. */
 	int32 GetStrikeCount() const { return StrikeCount; }
 

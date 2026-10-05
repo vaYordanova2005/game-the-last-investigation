@@ -982,7 +982,8 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 		// Same sky, same instant: the flash is read from the lead, not rolled.
 		FlashAlpha = Lead->GetFlashAlpha();
 		StrikeIntensity = Lead->GetStrikeIntensity();
-		LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * (Setup.bOwnView ? 900.f : 260.f));
+		const float GlowScale = Setup.bOwnView ? 900.f : (bViewUnderground ? 0.f : 260.f);
+		LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * GlowScale);
 		SkyPortal->SetIntensity(SkyPortalCandelas * Setup.PortalScale * (1.f + FlashAlpha * 9.f));
 		if (Setup.bOwnView)
 		{
@@ -1032,7 +1033,7 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 	// Never drops to zero: the floor value is the overcast sky the storm sits under, and it is what
 	// keeps the window a faint blue rectangle between strikes.
 	LightningLight->SetIntensity(StormAmbientLux + FlashAlpha * StrikeIntensity);
-	LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * 260.f);
+	LightningGlow->SetIntensity(bViewUnderground ? 0.f : FlashAlpha * StrikeIntensity * 260.f);
 	// The window itself floods when the sky goes off: from inside a room, that — not the bolt — is
 	// what a strike actually looks like.
 	SkyPortal->SetIntensity(SkyPortalCandelas * (1.f + FlashAlpha * 9.f));
