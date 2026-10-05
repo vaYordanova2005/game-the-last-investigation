@@ -1,6 +1,7 @@
 #include "RoomDressingActor.h"
 #include "RoomBuildLibrary.h"
 #include "ClueActor.h"
+#include "DoorActor.h"
 #include "StormWindowActor.h"
 #include "DustMotesComponent.h"
 #include "Components/SceneComponent.h"
@@ -136,19 +137,21 @@ void ARoomDressingActor::CacheMaterials(FRoomBuilder& Build)
 bool ARoomDressingActor::ReachesDoorSwing(const FVector2D& Point, float Radius) const
 {
 	// Room01's door (AInvestigationRoomActor): hinged at the window end of the doorway on the room
-	// side, its leaf as wide as the opening, sweeping a quarter disc of that radius into the room on
-	// the doorway's side of the hinge. At its 100 degrees the leaf's end passes ~18cm beyond the
-	// hinge line, past the 10cm margin; the strips' faded edges and their oversized test radius
-	// cover the difference.
+	// side, its leaf as wide as the opening, sweeping a disc of that radius into the room on the
+	// doorway's side of the hinge — and past it: opened beyond ninety degrees, the leaf's end
+	// crosses the hinge line by Width * sin(OpenYaw - 90), ~18cm at 100. The half-plane is pushed
+	// out by that much, which takes in the whole wedge the leaf sweeps over there.
 	//
 	// The cellar bedroom's door is NOT this door: ACellarActor hangs it on the corridor side, about
-	// 27cm further out, with a leaf 12cm narrower. Its sweep lies inside this one, so the test
-	// covers it only because this area is the larger. Change either door and this has to be
-	// worked out again.
+	// 27cm further out, with a leaf 12cm narrower, opening to 84 degrees. Its sweep lies inside this
+	// one, so the test covers it only because this area is the larger. Change either door and this
+	// has to be worked out again.
 	const FVector2D Hinge(Setup.DoorOpeningCenterX + Setup.DoorOpeningWidth * 0.5f, Setup.Depth * 0.5f - Setup.WallThickness);
+	const float Leaf = Setup.DoorOpeningWidth;
+	const float Overswing = Leaf * FMath::Sin(FMath::DegreesToRadians(FMath::Max(ADoorActor::OpenYaw - 90.f, 0.f)));
 	const float Margin = 10.f;
-	return FVector2D::Distance(Point, Hinge) < Setup.DoorOpeningWidth + Radius + Margin
-		&& Point.X - Radius < Hinge.X + Margin;
+	return FVector2D::Distance(Point, Hinge) < Leaf + Radius + Margin
+		&& Point.X - Radius < Hinge.X + Overswing + Margin;
 }
 
 bool ARoomDressingActor::IsFloorSpotClear(const FVector2D& Point, float Radius) const
