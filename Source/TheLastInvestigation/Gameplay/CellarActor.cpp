@@ -82,6 +82,24 @@ float ACellarActor::PassageWestX() const
 	return West - 30.f;
 }
 
+bool ACellarActor::DecalHitsDoorway(bool bNorthWall, float X, float HalfAlong, float Bottom) const
+{
+	// A decal projects straight through: one that reaches a doorway smears down the jambs, and over
+	// the leaf as it swings, while standing still on it. A hand's width of margin is for the leaf
+	// at the hinge jamb, which is inside the projection's reach as soon as it opens.
+	const float Margin = 15.f;
+	for (const FCellarRoom& Room : Rooms())
+	{
+		if (Room.bNorth == bNorthWall
+			&& FMath::Abs(X - Room.DoorX) < DoorHalf(Room) + HalfAlong + Margin
+			&& Bottom < FloorZ() + DoorHeight(Room) + Margin)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 void ACellarActor::BeginPlay()
 {
 	Super::BeginPlay();
@@ -240,12 +258,25 @@ void ACellarActor::BuildStairWell(FRoomBuilder& Build)
 	FRandomStream Random(1104);
 	for (int32 i = 0; i < 9; ++i)
 	{
+		// Every number drawn into a local first, in order: drawn inside the call's arguments the
+		// order is up to the compiler, and a skipped stain has to draw them all the same (09-29).
 		const bool bNorth = (i % 2) == 0;
 		const float X = Random.FRandRange(West + 30.f, Top - 30.f);
 		const float Z = Random.FRandRange(FloorZ() + 20.f, FloorZ() + 140.f);
+		const float Roll = Random.FRandRange(0.f, 360.f);
+		const FVector2D Size(Random.FRandRange(60.f, 140.f), Random.FRandRange(80.f, 180.f));
+		const float Opacity = Random.FRandRange(0.45f, 0.7f);
+		// The footprint turned by its roll, measured along the wall and up it.
+		const float Cos = FMath::Abs(FMath::Cos(FMath::DegreesToRadians(Roll)));
+		const float Sin = FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Roll)));
+		const float HalfAlong = (Cos * Size.X + Sin * Size.Y) * 0.5f;
+		const float HalfUp = (Sin * Size.X + Cos * Size.Y) * 0.5f;
+		if (DecalHitsDoorway(bNorth, X, HalfAlong, Z - HalfUp))
+		{
+			continue;
+		}
 		Build.Stain(RoomSurfaces::Damp, FVector(X, bNorth ? Setup.ShaftNorthY + 2.f : Setup.ShaftSouthY - 2.f, Z),
-			FRotator(0.f, bNorth ? -90.f : 90.f, Random.FRandRange(0.f, 360.f)),
-			FVector2D(Random.FRandRange(60.f, 140.f), Random.FRandRange(80.f, 180.f)), Damp, Random.FRandRange(0.45f, 0.7f), 1.2f);
+			FRotator(0.f, bNorth ? -90.f : 90.f, Roll), Size, Damp, Opacity, 1.2f);
 	}
 	// And water standing on the flags at the foot of the stair, where it runs down to.
 	Build.Stain(RoomSurfaces::Floorboards, FVector(FootX() - 40.f, (Setup.ShaftNorthY + Setup.ShaftSouthY) * 0.5f, FloorZ() + 4.f),
@@ -395,19 +426,34 @@ void ACellarActor::BuildBareRoom(FRoomBuilder& Build, const FCellarRoom& Room)
 	for (const FFace& Face : Faces)
 	{
 		const FVector Along = Face.Aim.RotateVector(FVector(0.f, 1.f, 0.f));
+		// The door wall is the one on the corridor's side; the decals on it are kept off the doorway.
+		const bool bDoorWall = FMath::Abs(Face.Point.X) < 1.f && (Face.Point.Y > 0.f) == Room.bNorth;
 		for (int32 i = 0; i < 4; ++i)
 		{
 			const float U = Random.FRandRange(-Face.Half + 40.f, Face.Half - 40.f);
 			const float Height = Random.FRandRange(60.f, 150.f);
-			Build.Stain(RoomSurfaces::Damp, C + Face.Point + Along * U + FVector(0.f, 0.f, Height * 0.4f),
-				Face.Aim + FRotator(0.f, 0.f, 0.f), FVector2D(Random.FRandRange(80.f, 180.f), Height),
-				Damp * 0.8f, Random.FRandRange(0.5f, 0.75f), 1.2f);
+			const float Width = Random.FRandRange(80.f, 180.f);
+			const float Opacity = Random.FRandRange(0.5f, 0.75f);
+			const FVector At = C + Face.Point + Along * U + FVector(0.f, 0.f, Height * 0.4f);
+			if (bDoorWall && DecalHitsDoorway(Room.bNorth, At.X, Width * 0.5f, At.Z - Height * 0.5f))
+			{
+				continue;
+			}
+			Build.Stain(RoomSurfaces::Damp, At, Face.Aim, FVector2D(Width, Height), Damp * 0.8f, Opacity, 1.2f);
 		}
 		for (int32 i = 0; i < 2; ++i)
 		{
 			const float U = Random.FRandRange(-Face.Half + 50.f, Face.Half - 50.f);
-			Build.Crack(C + Face.Point + Along * U + FVector(0.f, 0.f, Random.FRandRange(80.f, H - 60.f)), Face.Aim,
-				FVector2D(Random.FRandRange(80.f, 160.f), Random.FRandRange(100.f, 200.f)), Random.FRandRange(0.6f, 0.9f), Random.FRandRange(16.f, 26.f));
+			const float Z = Random.FRandRange(80.f, H - 60.f);
+			const FVector2D Size(Random.FRandRange(80.f, 160.f), Random.FRandRange(100.f, 200.f));
+			const float Opacity = Random.FRandRange(0.6f, 0.9f);
+			const float Sharpness = Random.FRandRange(16.f, 26.f);
+			const FVector At = C + Face.Point + Along * U + FVector(0.f, 0.f, Z);
+			if (bDoorWall && DecalHitsDoorway(Room.bNorth, At.X, Size.X * 0.5f, At.Z - Size.Y * 0.5f))
+			{
+				continue;
+			}
+			Build.Crack(At, Face.Aim, Size, Opacity, Sharpness);
 		}
 	}
 

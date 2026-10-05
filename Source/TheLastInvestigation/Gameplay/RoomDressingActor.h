@@ -129,7 +129,6 @@ private:
 
 	TArray<float> WindPartPhases;
 
-
 	UPROPERTY(Transient)
 	TWeakObjectPtr<AStormWindowActor> Storm;
 

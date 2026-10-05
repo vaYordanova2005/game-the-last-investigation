@@ -27,7 +27,6 @@ struct FCellarSetup
 	/** The half-landing's front edge and the underside of its floor: the well's nook under it. */
 	float LandingEdgeX = -2070.f;
 	float LandingSoffitZ = -200.f;
-	float HallWestX = -2270.f;
 };
 
 /**
@@ -125,6 +124,9 @@ private:
 	FVector RoomCentre(const FCellarRoom& Room) const;
 	float DoorHalf(const FCellarRoom& Room) const { return (Room.bBedroom ? DoorOpeningWidth : BareDoorWidth) * 0.5f; }
 	float DoorHeight(const FCellarRoom& Room) const { return Room.bBedroom ? DoorOpeningHeight : BareDoorHeight; }
+	/** Whether a wall decal centred at X, reaching HalfAlong either way and down to Bottom, on the
+	 *  corridor's north or south wall (from either face), would reach a doorway in it. */
+	bool DecalHitsDoorway(bool bNorthWall, float X, float HalfAlong, float Bottom) const;
 	/** Past the cellar door: in the well, on the stair, in the corridor or in a room. */
 	bool IsUnderground(const FVector& LocalPoint) const;
 

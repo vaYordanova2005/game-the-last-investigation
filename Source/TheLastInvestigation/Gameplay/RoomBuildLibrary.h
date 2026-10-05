@@ -182,7 +182,6 @@ namespace RoomPalette
 	extern const FLinearColor GlassShard;
 	extern const FLinearColor DriedBlood;
 	extern const FLinearColor Web;
-	extern const FLinearColor Water;
 	extern const FLinearColor Void;
 	extern const FLinearColor NightSky;
 	extern const FLinearColor Foliage;

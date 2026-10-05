@@ -528,10 +528,13 @@ void AGrandStaircaseActor::BuildFloors(FRoomBuilder& Build)
 	{
 		const FVector2D C = Piece.GetCenter();
 		const FVector2D S = Piece.GetSize();
-		if (UStaticMeshComponent* Floor = Build.Box(FVector(C.X, C.Y, GroundZ - 1.f), FRotator::ZeroRotator, FVector(S.X, S.Y, 2.f), MatShell))
+		// Hidden, but still the floor to Lumen: software Lumen traces mesh distance fields, and a
+		// generated sheet has none, so without these the hall floor stops bouncing light up the walls.
+		if (UStaticMeshComponent* Floor = Build.Box(FVector(C.X, C.Y, GroundZ - 1.f), FRotator::ZeroRotator, FVector(S.X, S.Y, 2.f), MatTiles))
 		{
 			Floor->SetHiddenInGame(true);
 			Floor->SetCastShadow(false);
+			Floor->SetAffectIndirectLightingWhileHidden(true);
 		}
 	}
 
@@ -807,6 +810,7 @@ void AGrandStaircaseActor::BuildFlights(FRoomBuilder& Build)
 		if (UStaticMeshComponent* Solid = Build.Box(FVector(FlightEastX() - 2.f, (Y0 + Y1) * 0.5f, (Z0 + Z1) * 0.5f), FRotator::ZeroRotator, FVector(4.f, Y1 - Y0, Z1 - Z0), MatWainscot))
 		{
 			Solid->SetHiddenInGame(true);
+			Solid->SetAffectIndirectLightingWhileHidden(true);
 		}
 		const float U0 = Y0 - NorthY();
 		const float U1 = Y1 - NorthY();
@@ -1941,7 +1945,6 @@ void AGrandStaircaseActor::SpawnCellar()
 		CellarSetup.GroundZ = GroundZ;
 		CellarSetup.LandingEdgeX = LandingEdgeX();
 		CellarSetup.LandingSoffitZ = LandingZ - FloorDepth;
-		CellarSetup.HallWestX = WestX();
 		Cellar->Configure(CellarSetup);
 		Cellar->FinishSpawning(Transform);
 	}
