@@ -129,9 +129,6 @@ private:
 
 	TArray<float> WindPartPhases;
 
-	/** The drop that falls from the ceiling stain into the puddle, over and over. */
-	UPROPERTY(Transient)
-	TObjectPtr<UStaticMeshComponent> WaterDrop;
 
 	UPROPERTY(Transient)
 	TWeakObjectPtr<AStormWindowActor> Storm;
@@ -162,13 +159,9 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBlood;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWeb;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatVoid;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWater;
 
 	FRoomDressingSetup Setup;
 	FRandomStream Random;
 
 	float ElapsedTime = 0.f;
-	float DropFallTime = 0.f;
-	float DropStartZ = 0.f;
-	FVector DropOrigin = FVector::ZeroVector;
 };

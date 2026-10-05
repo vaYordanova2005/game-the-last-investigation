@@ -131,7 +131,6 @@ void ARoomDressingActor::CacheMaterials(FRoomBuilder& Build)
 	MatBlood = Build.Flat(RoomPalette::DriedBlood, 0.95f);
 	MatWeb = Build.Cobweb(RoomPalette::Web);
 	MatVoid = Build.Flat(RoomPalette::Void, 1.f);
-	MatWater = Build.Flat(RoomPalette::Water, 0.08f);
 }
 
 bool ARoomDressingActor::IsFloorSpotClear(const FVector2D& Point, float Radius) const
@@ -910,13 +909,14 @@ void ARoomDressingActor::BuildCeiling(FRoomBuilder& Build)
 			FVector2D(15.f, 13.f), FLinearColor(0.150f, 0.064f, 0.030f), 0.7f, 1.f);
 	}
 
-	// Water dripping from the worst of the stains into a puddle that never dries.
-	DropOrigin = FVector(StainCenters[0].X, StainCenters[0].Y, CeilingZ - 6.f);
-	DropStartZ = DropOrigin.Z;
-	WaterDrop = Build.Sph(DropOrigin, 3.2f, MatWater);
+	// The puddle under the worst of the stains, where it drips.
+	//
+	// REMOVED: the drop itself, a 3cm dark sphere falling from the stain to here over and over. With
+	// no sound and no splash it read as a speck of dust stuck in a loop (the user, who took it for a
+	// bug), darker than the motes round it and in the same place every time.
 	Build.Stain(
 		RoomSurfaces::Floorboards,
-		FVector(DropOrigin.X, DropOrigin.Y, 11.f),
+		FVector(StainCenters[0].X, StainCenters[0].Y, 11.f),
 		FRotator(-90.f, 0.f, 0.f),
 		FVector2D(46.f, 38.f),
 		FLinearColor(0.20f, 0.23f, 0.25f),
@@ -2111,26 +2111,5 @@ void ARoomDressingActor::Tick(float DeltaTime)
 		const float Flutter = FMath::PerlinNoise1D(ElapsedTime * 1.6f + Phase) * 0.5f + 0.5f;
 		const float Lift = FMath::Lerp(1.f, 22.f, Gust) * FMath::Lerp(0.4f, 1.f, Flutter);
 		Part->SetRelativeRotation(FRotator(0.f, Part->GetRelativeRotation().Yaw, Lift));
-	}
-
-	// The drip. Constant period, so it becomes the room's metronome — the one sound-shaped thing
-	// in here that is reliable.
-	if (WaterDrop)
-	{
-		const float FallHeight = DropStartZ - 6.f;
-		DropFallTime += DeltaTime;
-
-		// Free fall at a fifth of g: real gravity crosses three metres too fast to register as a
-		// drip, and the read here is rhythm, not physics.
-		const float Fallen = 0.5f * 490.f * DropFallTime * DropFallTime;
-		if (Fallen >= FallHeight)
-		{
-			DropFallTime = 0.f;
-			WaterDrop->SetRelativeLocation(DropOrigin);
-		}
-		else
-		{
-			WaterDrop->SetRelativeLocation(FVector(DropOrigin.X, DropOrigin.Y, DropStartZ - Fallen));
-		}
 	}
 }
