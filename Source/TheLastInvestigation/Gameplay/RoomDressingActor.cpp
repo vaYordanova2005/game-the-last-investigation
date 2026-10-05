@@ -74,14 +74,6 @@ void ARoomDressingActor::CacheMaterials(FRoomBuilder& Build)
 	// it reads as a green stain rather than as dirt. Warm tints cancel it.
 	// Brick and coarse render: what the wall is actually made of, wherever the plaster has gone.
 	MatSubstrate = Build.Surface(RoomSurfaces::Substrate, FLinearColor(0.115f, 0.098f, 0.084f));
-	// The same plaster once it is on the floor. It needs its own tint rather than the wall's: the
-	// wall tint is set to sit the wall at the room's reflectance under a cold rectangle of sky,
-	// and a chunk of it lying on brown boards under a lantern is being asked a different question.
-	// Beside the floorboards the wall value read as a grey lump, because concrete photographed
-	// clean *is* grey and the wall only escapes it by having decades of damp projected over it.
-	// Rubble that has been down there as long has the same dirt in it, so it goes warmer and
-	// darker — nothing on this floor is newer than the floor.
-	MatRubble = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.145f, 0.127f, 0.110f));
 	MatCeiling = Build.Surface(RoomSurfaces::Ceiling, FLinearColor(0.38f, 0.37f, 0.34f));
 	MatFloorboards = Build.Surface(RoomSurfaces::Floorboards, FLinearColor(0.70f, 0.67f, 0.62f));
 	MatFloorboardsWorn = Build.Surface(RoomSurfaces::Floorboards, FLinearColor(0.44f, 0.40f, 0.36f));
@@ -1358,11 +1350,22 @@ void ARoomDressingActor::BuildDebris(FRoomBuilder& Build)
 
 		const bool bPlaster = Random.FRand() < 0.55f;
 		const float Size = Random.FRandRange(3.f, bPlaster ? 16.f : 9.f);
+		// REMOVED: the plaster lumps. Flat near-black slabs with four straight edges, they read as
+		// tiles or dominoes on the boards rather than as plaster (the user's call). The splintered
+		// wood stays; a skipped lump still draws its five numbers, so the wood stays where it was.
+		if (bPlaster)
+		{
+			for (int32 Draw = 0; Draw < 5; ++Draw)
+			{
+				Random.FRand();
+			}
+			continue;
+		}
 		Build.Box(
 			FVector(Spot.X, Spot.Y, 5.f + Size * 0.3f),
 			FRotator(Random.FRandRange(-20.f, 20.f), Random.FRandRange(0.f, 360.f), Random.FRandRange(-20.f, 20.f)),
 			FVector(Size, Size * Random.FRandRange(0.4f, 1.f), Size * Random.FRandRange(0.2f, 0.5f)),
-			bPlaster ? Cast<UMaterialInterface>(MatRubble) : Cast<UMaterialInterface>(MatRoughWood),
+			MatRoughWood,
 			/*bBlockingCollision*/ false);
 	}
 
@@ -1970,14 +1973,12 @@ void ARoomDressingActor::BuildClues()
 		// glass is a contour, and no arrangement of boxes is a hairline.
 		MirrorBuild.Crack(FVector(4.f, -8.f, -6.f), FRotator(0.f, 90.f, 0.f), FVector2D(58.f, 86.f), 0.9f, 21.f);
 
-		// What came out of it is on the floor under it, because nobody swept this room either.
-		for (int32 Piece = 0; Piece < 7; ++Piece)
+		// REMOVED: the seven pieces of it lying on the floor under it. At the dead glass's three per
+		// cent they were flat black rectangles on the boards, the same as the plaster lumps (the
+		// user's call). Their 42 numbers are still drawn, so everything after stays where it was.
+		for (int32 Draw = 0; Draw < 7 * 6; ++Draw)
 		{
-			MirrorBuild.Box(
-				FVector(Random.FRandRange(-34.f, 34.f), -Random.FRandRange(14.f, 46.f), -162.f),
-				FRotator(0.f, Random.FRandRange(0.f, 360.f), Random.FRandRange(-9.f, 9.f)),
-				FVector(Random.FRandRange(4.f, 13.f), Random.FRandRange(3.f, 9.f), 0.9f),
-				Dead, /*bBlockingCollision*/ false);
+			Random.FRand();
 		}
 
 		// The frame: four rails standing five centimetres proud of the glass, with a block at each
@@ -2034,21 +2035,13 @@ void ARoomDressingActor::BuildClues()
 		}
 	}
 
-	// Rusted tools spilled out of a box by the door. Somebody was working on this room.
-	if (AClueActor* Tools = SpawnClue(FVector(Setup.DoorOpeningCenterX - 105.f, DepthHalf - 45.f, 5.f), FRotator::ZeroRotator))
+	// REMOVED: the rusted tools spilled out of a box by the door. The "box" was one flat slab with
+	// no sides, the tool a handle with no head, the rest bare rods, and none of it read as anything
+	// (the user asked what it was). The 28 numbers it drew are still drawn, so everything built
+	// after it stays where it was.
+	for (int32 Draw = 0; Draw < 28; ++Draw)
 	{
-		FRoomBuilder ToolBuild(Tools, Tools->GetRootScene());
-		ToolBuild.Box(FVector(0.f, 0.f, 3.f), FRotator(0.f, 18.f, 0.f), FVector(52.f, 16.f, 6.f), MatRust);
-		ToolBuild.Cyl(FVector(-18.f, 4.f, 6.f), FRotator(0.f, 0.f, 90.f), FVector(6.f, 6.f, 34.f), MatRoughWood, /*bBlockingCollision*/ false);
-		for (int32 i = 0; i < 7; ++i)
-		{
-			ToolBuild.Cyl(
-				FVector(Random.FRandRange(-30.f, 30.f), Random.FRandRange(-16.f, 16.f), 2.f),
-				FRotator(0.f, Random.FRandRange(0.f, 360.f), 90.f),
-				FVector(1.6f, 1.6f, Random.FRandRange(8.f, 15.f)),
-				MatRust,
-				/*bBlockingCollision*/ false);
-		}
+		Random.FRand();
 	}
 
 	// Bottles against the skirting, lined up rather than thrown. Someone sat here and drank,

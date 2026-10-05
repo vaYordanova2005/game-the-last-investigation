@@ -147,7 +147,6 @@ private:
 	/** Brick and coarse render: what is behind the plaster, wherever the plaster has gone. */
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatSubstrate;
 	/** The plaster once it is off the wall and on the boards — dirtier and warmer than the wall. */
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatRubble;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatCeiling;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFloorboards;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFloorboardsWorn;
