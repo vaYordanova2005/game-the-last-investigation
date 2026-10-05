@@ -109,6 +109,9 @@ private:
 
 	/** True if a point is far enough from the door, the window and the player's spawn to drop a prop on. */
 	bool IsFloorSpotClear(const FVector2D& Point, float Radius) const;
+	/** Whether a floor decal within Radius of Point reaches the arc the door's bottom edge sweeps:
+	 *  a decal projects nine units up off the boards, which is the foot of the leaf as it turns. */
+	bool ReachesDoorSwing(const FVector2D& Point, float Radius) const;
 
 	UPROPERTY(VisibleAnywhere, Category = "Dressing")
 	TObjectPtr<USceneComponent> DressingRoot;

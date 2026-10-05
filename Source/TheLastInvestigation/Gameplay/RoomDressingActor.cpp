@@ -133,6 +133,17 @@ void ARoomDressingActor::CacheMaterials(FRoomBuilder& Build)
 	MatVoid = Build.Flat(RoomPalette::Void, 1.f);
 }
 
+bool ARoomDressingActor::ReachesDoorSwing(const FVector2D& Point, float Radius) const
+{
+	// The hinge is at the window end of the doorway, on the room side (AInvestigationRoomActor, and
+	// the cellar's door in the same opening), and the leaf is as wide as the opening: it sweeps a
+	// quarter disc of that radius into the room, on the doorway's side of the hinge.
+	const FVector2D Hinge(Setup.DoorOpeningCenterX + Setup.DoorOpeningWidth * 0.5f, Setup.Depth * 0.5f - Setup.WallThickness);
+	const float Margin = 10.f;
+	return FVector2D::Distance(Point, Hinge) < Setup.DoorOpeningWidth + Radius + Margin
+		&& Point.X - Radius < Hinge.X + Margin;
+}
+
 bool ARoomDressingActor::IsFloorSpotClear(const FVector2D& Point, float Radius) const
 {
 	const float WidthHalf = Setup.Width * 0.5f;
@@ -761,6 +772,16 @@ void ARoomDressingActor::BuildFloor(FRoomBuilder& Build)
 
 		if (FVector2D::Distance(Spot, CollapseCenter) < CollapseRadius)
 		{
+			continue;
+		}
+		// Off the door's arc, at the largest strip's half-diagonal (90 x 54). A strip skipped here
+		// still takes its four draws, so nothing built after it moves (09-29).
+		if (ReachesDoorSwing(Spot, 52.5f))
+		{
+			for (int32 Draw = 0; Draw < 4; ++Draw)
+			{
+				Random.FRand();
+			}
 			continue;
 		}
 
