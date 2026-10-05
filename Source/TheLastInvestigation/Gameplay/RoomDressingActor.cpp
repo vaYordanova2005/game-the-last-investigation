@@ -355,9 +355,32 @@ void ARoomDressingActor::BuildWalls(FRoomBuilder& Build)
 		}
 	};
 
+	// Whether a decal on the door wall reaches the doorway. A decal projects straight through: one
+	// that reaches the opening smears down the jambs, and over the leaf as it swings while standing
+	// still on it. The footprint is measured turned by its roll, and the margin is for the open leaf
+	// at the hinge jamb, which is inside the projection's reach. Tested here, after the caller has
+	// drawn every number, so a skipped decal leaves the stream as it was (09-29).
+	auto ReachesDoor = [&](EWallSide Side, float U, float V, float SizeU, float SizeV, float Roll)
+	{
+		if (Side != EWallSide::South)
+		{
+			return false;
+		}
+		const float Cos = FMath::Abs(FMath::Cos(FMath::DegreesToRadians(Roll)));
+		const float Sin = FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Roll)));
+		const float HalfU = (Cos * SizeU + Sin * SizeV) * 0.5f;
+		const float HalfV = (Sin * SizeU + Cos * SizeV) * 0.5f;
+		const float Margin = 15.f;
+		return SpotBlocked(Side, U, V, HalfU + Margin, HalfV + Margin);
+	};
+
 	auto WallStain = [&](EWallSide Side, float U, float V, float SizeU, float SizeV,
 		const FRoomSurface& Set, const FLinearColor& Tint, float Opacity, float Roll = 0.f, float EdgeNoise = 0.9f)
 	{
+		if (ReachesDoor(Side, U, V, SizeU, SizeV, Roll))
+		{
+			return;
+		}
 		FVector Location;
 		FRotator Rotation;
 		AimAt(Side, U, V, Roll, Location, Rotation);
@@ -366,6 +389,10 @@ void ARoomDressingActor::BuildWalls(FRoomBuilder& Build)
 
 	auto WallCrack = [&](EWallSide Side, float U, float V, float SizeU, float SizeV, float Opacity, float Sharpness)
 	{
+		if (ReachesDoor(Side, U, V, SizeU, SizeV, 0.f))
+		{
+			return;
+		}
 		FVector Location;
 		FRotator Rotation;
 		AimAt(Side, U, V, 0.f, Location, Rotation);

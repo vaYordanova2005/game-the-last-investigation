@@ -82,13 +82,13 @@ float ACellarActor::PassageWestX() const
 	return West - 30.f;
 }
 
-bool ACellarActor::DecalHitsDoorway(bool bNorthWall, float X, float HalfAlong, float Bottom) const
+bool ACellarActor::DecalHitsDoorway(TConstArrayView<FCellarRoom> Candidates, bool bNorthWall, float X, float HalfAlong, float Bottom) const
 {
 	// A decal projects straight through: one that reaches a doorway smears down the jambs, and over
 	// the leaf as it swings, while standing still on it. A hand's width of margin is for the leaf
 	// at the hinge jamb, which is inside the projection's reach as soon as it opens.
 	const float Margin = 15.f;
-	for (const FCellarRoom& Room : Rooms())
+	for (const FCellarRoom& Room : Candidates)
 	{
 		if (Room.bNorth == bNorthWall
 			&& FMath::Abs(X - Room.DoorX) < DoorHalf(Room) + HalfAlong + Margin
@@ -271,7 +271,7 @@ void ACellarActor::BuildStairWell(FRoomBuilder& Build)
 		const float Sin = FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Roll)));
 		const float HalfAlong = (Cos * Size.X + Sin * Size.Y) * 0.5f;
 		const float HalfUp = (Sin * Size.X + Cos * Size.Y) * 0.5f;
-		if (DecalHitsDoorway(bNorth, X, HalfAlong, Z - HalfUp))
+		if (DecalHitsDoorway(AllRooms, bNorth, X, HalfAlong, Z - HalfUp))
 		{
 			continue;
 		}
@@ -435,7 +435,7 @@ void ACellarActor::BuildBareRoom(FRoomBuilder& Build, const FCellarRoom& Room)
 			const float Width = Random.FRandRange(80.f, 180.f);
 			const float Opacity = Random.FRandRange(0.5f, 0.75f);
 			const FVector At = C + Face.Point + Along * U + FVector(0.f, 0.f, Height * 0.4f);
-			if (bDoorWall && DecalHitsDoorway(Room.bNorth, At.X, Width * 0.5f, At.Z - Height * 0.5f))
+			if (bDoorWall && DecalHitsDoorway(MakeArrayView(&Room, 1), Room.bNorth, At.X, Width * 0.5f, At.Z - Height * 0.5f))
 			{
 				continue;
 			}
@@ -449,7 +449,7 @@ void ACellarActor::BuildBareRoom(FRoomBuilder& Build, const FCellarRoom& Room)
 			const float Opacity = Random.FRandRange(0.6f, 0.9f);
 			const float Sharpness = Random.FRandRange(16.f, 26.f);
 			const FVector At = C + Face.Point + Along * U + FVector(0.f, 0.f, Z);
-			if (bDoorWall && DecalHitsDoorway(Room.bNorth, At.X, Size.X * 0.5f, At.Z - Size.Y * 0.5f))
+			if (bDoorWall && DecalHitsDoorway(MakeArrayView(&Room, 1), Room.bNorth, At.X, Size.X * 0.5f, At.Z - Size.Y * 0.5f))
 			{
 				continue;
 			}

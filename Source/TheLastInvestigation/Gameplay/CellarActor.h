@@ -125,8 +125,9 @@ private:
 	float DoorHalf(const FCellarRoom& Room) const { return (Room.bBedroom ? DoorOpeningWidth : BareDoorWidth) * 0.5f; }
 	float DoorHeight(const FCellarRoom& Room) const { return Room.bBedroom ? DoorOpeningHeight : BareDoorHeight; }
 	/** Whether a wall decal centred at X, reaching HalfAlong either way and down to Bottom, on the
-	 *  corridor's north or south wall (from either face), would reach a doorway in it. */
-	bool DecalHitsDoorway(bool bNorthWall, float X, float HalfAlong, float Bottom) const;
+	 *  corridor's north or south wall (from either face), would reach the doorway of one of the
+	 *  Candidates: every room for the corridor's face, the room itself for its own. */
+	bool DecalHitsDoorway(TConstArrayView<FCellarRoom> Candidates, bool bNorthWall, float X, float HalfAlong, float Bottom) const;
 	/** Past the cellar door: in the well, on the stair, in the corridor or in a room. */
 	bool IsUnderground(const FVector& LocalPoint) const;
 
