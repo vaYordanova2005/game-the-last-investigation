@@ -60,6 +60,13 @@ namespace RoomSurfaces
 	extern const FRoomSurface Stone;
 	/** Polished, scratched cherry, tinted near black: the grand piano's case. */
 	extern const FRoomSurface PianoWood;
+	/**
+	 * The girl's bedroom, baked by Tools/make_nursery_art.py: a pale pink paper with a cream stripe
+	 * and a rosebud sprig, printed over the decrepit wallpaper's own wear; and a small rose print on
+	 * the linen weave, at the drapes' repeat, so the curtains' generated UVs fit it as they are.
+	 */
+	extern const FRoomSurface NurseryWallpaper;
+	extern const FRoomSurface FloralFabric;
 }
 
 /** Imported prop meshes, /Game/Meshes/<name>. Names match Tools/fetch_assets.py's manifest. */
@@ -116,6 +123,53 @@ namespace RoomProps
 	 * 46: goes in unscaled. Faces its local +Y (the back is at -Y), as the other props do.
 	 */
 	extern const TCHAR* KitchenChair;
+	/**
+	 * The girl's bedroom. Generated in Blender by Tools/make_nursery.py: every one stands on its
+	 * origin, faces its local +Y, and has named material slots (Paint, Inside, Fur, Case...) that
+	 * ANurseryActor fills. The wardrobe's right door and the toy chest's lid are separate models
+	 * with their origin on the hinge.
+	 */
+	extern const TCHAR* NurseryBed;
+	extern const TCHAR* NurseryNightstand;
+	extern const TCHAR* NurseryWardrobe;
+	extern const TCHAR* NurseryWardrobeDoor;
+	extern const TCHAR* NurseryDesk;
+	extern const TCHAR* NurseryChair;
+	extern const TCHAR* NurseryBookcase;
+	extern const TCHAR* NurseryToyShelf;
+	extern const TCHAR* NurseryToyChest;
+	extern const TCHAR* NurseryToyChestLid;
+	extern const TCHAR* DollHouse;
+	extern const TCHAR* Teddy;
+	extern const TCHAR* PlushRabbit;
+	extern const TCHAR* RagDoll;
+	extern const TCHAR* ToyBlock;
+	extern const TCHAR* Backpack;
+	extern const TCHAR* Headphones;
+	extern const TCHAR* Tablet;
+	extern const TCHAR* MusicBox;
+	extern const TCHAR* Sneaker;
+	extern const TCHAR* DeskLamp;
+	extern const TCHAR* PencilCase;
+	extern const TCHAR* Hairbrush;
+	extern const TCHAR* HairBow;
+	extern const TCHAR* Pajamas;
+	extern const TCHAR* Pillow;
+	extern const TCHAR* NurseryDresser;
+	extern const TCHAR* NurseryTVStand;
+	extern const TCHAR* Television;
+	extern const TCHAR* Laptop;
+	extern const TCHAR* StandingMirror;
+	extern const TCHAR* CoatRack;
+	/** Hanging clothes. The dress and the cardigan hang from a hanger whose hook top is the origin; the jacket and the scarf from their own loop. */
+	extern const TCHAR* SummerDress;
+	extern const TCHAR* Cardigan;
+	extern const TCHAR* RainJacket;
+	extern const TCHAR* Scarf;
+	/** And from Poly Haven (CC0). */
+	extern const TCHAR* Ukulele;
+	extern const TCHAR* AlarmClock;
+	extern const TCHAR* WickerBasket;
 }
 
 /**

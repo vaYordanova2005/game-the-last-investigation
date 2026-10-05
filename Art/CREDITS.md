@@ -45,11 +45,24 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 |---|---|---|
 | `painted_wooden_chair_02` | model | the ladder-back chairs round the kitchen table |
 
+## The girl's bedroom — Poly Haven (CC0 / public domain)
+
+| Asset ID | Kind | Used for |
+|---|---|---|
+| `Ukulele_01` | model | her ukulele, against the west wall |
+| `alarm_clock_01` | model | the alarm clock on her bedside table |
+| `wicker_basket_02` | model | the basket of soft toys in the corner |
+
 ## Generated in-repo
 
 | File | Made by | Used for |
 |---|---|---|
 | `Art/Source/Generated/stained_glass_*.png` | `Tools/make_stained_glass.py` | the stair window's glass and lead |
 | `Art/Source/Generated/glass_crack_*.png` | `Tools/make_glass_crack.py` | the starred pane in the bedroom window |
+| `Art/Source/Models/grand_piano`, `piano_bench` | `Tools/make_piano.py` (Blender) | the living room's piano |
+| `Art/Source/Models/nursery_*`, `toy_*`, `girl_*` | `Tools/make_nursery.py` (Blender) | the girl's furniture, toys and belongings |
+| `Art/Source/Textures/nursery_wallpaper_*` | `Tools/make_nursery_art.py`, on Poly Haven's `decrepit_wallpaper` | her rosebud wallpaper |
+| `Art/Source/Textures/floral_fabric_*` | `Tools/make_nursery_art.py`, on Poly Haven's `rough_linen` | her curtains, quilt and pillowcases |
+| `Art/Source/Textures/child_drawings_*` | `Tools/make_nursery_art.py` | her drawings on the walls |
 
 The stained-glass inscription is set in Cinzel (SIL Open Font License, `Content/Fonts/OFL.txt`).

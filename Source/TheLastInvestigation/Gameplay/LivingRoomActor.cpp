@@ -916,8 +916,8 @@ void ALivingRoomActor::BuildSeating(FRoomBuilder& Build)
 		Footprints.Add(FBox2D(FVector2D(Seat.X - 48.f, Seat.Y - 48.f), FVector2D(Seat.X + 48.f, Seat.Y + 48.f)));
 	}
 
-	// The coffee table, and on it a cup somebody left, the tea dried to a ring in the bottom of it,
-	// and three drops that have fallen off the chandelier over it.
+	// The coffee table, and on it a cup somebody left, the tea dried to a ring in the bottom of it.
+	// (Three fallen chandelier drops used to lie here: glass cones lying flat read as white arrows.)
 	if (UStaticMeshComponent* Table = Build.PropSeated(RoomProps::CoffeeTable, FVector(LX, H, F), FRotator(0.f, 3.f, 0.f), 46.f))
 	{
 		FRoomShapes::TintSlots(Table, FLinearColor(1.1f, 1.05f, 1.f));
@@ -938,10 +938,6 @@ void ALivingRoomActor::BuildSeating(FRoomBuilder& Build)
 	Build.Box(InCup + FVector(-2.8f, 4.1f, 5.f), FRotator(0.f, 124.f, 0.f), FVector(2.f, 0.8f, 4.f), China, false);
 	Build.Stain(RoomSurfaces::Damp, InCup + FVector(4.5f, 0.f, 4.f), FRotator(0.f, 180.f, 0.f), FVector2D(3.f, 6.f), FLinearColor(0.10f, 0.055f, 0.025f), 0.8f, 1.1f);
 	Build.Stain(RoomSurfaces::Damp, Cup + FVector(0.f, 0.f, 6.f), FRotator(-90.f, 0.f, 0.f), FVector2D(34.f, 34.f), FLinearColor(0.40f, 0.38f, 0.35f), 0.5f, 1.3f);
-	for (int32 i = 0; i < 3; ++i)
-	{
-		Build.Add(FRoomShapes::Cone(), FVector(LX + 10.f + i * 17.f, H - 20.f + i * 9.f, TableTop + 1.2f), FRotator(90.f, 40.f + i * 70.f, 0.f), FVector(2.4f, 2.4f, 6.f), MatGlass, false);
-	}
 	Footprints.Add(FBox2D(FVector2D(LX - 62.f, H - 62.f), FVector2D(LX + 62.f, H + 62.f)));
 
 	// The lamp table at the end of the sofa, and the oil lamp on it, empty and never lit again.

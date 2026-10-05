@@ -11,6 +11,7 @@ class UDirectionalLightComponent;
 class UPointLightComponent;
 class URectLightComponent;
 class UMaterialInstanceDynamic;
+struct FRoomSurface;
 
 /** Geometry of the wall opening this storm is seen through, handed over by the room that spawns it. */
 struct FStormWindowSetup
@@ -45,6 +46,15 @@ struct FStormWindowSetup
 	 */
 	bool bOwnView = false;
 
+	/**
+	 * For a follower on the lead's side of the house but well along from it: its own trees and
+	 * rain, in front of the lead's sky and ground. The lead's trees and rain stand in a band in
+	 * front of the lead's window, and through a window eight metres along the same wall there was
+	 * nothing out there but the flat sky over the flat ground. A second sky and ground would stand
+	 * in the same place as the lead's, which is what bOwnView is for and this is not.
+	 */
+	bool bOwnTrees = false;
+
 	/** Multiplies the sky portal, for an opening whose glass lets through less than a clear pane. */
 	float PortalScale = 1.f;
 
@@ -54,6 +64,14 @@ struct FStormWindowSetup
 	 * so every follower past the first needs its own, or it is the first one's window again.
 	 */
 	int32 Seed = 0;
+
+	/**
+	 * What the curtains are made of. Null is the house's grey linen; the girl's room hangs a pink
+	 * rose print. The surface must tile at Drapery's 34cm, since the drapes' UVs are laid out in it.
+	 */
+	const FRoomSurface* CurtainSurface = nullptr;
+	/** The curtains' tint on that surface; the default is the house's grey worked out for linen. */
+	FLinearColor CurtainTint = FLinearColor(0.268f, 0.184f, 0.118f);
 };
 
 /**
@@ -116,6 +134,8 @@ public:
 private:
 	void BuildWindow();
 	void BuildOutsideWorld();
+	/** The trees outside, on their own: part of BuildOutsideWorld, and all of a bOwnTrees follower's. */
+	void BuildTreeline();
 	void BuildRain();
 	void BuildLightningBolts();
 	void TickCurtains(float DeltaTime);

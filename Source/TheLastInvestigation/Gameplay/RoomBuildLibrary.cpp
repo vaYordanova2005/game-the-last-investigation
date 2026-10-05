@@ -53,6 +53,10 @@ namespace RoomSurfaces
 	// Shot at two metres: courses about forty centimetres high, which is dressed stone.
 	const FRoomSurface Stone{ TEXT("medieval_blocks_03"), 170.f };
 	const FRoomSurface PianoWood{ TEXT("lacquered_cherry_wood"), 120.f };
+	// The paper's stripes are 20cm apart at 160, a wallpaper's honest repeat; the fabric matches
+	// Drapery's 34, which the generated curtains' and bedding's UVs are laid out in.
+	const FRoomSurface NurseryWallpaper{ TEXT("nursery_wallpaper"), 160.f };
+	const FRoomSurface FloralFabric{ TEXT("floral_fabric"), 34.f };
 }
 
 namespace RoomProps
@@ -99,6 +103,45 @@ namespace RoomProps
 	const TCHAR* Vase = TEXT("ceramic_vase_01");
 	const TCHAR* PorcelainHorse = TEXT("horse_statue_01");
 	const TCHAR* KitchenChair = TEXT("painted_wooden_chair_02");
+	const TCHAR* NurseryBed = TEXT("nursery_bed");
+	const TCHAR* NurseryNightstand = TEXT("nursery_nightstand");
+	const TCHAR* NurseryWardrobe = TEXT("nursery_wardrobe");
+	const TCHAR* NurseryWardrobeDoor = TEXT("nursery_wardrobe_door");
+	const TCHAR* NurseryDesk = TEXT("nursery_desk");
+	const TCHAR* NurseryChair = TEXT("nursery_chair");
+	const TCHAR* NurseryBookcase = TEXT("nursery_bookcase");
+	const TCHAR* NurseryToyShelf = TEXT("nursery_toyshelf");
+	const TCHAR* NurseryToyChest = TEXT("nursery_toychest");
+	const TCHAR* NurseryToyChestLid = TEXT("nursery_toychest_lid");
+	const TCHAR* DollHouse = TEXT("nursery_dollhouse");
+	const TCHAR* Teddy = TEXT("toy_teddy");
+	const TCHAR* PlushRabbit = TEXT("toy_rabbit");
+	const TCHAR* RagDoll = TEXT("toy_ragdoll");
+	const TCHAR* ToyBlock = TEXT("toy_block");
+	const TCHAR* Backpack = TEXT("girl_backpack");
+	const TCHAR* Headphones = TEXT("girl_headphones");
+	const TCHAR* Tablet = TEXT("girl_tablet");
+	const TCHAR* MusicBox = TEXT("girl_musicbox");
+	const TCHAR* Sneaker = TEXT("girl_sneaker");
+	const TCHAR* DeskLamp = TEXT("girl_desklamp");
+	const TCHAR* PencilCase = TEXT("girl_pencilcase");
+	const TCHAR* Hairbrush = TEXT("girl_hairbrush");
+	const TCHAR* HairBow = TEXT("girl_hairbow");
+	const TCHAR* Pajamas = TEXT("girl_pajamas");
+	const TCHAR* Pillow = TEXT("girl_pillow");
+	const TCHAR* NurseryDresser = TEXT("nursery_dresser");
+	const TCHAR* NurseryTVStand = TEXT("nursery_tvstand");
+	const TCHAR* Television = TEXT("girl_tv");
+	const TCHAR* Laptop = TEXT("girl_laptop");
+	const TCHAR* StandingMirror = TEXT("girl_mirror");
+	const TCHAR* CoatRack = TEXT("nursery_coatrack");
+	const TCHAR* SummerDress = TEXT("girl_dress");
+	const TCHAR* Cardigan = TEXT("girl_cardigan");
+	const TCHAR* RainJacket = TEXT("girl_jacket");
+	const TCHAR* Scarf = TEXT("girl_scarf");
+	const TCHAR* Ukulele = TEXT("Ukulele_01");
+	const TCHAR* AlarmClock = TEXT("alarm_clock_01");
+	const TCHAR* WickerBasket = TEXT("wicker_basket_02");
 }
 
 namespace RoomPalette

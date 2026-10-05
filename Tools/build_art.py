@@ -91,11 +91,13 @@ def suffix_of(stem):
     return None
 
 
-def import_texture(file_path, asset_name, map_kind):
+def import_texture(file_path, asset_name, map_kind, force=False):
     _, compression, srgb = MAP_KINDS[map_kind]
     asset_path = "{}/{}".format(TEXTURE_PACKAGE, asset_name)
 
-    if not ASSET_LIB.does_asset_exist(asset_path):
+    # force: the source is one of ours and has been re-baked (Tools/make_nursery_art.py), so the
+    # asset already in the project is stale. Downloaded maps never change and are never forced.
+    if force or not ASSET_LIB.does_asset_exist(asset_path):
         task = unreal.AssetImportTask()
         task.filename = file_path
         task.destination_path = TEXTURE_PACKAGE
@@ -786,6 +788,7 @@ def import_surface_textures():
         return {}
 
     sets = {}
+    only = only_requested()
     for file_name in sorted(os.listdir(TEXTURE_SOURCE)):
         if not file_name.lower().endswith((".jpg", ".png")):
             continue
@@ -797,7 +800,9 @@ def import_surface_textures():
             continue
 
         set_name = stem[: -(len(map_kind) + 1)]
-        texture = import_texture(os.path.join(TEXTURE_SOURCE, file_name), "T_" + stem, map_kind)
+        # A baked set named in -ArtOnly is re-imported over itself; nothing else is touched twice.
+        force = bool(only and set_name.lower() in only)
+        texture = import_texture(os.path.join(TEXTURE_SOURCE, file_name), "T_" + stem, map_kind, force)
         if texture:
             sets.setdefault(set_name, {})[MAP_KINDS[map_kind][0]] = texture
 
@@ -840,16 +845,17 @@ def build_surface_instances(master, sets):
     return instances
 
 
-# Models generated in Blender by our own scripts (Tools/make_piano.py) rather than downloaded. They
-# carry hardened custom normals — flat faces kept flat right up to their bevels — so the import
-# takes the normals from the file instead of recomputing them, and they are re-imported every run,
-# because the script is where they are edited.
+# Models generated in Blender by our own scripts (Tools/make_piano.py, Tools/make_nursery.py) rather
+# than downloaded. They carry hardened custom normals — flat faces kept flat right up to their
+# bevels — so the import takes the normals from the file instead of recomputing them, and they are
+# re-imported every run, because the script is where they are edited. The piano predates the
+# marker; make_nursery.py writes an empty GENERATED file beside each FBX instead of growing a list.
 GENERATED_MODELS = {"grand_piano", "piano_bench"}
 
 
 def import_mesh(fbx_path, asset_name):
     asset_path = "{}/{}".format(MESH_PACKAGE, asset_name)
-    generated = asset_name in GENERATED_MODELS
+    generated = asset_name in GENERATED_MODELS or os.path.isfile(os.path.join(os.path.dirname(fbx_path), "GENERATED"))
     if ASSET_LIB.does_asset_exist(asset_path) and not generated:
         return ASSET_LIB.load_asset(asset_path)
 

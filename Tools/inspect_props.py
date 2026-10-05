@@ -12,6 +12,11 @@ names = [
     "Lantern_01", "wooden_crate_01",
 ]
 
+# -Props=a,b,c on the command line reports those instead.
+for token in unreal.SystemLibrary.get_command_line().split():
+    if token.lower().startswith("-props="):
+        names = [n for n in token.split("=", 1)[1].strip('"').split(",") if n]
+
 lines = []
 for name in names:
     path = "/Game/Meshes/" + name

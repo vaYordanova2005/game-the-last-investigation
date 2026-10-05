@@ -1720,8 +1720,8 @@ void AGrandStaircaseActor::SpawnDoors()
 		// The front door. Local +X is the hall side: yaw 180 on the east wall.
 		{ FVector(EastX() + 2.6f, Setup.CenterY + 60.f - 2.f, GroundZ), 180.f, 116.f, 248.f, 0.f, 0.f, FLinearColor(0.20f, 0.20f, 0.20f), true },
 		// The kitchen: swollen in its frame and standing a hand's width open, and it goes the rest of
-		// the way when pushed.
-		{ FVector(SideDoorX() + Half - 2.f, NorthY() - 2.6f, GroundZ), 90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 14.f, 100.f, FLinearColor(0.26f, 0.27f, 0.28f), true },
+		// the way when pushed (89: past 90 the leaf swings through the casing, as on the girl's door).
+		{ FVector(SideDoorX() + Half - 2.f, NorthY() - 2.6f, GroundZ), 90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 14.f, 89.f, FLinearColor(0.26f, 0.27f, 0.28f), true },
 	};
 
 	int32 Seed = 5101;
