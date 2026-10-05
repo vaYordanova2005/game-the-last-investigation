@@ -6,7 +6,6 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
-#include "Engine/Texture.h"
 #include "Engine/World.h"
 
 namespace

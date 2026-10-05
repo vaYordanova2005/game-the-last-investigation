@@ -33,7 +33,8 @@ void AHallDoorActor::BeginPlay()
 	// -OpenDoors (see ADoorActor): swung wide into its room, so the room behind can be walked into.
 	if (FParse::Param(FCommandLine::Get(), TEXT("OpenDoors")))
 	{
-		Setup.AjarYaw = FMath::Max(95.f, Setup.OpenYaw);
+		// A door that opens goes to exactly its own OpenYaw (wider would swing it through the casing).
+		Setup.AjarYaw = Setup.OpenYaw > 0.f ? Setup.OpenYaw : 95.f;
 		bOpened = Setup.OpenYaw > 0.f;
 	}
 	Swing->SetRelativeRotation(FRotator(0.f, Setup.AjarYaw, 0.f));
