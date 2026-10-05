@@ -25,6 +25,8 @@ struct FNurserySetup
 	float DoorX = -40.f;
 	float DoorHalf = 50.f;
 	float DoorHeight = 212.f;
+	/** The corridor's ceiling: the strip of north wall above it is this room's to build. */
+	float CorridorHeight = 305.f;
 };
 
 /**
@@ -39,13 +41,13 @@ struct FNurserySetup
  * dolls are cloth dolls with stitched faces.
  *
  *              north (the corridor)
- *      +-------------[door]------------------------+
+ *      +------ coat rack [door]  TV stand ----------+
  *      |  wardrobe        rug        calendar  desk |  window
  *  W   |  (west)                              chair | (east, the
  *  E   |  bookcase                                  |  storm)
  *  S   |               toy chest                    |
- *  T   |   toy shelf      +---- bed ----+  nightstand
- *      +------------------+  (head)     +-----------+
+ *  T   |   toy shelf  dresser  +--- bed ---+ nightstand  mirror
+ *      +-----------------------+  (head)   +--------------+
  *              south
  *
  * Shares the room's frame, like the corridor, so every number in here reads straight off
@@ -117,7 +119,7 @@ private:
 	FVector ToyChestSeat() const { return FVector(BedX() - 6.f, SouthY() - BedLength - 38.f, 0.f); }
 	/** The chest of drawers, on the south wall between the bed and the toy shelf. */
 	FVector DresserSeat() const { return FVector(8.f, SouthY() - 24.f, 0.f); }
-	/** Her television on its low cabinet, against the north wall to the right of the door as you come in. */
+	/** Her television on its low cabinet, against the north wall, to the left of the door as you come in (the right as you face it from inside). */
 	FVector TVStandSeat() const { return FVector(150.f, NorthY() + 21.f, 0.f); }
 	/** The hook rail behind the door, on the north wall the open leaf swings towards. */
 	float CoatRackX() const { return Setup.DoorX - Setup.DoorHalf - 80.f; }

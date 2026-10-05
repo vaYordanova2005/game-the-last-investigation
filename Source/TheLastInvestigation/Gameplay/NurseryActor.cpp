@@ -444,14 +444,6 @@ UStaticMeshComponent* ANurseryActor::Drawing(FRoomBuilder& Build, int32 Index, c
 			UMaterialInstanceDynamic* Mat = Parent ? UMaterialInstanceDynamic::Create(Parent, this) : nullptr;
 			if (Mat)
 			{
-				for (const TCHAR* Parameter : { TEXT("BaseColorMap"), TEXT("NormalMap"), TEXT("ARMMap") })
-				{
-					UTexture* Texture = nullptr;
-					if (Parent->GetTextureParameterValue(FMaterialParameterInfo(Parameter), Texture) && Texture)
-					{
-						Mat->SetTextureParameterValue(Parameter, Texture);
-					}
-				}
 				// Cartridge paper at about an eighth. First at a fifth, which is honest for paper and
 				// under a lantern at arm's length burned every drawing out to a blank white sheet.
 				Mat->SetVectorParameterValue(TEXT("Tint"), FLinearColor(0.150f, 0.140f, 0.130f));
@@ -606,7 +598,7 @@ void ANurseryActor::BuildShell(FRoomBuilder& Build)
 		const FVector2D S = Piece.GetSize();
 		Build.Box(FVector(EastX() + T * 0.5f, C.X, C.Y), FRotator::ZeroRotator, FVector(T, S.X, S.Y), MatShell);
 	}
-	Build.Box(FVector(MidX(), NorthY() - T * 0.5f, (300.f + Z1) * 0.5f), FRotator::ZeroRotator, FVector(RoomWidth + T * 2.f, T, Z1 - 300.f), MatShell);
+	Build.Box(FVector(MidX(), NorthY() - T * 0.5f, (Setup.CorridorHeight - 5.f + Z1) * 0.5f), FRotator::ZeroRotator, FVector(RoomWidth + T * 2.f, T, Z1 - (Setup.CorridorHeight - 5.f)), MatShell);
 
 	// The ceiling, and under the boards a dark subfloor that only ever shows through their gaps.
 	Build.Box(FVector(MidX(), MidY(), RoomHeight + 5.f), FRotator::ZeroRotator, FVector(RoomWidth + T * 2.f, RoomDepth + T * 2.f, 10.f), MatShell);
@@ -1426,7 +1418,10 @@ void ANurseryActor::BuildDrawings(FRoomBuilder& Build)
 		const FVector Right = FVector::CrossProduct(N, FVector::UpVector);
 		const FVector Centre = WallPoint(EWall::West, SouthY() - 112.f, 108.f, PaperProud);
 		const FRotator Face = FRotationMatrix::MakeFromZX(N, Right).Rotator();
-		Build.Add(FRoomShapes::Plane(), Centre, Face, FVector(21.f, 29.7f, 1.f), MatPaper, false)->SetReceivesDecals(false);
+		if (UStaticMeshComponent* Chart = Build.Add(FRoomShapes::Plane(), Centre, Face, FVector(21.f, 29.7f, 1.f), MatPaper, false))
+		{
+			Chart->SetReceivesDecals(false);
+		}
 		const FTransform Sheet(Face, Centre + N * 0.05f);
 		for (int32 g = 0; g < 4; ++g)
 		{
@@ -1522,8 +1517,8 @@ void ANurseryActor::BuildDresser(FRoomBuilder& Build)
 
 void ANurseryActor::BuildTelevision(FRoomBuilder& Build)
 {
-	// Her television, a flat forty-inch, on a low cabinet against the north wall to the right of the
-	// door: the other screen in the house besides the one downstairs, and dark like it.
+	// Her television, a flat forty-inch, on a low cabinet against the north wall, left of the door as
+	// you come in: the other screen in the house besides the one downstairs, and dark like it.
 	const FVector Seat = TVStandSeat();
 	const FRotator Turn(0.f, FacingYaw(EWall::North), 0.f);
 	Dress(Build.Prop(RoomProps::NurseryTVStand, Seat, Turn, 0.f, false),
@@ -1805,7 +1800,7 @@ void ANurseryActor::BuildClues()
 		}
 	}
 
-	// Her heights, in pencil up the door casing on the room side, a line and a mark each birthday:
+	// Her heights, in pencil on the wallpaper a hand's width east of the door casing, a line and a mark each birthday:
 	// from not quite a metre to half again. The last two in pink felt pen, because by then she
 	// wanted to.
 	{

@@ -1174,12 +1174,13 @@ void ACorridorActor::Tick(float DeltaTime)
 void ACorridorActor::SpawnDoors()
 {
 	// OpenYaw: how far a door goes when pushed. Only the girl's door has a room behind it; it stands
-	// ajar a few degrees, enough to show a line of dark and no more.
+	// ajar a few degrees, enough to show a line of dark and no more. It opens to 89, not 100: the hinge
+	// is 2cm inside the opening, so past 90 the leaf's edge swings through the casing on the room side.
 	struct FDoorSpec { bool bNorth; float U; float Ajar; FLinearColor Tint; bool bSix; bool bHole; float OpenYaw; };
 	const FDoorSpec Specs[] = {
 		{ true,  -690.f,  0.f,  FLinearColor(0.255f, 0.279f, 0.295f), true,  false, 0.f },
 		{ true,  -1060.f, 24.f, FLinearColor(0.215f, 0.232f, 0.245f), false, false, 0.f },
-		{ false, NurseryDoorU, 6.f, FLinearColor(0.300f, 0.300f, 0.290f), false, true, 100.f },
+		{ false, NurseryDoorU, 6.f, FLinearColor(0.300f, 0.300f, 0.290f), false, true, 89.f },
 		{ false, -470.f,  17.f, FLinearColor(0.240f, 0.250f, 0.262f), true,  false, 0.f },
 		{ false, -880.f,  0.f,  FLinearColor(0.330f, 0.330f, 0.320f), false, false, 0.f },
 	};
@@ -1268,6 +1269,7 @@ void ACorridorActor::SpawnNursery()
 		NurserySetup.DoorX = NurseryDoorU;
 		NurserySetup.DoorHalf = HallDoorWidth * 0.5f;
 		NurserySetup.DoorHeight = HallDoorHeight;
+		NurserySetup.CorridorHeight = Setup.Height;
 		Nursery->Configure(NurserySetup, LeadStorm);
 		Nursery->FinishSpawning(Transform);
 	}
