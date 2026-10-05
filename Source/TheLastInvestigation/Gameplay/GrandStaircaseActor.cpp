@@ -3,6 +3,7 @@
 #include "HallDoorActor.h"
 #include "LivingRoomActor.h"
 #include "KitchenActor.h"
+#include "CellarActor.h"
 #include "ClueActor.h"
 #include "StormWindowActor.h"
 #include "DustMotesComponent.h"
@@ -145,6 +146,53 @@ namespace
 	}
 }
 
+namespace
+{
+	/**
+	 * A floor of rectangles at one height, as one generated sheet with its UVs in centimetres over
+	 * TexelCm, so a photographed floor runs on across the pieces without a seam. The chequer was a
+	 * single box until the cellar stair had to come down through it, and boxes cut around a hole
+	 * each get their own crop: the squares would have stepped at every cut. Both windings with the
+	 * normal forced up (the Pane rule); no collision, which the caller builds separately.
+	 */
+	UProceduralMeshComponent* HallFloorSheet(AActor* Owner, USceneComponent* Parent, const TArray<FBox2D>& Rects, float Z, float TexelCm, UMaterialInterface* Mat)
+	{
+		if (Rects.Num() == 0 || !Mat)
+		{
+			return nullptr;
+		}
+		TArray<FVector> Verts;
+		TArray<FVector> Normals;
+		TArray<FVector2D> UVs;
+		TArray<FProcMeshTangent> Tangents;
+		TArray<int32> Tris;
+		for (const FBox2D& R : Rects)
+		{
+			const int32 First = Verts.Num();
+			const FVector2D Corners[4] = { R.Min, FVector2D(R.Max.X, R.Min.Y), R.Max, FVector2D(R.Min.X, R.Max.Y) };
+			for (const FVector2D& C : Corners)
+			{
+				Verts.Add(FVector(C.X, C.Y, Z));
+				Normals.Add(FVector::UpVector);
+				UVs.Add(C / TexelCm);
+				Tangents.Add(FProcMeshTangent(FVector(1.f, 0.f, 0.f), false));
+			}
+			Tris.Append({ First, First + 1, First + 2, First, First + 2, First + 3 });
+			Tris.Append({ First, First + 2, First + 1, First, First + 3, First + 2 });
+		}
+		UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(Owner, MakeUniqueObjectName(Owner, UProceduralMeshComponent::StaticClass(), TEXT("FloorSheet")));
+		Mesh->SetMobility(EComponentMobility::Movable);
+		Mesh->AttachToComponent(Parent, FAttachmentTransformRules::KeepRelativeTransform);
+		Mesh->bUseAsyncCooking = false;
+		Mesh->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, UVs, TArray<FLinearColor>(), Tangents, /*bCreateCollision*/ false);
+		Mesh->SetMaterial(0, Mat);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Mesh->RegisterComponent();
+		Owner->AddInstanceComponent(Mesh);
+		return Mesh;
+	}
+}
+
 AGrandStaircaseActor::AGrandStaircaseActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -212,6 +260,7 @@ void AGrandStaircaseActor::BeginPlay()
 	SpawnWindow();
 	SpawnLivingRoom();
 	SpawnKitchen();
+	SpawnCellar();
 	BuildClues();
 }
 
@@ -247,6 +296,14 @@ void AGrandStaircaseActor::CacheMaterials(FRoomBuilder& Build)
 	MatFloorboardsWorn = Build.Surface(RoomSurfaces::Floorboards, FLinearColor(0.40f, 0.36f, 0.32f));
 	// The chequer's pale squares are about 0.2 as shot; held to roughly the plaster's value.
 	MatTiles = Build.Surface(RoomSurfaces::HallTiles, FLinearColor(0.70f, 0.68f, 0.66f));
+	// A hair off the tint so the builder's cache hands back an instance of its own (see
+	// MatWainscotSheet), with the tiling at one for the floor sheet's centimetre UVs.
+	MatTilesSheet = Build.Surface(RoomSurfaces::HallTiles, FLinearColor(0.70f, 0.68f, 0.661f));
+	if (MatTilesSheet)
+	{
+		MatTilesSheet->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(1.f, 1.f, 0.f, 1.f));
+		MatTilesSheet->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(0.f, 0.f, 0.f, 1.f));
+	}
 	MatMarble = Build.Surface(RoomSurfaces::Marble, FLinearColor(0.40f, 0.40f, 0.42f), 0.7f);
 	MatCeiling = Build.Surface(RoomSurfaces::Ceiling, FLinearColor(0.30f, 0.29f, 0.27f));
 	MatBeam = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.220f, 0.210f, 0.200f));
@@ -412,7 +469,16 @@ void AGrandStaircaseActor::BuildShell(FRoomBuilder& Build)
 
 	const FVector Middle(EastX() - HallLength * 0.5f, Setup.CenterY, 0.f);
 	const FVector Span(HallLength + T * 2.f, HallWidth + T * 2.f, 20.f);
-	Build.Box(FVector(Middle.X, Middle.Y, GroundZ - 12.f), FRotator::ZeroRotator, Span, MatShell);
+	// The slab under the floor, open over the cellar stair's well (see BuildFloors).
+	for (const FBox2D& Piece : {
+		FBox2D(FVector2D(WestX() - T, CellarShaftSouthY()), FVector2D(EastX() + T, SouthY() + T)),
+		FBox2D(FVector2D(WestX() - T, NorthY() - T), FVector2D(CellarWellWestX(), CellarShaftSouthY())),
+		FBox2D(FVector2D(CellarWellEastX(), NorthY() - T), FVector2D(EastX() + T, CellarShaftSouthY())) })
+	{
+		const FVector2D C = Piece.GetCenter();
+		const FVector2D S = Piece.GetSize();
+		Build.Box(FVector(C.X, C.Y, GroundZ - 12.f), FRotator::ZeroRotator, FVector(S.X, S.Y, 20.f), MatShell);
+	}
 	Build.Box(FVector(Middle.X, Middle.Y, CeilingZ + 10.f), FRotator::ZeroRotator, Span, MatShell);
 
 	// Behind the front door, a vestibule the hall never lets you into, as in the corridor: a floor
@@ -449,10 +515,25 @@ void AGrandStaircaseActor::BuildShell(FRoomBuilder& Build)
 
 void AGrandStaircaseActor::BuildFloors(FRoomBuilder& Build)
 {
-	// The entrance hall: one chequered floor, wall to wall. It collides; everything laid on it
-	// does not.
-	Build.Box(FVector(EastX() - HallLength * 0.5f, Setup.CenterY, GroundZ - 1.f), FRotator::ZeroRotator,
-		FVector(HallLength, HallWidth, 2.f), MatTiles);
+	// The entrance hall: one chequered floor, wall to wall, but for the cellar stair's well behind
+	// the end wall under the north flight. It collides; everything laid on it does not. The visible
+	// floor is one generated sheet so the chequer runs on round the hole; the collision is boxes.
+	const TArray<FBox2D> FloorPieces = {
+		FBox2D(FVector2D(WestX(), CellarShaftSouthY()), FVector2D(EastX(), SouthY())),
+		FBox2D(FVector2D(WestX(), NorthY()), FVector2D(CellarWellWestX(), CellarShaftSouthY())),
+		FBox2D(FVector2D(CellarWellEastX(), NorthY()), FVector2D(EastX(), CellarShaftSouthY())),
+	};
+	HallFloorSheet(this, HallRoot, FloorPieces, GroundZ, RoomSurfaces::HallTiles.TexelSizeCm, MatTilesSheet);
+	for (const FBox2D& Piece : FloorPieces)
+	{
+		const FVector2D C = Piece.GetCenter();
+		const FVector2D S = Piece.GetSize();
+		if (UStaticMeshComponent* Floor = Build.Box(FVector(C.X, C.Y, GroundZ - 1.f), FRotator::ZeroRotator, FVector(S.X, S.Y, 2.f), MatShell))
+		{
+			Floor->SetHiddenInGame(true);
+			Floor->SetCastShadow(false);
+		}
+	}
 
 	// The upper floors — the gallery on three sides and the half-landing — are structure under
 	// boards, like the corridor: a slab that carries the player, boards over it that are what the
@@ -534,10 +615,12 @@ void AGrandStaircaseActor::BuildFloors(FRoomBuilder& Build)
 		++DeckIndex;
 	}
 
-	// Under the half-landing: panelled, floor to soffit, across the whole width of the hall. What
-	// is behind it is the dark under the stairs, and nothing is.
-	Build.Box(FVector(LandingEdgeX() + 2.f, Setup.CenterY, (GroundZ + LandingZ - FloorDepth) * 0.5f), FRotator::ZeroRotator,
-		FVector(4.f, HallWidth, LandingZ - FloorDepth - GroundZ), MatWainscot);
+	// Under the half-landing: panelled, floor to soffit, across the hall from the north flight's
+	// spandrel to the south wall. What is behind it is the dark under the stairs, and nothing is.
+	// Not across the north flight's width: the cellar stair runs down under there, and the
+	// panelling would cross it at head height (ACellarActor walls that side off instead).
+	Build.Box(FVector(LandingEdgeX() + 2.f, (NorthInnerY() + SouthY()) * 0.5f, (GroundZ + LandingZ - FloorDepth) * 0.5f), FRotator::ZeroRotator,
+		FVector(4.f, SouthY() - NorthInnerY(), LandingZ - FloorDepth - GroundZ), MatWainscot);
 
 	// A runner from the front door to the foot of the stairs, rotted into lengths like the one
 	// upstairs, and a worn path down its middle.
@@ -707,24 +790,42 @@ void AGrandStaircaseActor::BuildFlights(FRoomBuilder& Build)
 	Spandrel(SouthInnerY(), LandingEdgeX(), 1.f, LandingZ, -FloorDepth, 1.f);
 
 	// Where the return flights meet the gallery, the space under them is closed off from the hall
-	// by an end wall, and on the north side there is a cupboard door in it — the cupboard under
-	// the stairs, which no house of this size was without.
-	for (const bool bNorth : { true, false })
+	// by an end wall. On the north side there is a door in it: it was the cupboard under the
+	// stairs, and it is the way down to the cellar now (SpawnDoors hangs the leaf, ACellarActor
+	// builds the stair behind it).
+	const float EndTopZ = -FloorDepth;
+	const float DoorY0 = CellarShaftNorthY();
+	const float DoorY1 = CellarShaftNorthY() + CellarDoorWidth;
+	const float DoorTopZ = GroundZ + CellarDoorHeight;
+	Build.Box(FVector(FlightEastX() - 2.f, (SouthInnerY() + SouthY()) * 0.5f, (GroundZ + EndTopZ) * 0.5f), FRotator::ZeroRotator,
+		FVector(4.f, SouthY() - SouthInnerY(), EndTopZ - GroundZ), MatWainscot);
+	// The north one in three pieces round the door. As boxes, each narrow piece took its own crop
+	// and its own squeeze of the panelling and came out in vertical stripes (the spandrels' bug),
+	// so the boxes are only the collision and the face is generated sheets on one UV origin.
+	auto EndWall = [&](float Y0, float Y1, float Z0, float Z1)
 	{
-		const float Y0 = bNorth ? NorthY() : SouthInnerY();
-		const float Y1 = bNorth ? NorthInnerY() : SouthY();
-		Build.Box(FVector(FlightEastX() - 2.f, (Y0 + Y1) * 0.5f, (GroundZ - FloorDepth) * 0.5f), FRotator::ZeroRotator,
-			FVector(4.f, Y1 - Y0, -FloorDepth - GroundZ), MatWainscot);
-	}
-	const FVector Cupboard(FlightEastX() + 1.f, NorthY() + 80.f, GroundZ);
-	Build.Box(Cupboard + FVector(0.f, 0.f, 80.f), FRotator::ZeroRotator, FVector(2.f, 66.f, 160.f), MatOakDark, false);
-	for (const float Z : { 40.f, 120.f })
-	{
-		Build.Box(Cupboard + FVector(1.2f, 0.f, Z), FRotator::ZeroRotator, FVector(1.2f, 50.f, 60.f), MatOak, false);
-	}
-	Build.Sph(Cupboard + FVector(3.f, -24.f, 82.f), 4.f, MatBrass);
-	// Open a crack, and dark in the crack.
-	Build.Box(Cupboard + FVector(1.8f, 33.f, 80.f), FRotator::ZeroRotator, FVector(1.f, 2.2f, 158.f), MatVoid, false);
+		if (UStaticMeshComponent* Solid = Build.Box(FVector(FlightEastX() - 2.f, (Y0 + Y1) * 0.5f, (Z0 + Z1) * 0.5f), FRotator::ZeroRotator, FVector(4.f, Y1 - Y0, Z1 - Z0), MatWainscot))
+		{
+			Solid->SetHiddenInGame(true);
+		}
+		const float U0 = Y0 - NorthY();
+		const float U1 = Y1 - NorthY();
+		const TArray<FVector2D> Outline = { FVector2D(U0, Z0), FVector2D(U1, Z0), FVector2D(U1, Z1), FVector2D(U0, Z1) };
+		PanelMesh(this, HallRoot, Outline, FVector(FlightEastX() + 0.4f, NorthY(), 0.f), FVector(0.f, 1.f, 0.f), FVector(1.f, 0.f, 0.f),
+			RoomSurfaces::Wainscot.TexelSizeCm, MatWainscotSheet);
+	};
+	EndWall(NorthY(), DoorY0, GroundZ, EndTopZ);
+	EndWall(DoorY1, NorthInnerY(), GroundZ, EndTopZ);
+	EndWall(DoorY0, DoorY1, DoorTopZ, EndTopZ);
+	// A plain casing round it on the hall side, and the head lined through the wall.
+	const float CaseX = FlightEastX() + 1.f;
+	const float CaseHeight = CellarDoorHeight + 8.f;
+	Build.Box(FVector(CaseX, DoorY0 - 4.f, GroundZ + CaseHeight * 0.5f), FRotator::ZeroRotator, FVector(2.f, 8.f, CaseHeight), MatOakDark, false);
+	Build.Box(FVector(CaseX, DoorY1 + 4.f, GroundZ + CaseHeight * 0.5f), FRotator::ZeroRotator, FVector(2.f, 8.f, CaseHeight), MatOakDark, false);
+	Build.Box(FVector(CaseX, (DoorY0 + DoorY1) * 0.5f, DoorTopZ + 4.f), FRotator::ZeroRotator, FVector(2.f, CellarDoorWidth + 16.f, 8.f), MatOakDark, false);
+	Build.Box(FVector(FlightEastX() - 2.f, (DoorY0 + DoorY1) * 0.5f, DoorTopZ + 0.5f), FRotator::ZeroRotator, FVector(6.f, CellarDoorWidth, 1.f), MatOakDark, false);
+	// The threshold, worn hollow.
+	Build.Box(FVector(FlightEastX() - 2.f, (DoorY0 + DoorY1) * 0.5f, GroundZ + 0.8f), FRotator::ZeroRotator, FVector(8.f, CellarDoorWidth, 1.6f), MatOakDark, false);
 }
 
 void AGrandStaircaseActor::Newel(FRoomBuilder& Build, const FVector& Base, float Height, bool bGrand)
@@ -1722,6 +1823,10 @@ void AGrandStaircaseActor::SpawnDoors()
 		// The kitchen: swollen in its frame and standing a hand's width open, and it goes the rest of
 		// the way when pushed (89: past 90 the leaf swings through the casing, as on the girl's door).
 		{ FVector(SideDoorX() + Half - 2.f, NorthY() - 2.6f, GroundZ), 90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 14.f, 89.f, FLinearColor(0.26f, 0.27f, 0.28f), true },
+		// The cellar door, in the end wall under the north flight. Local +X is the hall side at yaw
+		// 0; pushed, it swings in over the top landing and lies along the north wall. Shut but for
+		// a crack, and dark in the crack, as the cupboard door it was.
+		{ FVector(FlightEastX() - 2.f, CellarShaftNorthY() + 1.f, GroundZ), 0.f, CellarDoorWidth - 2.f, CellarDoorHeight - 1.f, 3.f, 86.f, FLinearColor(0.22f, 0.22f, 0.22f), false },
 	};
 
 	int32 Seed = 5101;
@@ -1816,6 +1921,29 @@ void AGrandStaircaseActor::SpawnKitchen()
 		RoomSetup.DoorHeight = SideDoorHeight;
 		Kitchen->Configure(RoomSetup, LeadStorm);
 		Kitchen->FinishSpawning(Transform);
+	}
+}
+
+void AGrandStaircaseActor::SpawnCellar()
+{
+	// Down the stair behind the door under the north flight: the cellar under the hall, which is
+	// where Room01's furniture and everything in it stands now. Same frame as the hall.
+	const FTransform Transform = GetActorTransform();
+	Cellar = GetWorld()->SpawnActorDeferred<ACellarActor>(ACellarActor::StaticClass(), Transform, this);
+	if (Cellar)
+	{
+		FCellarSetup CellarSetup;
+		CellarSetup.DoorWallX = FlightEastX() - 4.f;
+		CellarSetup.TopLandingX = CellarWellEastX();
+		CellarSetup.WellWestX = CellarWellWestX();
+		CellarSetup.ShaftNorthY = CellarShaftNorthY();
+		CellarSetup.ShaftSouthY = CellarShaftSouthY();
+		CellarSetup.GroundZ = GroundZ;
+		CellarSetup.LandingEdgeX = LandingEdgeX();
+		CellarSetup.LandingSoffitZ = LandingZ - FloorDepth;
+		CellarSetup.HallWestX = WestX();
+		Cellar->Configure(CellarSetup);
+		Cellar->FinishSpawning(Transform);
 	}
 }
 

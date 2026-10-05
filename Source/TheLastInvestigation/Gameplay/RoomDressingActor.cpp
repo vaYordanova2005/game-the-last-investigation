@@ -141,7 +141,7 @@ bool ARoomDressingActor::IsFloorSpotClear(const FVector2D& Point, float Radius) 
 
 	// The detective comes round on the floor in the corner and must not do so inside a wardrobe,
 	// nor with a crate in front of his face — the first thing he sees has to be the room.
-	if (FVector2D::DistSquared(Point, Setup.WakeSpot) < FMath::Square(Radius + 95.f))
+	if (Setup.bWakeSpot && FVector2D::DistSquared(Point, Setup.WakeSpot) < FMath::Square(Radius + 95.f))
 	{
 		return false;
 	}
@@ -167,7 +167,7 @@ bool ARoomDressingActor::IsFloorSpotClear(const FVector2D& Point, float Radius) 
 	{
 		return false;
 	}
-	if (FMath::Abs(Point.Y) < Setup.WindowOpeningWidth * 0.5f + Radius && Point.X > WidthHalf - 70.f - Radius)
+	if (Setup.bWindow && FMath::Abs(Point.Y) < Setup.WindowOpeningWidth * 0.5f + Radius && Point.X > WidthHalf - 70.f - Radius)
 	{
 		return false;
 	}
@@ -190,12 +190,22 @@ void ARoomDressingActor::BeginPlay()
 	BuildWalls(Build);
 	BuildFloor(Build);
 	BuildCeiling(Build);
-	BuildFurniture(Build);
-	BuildBedroom(Build);
-	BuildDebris(Build);
-	BuildTraces(Build);
-	BuildClues();
-	PruneBodilessClues();
+	if (Setup.bContents)
+	{
+		BuildFurniture(Build);
+		BuildBedroom(Build);
+		BuildDebris(Build);
+	}
+	if (Setup.bWindow)
+	{
+		BuildWindowGlass(Build);
+	}
+	if (Setup.bContents)
+	{
+		BuildTraces(Build);
+		BuildClues();
+		PruneBodilessClues();
+	}
 }
 
 void ARoomDressingActor::BuildWalls(FRoomBuilder& Build)
@@ -257,7 +267,7 @@ void ARoomDressingActor::BuildWalls(FRoomBuilder& Build)
 		{
 			return FWallOpening{ true, Setup.DoorOpeningCenterX, Setup.DoorOpeningWidth * 0.5f, -20.f, 208.f };
 		}
-		if (Side == EWallSide::East)
+		if (Side == EWallSide::East && Setup.bWindow)
 		{
 			return FWallOpening{ true, 0.f, Setup.WindowOpeningWidth * 0.5f, Setup.WindowSillHeight, Setup.WindowTopHeight };
 		}
@@ -578,15 +588,19 @@ void ARoomDressingActor::BuildFloor(FRoomBuilder& Build)
 	// of does more for the "this floor will not hold you" feeling than any amount of texture.
 	// Placed deliberately in the middle-right of the waking view, between the detective and the
 	// door: the first thing he has to solve is not the lock, it is how to cross his own floor.
+	// It goes with the hook over it: where there is no hook (the cellar) the floor is whole.
 	const FVector2D CollapseCenter(60.f, 90.f);
-	const float CollapseRadius = 88.f;
+	const float CollapseRadius = Setup.bHook ? 88.f : 0.f;
 
 	// Solid: the detective can step down into the hole, about fourteen centimetres below the
 	// boards, and step back out (well inside the character's step height). Without it he would
 	// drop through the black onto the shell slab.
-	Build.Box(FVector(CollapseCenter.X, CollapseCenter.Y, -26.f), FRotator::ZeroRotator, FVector(CollapseRadius * 2.2f, CollapseRadius * 2.2f, 24.f), MatVoid, /*bBlockingCollision*/ true);
-	Build.Box(FVector(CollapseCenter.X - 30.f, CollapseCenter.Y, -12.f), FRotator::ZeroRotator, FVector(CollapseRadius * 2.4f, 14.f, 12.f), MatRoughWood);
-	Build.Box(FVector(CollapseCenter.X + 46.f, CollapseCenter.Y, -10.f), FRotator(0.f, 6.f, 0.f), FVector(CollapseRadius * 2.4f, 12.f, 10.f), MatRoughWood);
+	if (Setup.bHook)
+	{
+		Build.Box(FVector(CollapseCenter.X, CollapseCenter.Y, -26.f), FRotator::ZeroRotator, FVector(CollapseRadius * 2.2f, CollapseRadius * 2.2f, 24.f), MatVoid, /*bBlockingCollision*/ true);
+		Build.Box(FVector(CollapseCenter.X - 30.f, CollapseCenter.Y, -12.f), FRotator::ZeroRotator, FVector(CollapseRadius * 2.4f, 14.f, 12.f), MatRoughWood);
+		Build.Box(FVector(CollapseCenter.X + 46.f, CollapseCenter.Y, -10.f), FRotator(0.f, 6.f, 0.f), FVector(CollapseRadius * 2.4f, 12.f, 10.f), MatRoughWood);
+	}
 
 	// The subfloor: a second course of boards under the first.
 	//
@@ -614,7 +628,7 @@ void ARoomDressingActor::BuildFloor(FRoomBuilder& Build)
 
 		float GapMin = 0.f;
 		float GapMax = 0.f;
-		if (DY < CollapseRadius + SubBoardWidth * 0.5f)
+		if (Setup.bHook && DY < CollapseRadius + SubBoardWidth * 0.5f)
 		{
 			const float HalfChord = FMath::Sqrt(FMath::Max(FMath::Square(CollapseRadius + SubBoardWidth * 0.5f) - FMath::Square(DY), 0.f));
 			GapMin = CollapseCenter.X - HalfChord;
@@ -825,72 +839,76 @@ void ARoomDressingActor::BuildCeiling(FRoomBuilder& Build)
 	// the second brightest thing in the room, which is not what a dead bulb does.
 	Build.Sph(BulbAnchor + FVector(0.f, 0.f, -CordLength - 18.f), 20.f, Build.Flat(FLinearColor(0.030f, 0.032f, 0.035f), 0.62f));
 
-	// The lantern hook — iron screwed into a beam, worn where something hung from it for years.
-	//
-	// Into a beam, which it was not. The beams run along Y at four fixed X positions and this sat
-	// between two of them, so what was actually on the ceiling was a bent piece of iron stuck to
-	// bare plaster with nothing holding it and nothing above it — and lit from below it threw a
-	// bent shadow beside itself, so it read as two pieces of rubbish up there rather than one
-	// fitting. On the underside of the timber it reads as a fitting.
-	// And it was two straight cylinders — a stub down and a second stub leaning off it at
-	// seventy-five degrees. That is not a hook, it is two sticks meeting at a corner. What makes a
-	// hook a hook is the *curve*: one rod, bent through most of a circle and drawn to a point, and
-	// a curve has to be built as a curve. Fifteen short segments round an arc with a ball at every
-	// joint, so the rod reads as continuous rather than as a chain of pipes, tapering from the
-	// shank to the tip because a smith draws the end out thin before bending it.
-	//
-	// The arc is swept in the room's YZ plane, which is the plane the detective is looking across
-	// as he wakes: a hook whose opening faces the eye is a hook, and the same hook turned ninety
-	// degrees is a vertical line.
-	const float HookBeamX = -WidthHalf + (WidthHalf * 2.f) * 2.5f / 4.f;
-	const FVector HookAnchor(HookBeamX, 60.f, CeilingZ - 18.f);
-
-	// The screw end, up into the timber. Four thin collars are the thread: it is the detail that
-	// says the hook was turned into the beam rather than glued onto it, and the only part of the
-	// fitting that is lit from directly underneath.
-	const float ShankLength = 8.5f;
-	Build.Cyl(HookAnchor + FVector(0.f, 0.f, -ShankLength * 0.5f), FRotator::ZeroRotator, FVector(2.2f, 2.2f, ShankLength), MatIron, /*bBlockingCollision*/ false);
-	for (int32 Thread = 0; Thread < 4; ++Thread)
+	// The hook stays upstairs: the cellar has the furniture and not this.
+	if (Setup.bHook)
 	{
-		Build.Cyl(HookAnchor + FVector(0.f, 0.f, -1.6f - Thread * 1.5f), FRotator(0.f, 0.f, 4.f),
-			FVector(3.1f, 3.1f, 0.55f), MatIron, /*bBlockingCollision*/ false);
+		// The lantern hook — iron screwed into a beam, worn where something hung from it for years.
+		//
+		// Into a beam, which it was not. The beams run along Y at four fixed X positions and this sat
+		// between two of them, so what was actually on the ceiling was a bent piece of iron stuck to
+		// bare plaster with nothing holding it and nothing above it — and lit from below it threw a
+		// bent shadow beside itself, so it read as two pieces of rubbish up there rather than one
+		// fitting. On the underside of the timber it reads as a fitting.
+		// And it was two straight cylinders — a stub down and a second stub leaning off it at
+		// seventy-five degrees. That is not a hook, it is two sticks meeting at a corner. What makes a
+		// hook a hook is the *curve*: one rod, bent through most of a circle and drawn to a point, and
+		// a curve has to be built as a curve. Fifteen short segments round an arc with a ball at every
+		// joint, so the rod reads as continuous rather than as a chain of pipes, tapering from the
+		// shank to the tip because a smith draws the end out thin before bending it.
+		//
+		// The arc is swept in the room's YZ plane, which is the plane the detective is looking across
+		// as he wakes: a hook whose opening faces the eye is a hook, and the same hook turned ninety
+		// degrees is a vertical line.
+		const float HookBeamX = -WidthHalf + (WidthHalf * 2.f) * 2.5f / 4.f;
+		const FVector HookAnchor(HookBeamX, 60.f, CeilingZ - 18.f);
+
+		// The screw end, up into the timber. Four thin collars are the thread: it is the detail that
+		// says the hook was turned into the beam rather than glued onto it, and the only part of the
+		// fitting that is lit from directly underneath.
+		const float ShankLength = 8.5f;
+		Build.Cyl(HookAnchor + FVector(0.f, 0.f, -ShankLength * 0.5f), FRotator::ZeroRotator, FVector(2.2f, 2.2f, ShankLength), MatIron, /*bBlockingCollision*/ false);
+		for (int32 Thread = 0; Thread < 4; ++Thread)
+		{
+			Build.Cyl(HookAnchor + FVector(0.f, 0.f, -1.6f - Thread * 1.5f), FRotator(0.f, 0.f, 4.f),
+				FVector(3.1f, 3.1f, 0.55f), MatIron, /*bBlockingCollision*/ false);
+		}
+
+		// The bend. The centre sits one radius to the side of the shank, so the rod leaves the shank
+		// pointing straight down and turns from there — put the centre directly below it instead and
+		// the hook starts horizontal, which is a corner, which is what was wrong with the old one.
+		const float HookRadius = 5.4f;
+		const FVector BendCentre = HookAnchor + FVector(0.f, HookRadius, -ShankLength);
+		const int32 BendSegments = 15;
+		const float BendSweep = 214.f;
+
+		FVector Previous = HookAnchor + FVector(0.f, 0.f, -ShankLength);
+		FVector Heading = FVector(0.f, 0.f, -1.f);
+		float Thickness = 2.2f;
+		for (int32 Step = 1; Step <= BendSegments; ++Step)
+		{
+			const float Along = Step / static_cast<float>(BendSegments);
+			const float Sweep = FMath::DegreesToRadians(BendSweep * Along);
+			const FVector Point = BendCentre + FVector(0.f, -FMath::Cos(Sweep), -FMath::Sin(Sweep)) * HookRadius;
+
+			Heading = Point - Previous;
+			Thickness = FMath::Lerp(2.2f, 1.f, Along);
+
+			Build.Cyl(Previous + Heading * 0.5f, FRotationMatrix::MakeFromZ(Heading).Rotator(),
+				FVector(Thickness, Thickness, Heading.Size() + 0.5f), MatIron, /*bBlockingCollision*/ false);
+			Build.Sph(Point, Thickness, MatIron);
+
+			Previous = Point;
+		}
+
+		// Drawn to a point, which is the last thing that separates a hook from a bent bar.
+		Build.Add(FRoomShapes::Cone(), Previous + Heading.GetSafeNormal() * 1.6f,
+			FRotationMatrix::MakeFromZ(Heading).Rotator(), FVector(Thickness, Thickness, 3.4f), MatIron, /*bBlockingCollision*/ false);
+
+		// Fifty years of iron in wet timber leaves a mark on the timber. Aimed straight up at the
+		// beam's underside, the same way the leak stains are aimed at the ceiling.
+		Build.Stain(RoomSurfaces::Damp, HookAnchor + FVector(0.f, 0.f, -1.f), FRotator(90.f, 0.f, 24.f),
+			FVector2D(15.f, 13.f), FLinearColor(0.150f, 0.064f, 0.030f), 0.7f, 1.f);
 	}
-
-	// The bend. The centre sits one radius to the side of the shank, so the rod leaves the shank
-	// pointing straight down and turns from there — put the centre directly below it instead and
-	// the hook starts horizontal, which is a corner, which is what was wrong with the old one.
-	const float HookRadius = 5.4f;
-	const FVector BendCentre = HookAnchor + FVector(0.f, HookRadius, -ShankLength);
-	const int32 BendSegments = 15;
-	const float BendSweep = 214.f;
-
-	FVector Previous = HookAnchor + FVector(0.f, 0.f, -ShankLength);
-	FVector Heading = FVector(0.f, 0.f, -1.f);
-	float Thickness = 2.2f;
-	for (int32 Step = 1; Step <= BendSegments; ++Step)
-	{
-		const float Along = Step / static_cast<float>(BendSegments);
-		const float Sweep = FMath::DegreesToRadians(BendSweep * Along);
-		const FVector Point = BendCentre + FVector(0.f, -FMath::Cos(Sweep), -FMath::Sin(Sweep)) * HookRadius;
-
-		Heading = Point - Previous;
-		Thickness = FMath::Lerp(2.2f, 1.f, Along);
-
-		Build.Cyl(Previous + Heading * 0.5f, FRotationMatrix::MakeFromZ(Heading).Rotator(),
-			FVector(Thickness, Thickness, Heading.Size() + 0.5f), MatIron, /*bBlockingCollision*/ false);
-		Build.Sph(Point, Thickness, MatIron);
-
-		Previous = Point;
-	}
-
-	// Drawn to a point, which is the last thing that separates a hook from a bent bar.
-	Build.Add(FRoomShapes::Cone(), Previous + Heading.GetSafeNormal() * 1.6f,
-		FRotationMatrix::MakeFromZ(Heading).Rotator(), FVector(Thickness, Thickness, 3.4f), MatIron, /*bBlockingCollision*/ false);
-
-	// Fifty years of iron in wet timber leaves a mark on the timber. Aimed straight up at the
-	// beam's underside, the same way the leak stains are aimed at the ceiling.
-	Build.Stain(RoomSurfaces::Damp, HookAnchor + FVector(0.f, 0.f, -1.f), FRotator(90.f, 0.f, 24.f),
-		FVector2D(15.f, 13.f), FLinearColor(0.150f, 0.064f, 0.030f), 0.7f, 1.f);
 
 	// Water dripping from the worst of the stains into a puddle that never dries.
 	DropOrigin = FVector(StainCenters[0].X, StainCenters[0].Y, CeilingZ - 6.f);
@@ -1296,6 +1314,11 @@ void ARoomDressingActor::BuildDebris(FRoomBuilder& Build)
 		Build.Mark(FVector(Spot.X, Spot.Y, 5.f), FRotator(Random.FRandRange(-6.f, 6.f), Random.FRandRange(0.f, 360.f), 0.f), FVector2D(Random.FRandRange(16.f, 26.f), Random.FRandRange(20.f, 32.f)),
 			Random.FRand() < 0.45f ? Cast<UMaterialInterface>(MatPaperDamp) : Cast<UMaterialInterface>(MatPaper));
 	}
+}
+
+void ARoomDressingActor::BuildWindowGlass(FRoomBuilder& Build)
+{
+	const float WidthHalf = Setup.Width * 0.5f - Setup.WallThickness;
 
 	// Glass from the window, thrown inward across the boards below the sill.
 	for (int32 i = 0; i < 20; ++i)
@@ -1458,6 +1481,9 @@ void ARoomDressingActor::BuildClues()
 	//
 	// The far side of the collapse, too: the hook is directly over the hole, and there is no floor
 	// under it to stand a chair on.
+	//
+	// (Room01's contents are built in the cellar now, where there is neither hook nor collapse; the
+	// chair is where it was relative to the walls.)
 	if (AClueActor* Chair = SpawnClue(FVector(178.f, 6.f, 0.f), FRotator(0.f, 34.f, 0.f)))
 	{
 		FRoomBuilder ChairBuild(Chair, Chair->GetRootScene());

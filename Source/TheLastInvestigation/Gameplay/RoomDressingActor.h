@@ -29,6 +29,18 @@ struct FRoomDressingSetup
 
 	/** Where the detective wakes up. Nothing is dropped on top of him, and nothing blocks his view. */
 	FVector2D WakeSpot = FVector2D(-300.f, -70.f);
+	/** False where nobody wakes up, so the floor there is not kept clear for him. */
+	bool bWakeSpot = true;
+
+	/**
+	 * The furniture, the debris, the traces and the clue markers. Off in Room01 upstairs, whose
+	 * contents now stand in the cellar (ACellarActor), and which is to be furnished another way.
+	 */
+	bool bContents = true;
+	/** The window in the east wall. The cellar's east wall is blind. */
+	bool bWindow = true;
+	/** The hook in the beam and the collapsed boards under it. They stay upstairs. */
+	bool bHook = true;
 };
 
 /**
@@ -87,6 +99,8 @@ private:
 	 */
 	void BuildBookcaseContents(const FVector& Spot, const FRotator& Facing, float HeightCm);
 	void BuildDebris(FRoomBuilder& Build);
+	/** The glass the storm blew in across the boards under the window. Goes with the window. */
+	void BuildWindowGlass(FRoomBuilder& Build);
 	void BuildTraces(FRoomBuilder& Build);
 	void BuildClues();
 
