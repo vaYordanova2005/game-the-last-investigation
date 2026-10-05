@@ -135,9 +135,16 @@ void ARoomDressingActor::CacheMaterials(FRoomBuilder& Build)
 
 bool ARoomDressingActor::ReachesDoorSwing(const FVector2D& Point, float Radius) const
 {
-	// The hinge is at the window end of the doorway, on the room side (AInvestigationRoomActor, and
-	// the cellar's door in the same opening), and the leaf is as wide as the opening: it sweeps a
-	// quarter disc of that radius into the room, on the doorway's side of the hinge.
+	// Room01's door (AInvestigationRoomActor): hinged at the window end of the doorway on the room
+	// side, its leaf as wide as the opening, sweeping a quarter disc of that radius into the room on
+	// the doorway's side of the hinge. At its 100 degrees the leaf's end passes ~18cm beyond the
+	// hinge line, past the 10cm margin; the strips' faded edges and their oversized test radius
+	// cover the difference.
+	//
+	// The cellar bedroom's door is NOT this door: ACellarActor hangs it on the corridor side, about
+	// 27cm further out, with a leaf 12cm narrower. Its sweep lies inside this one, so the test
+	// covers it only because this area is the larger. Change either door and this has to be
+	// worked out again.
 	const FVector2D Hinge(Setup.DoorOpeningCenterX + Setup.DoorOpeningWidth * 0.5f, Setup.Depth * 0.5f - Setup.WallThickness);
 	const float Margin = 10.f;
 	return FVector2D::Distance(Point, Hinge) < Setup.DoorOpeningWidth + Radius + Margin
