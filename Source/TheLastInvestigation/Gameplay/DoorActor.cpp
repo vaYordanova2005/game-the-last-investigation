@@ -74,7 +74,7 @@ void ADoorActor::BeginPlay()
 	{
 		bIsLocked = false;
 		bIsOpen = true;
-		TargetYaw = 100.f;
+		TargetYaw = OpenYaw;
 	}
 }
 
@@ -299,7 +299,7 @@ void ADoorActor::Interact(AActor* Interactor)
 	}
 
 	bIsOpen = !bIsOpen;
-	TargetYaw = bIsOpen ? 100.f : 0.f;
+	TargetYaw = bIsOpen ? OpenYaw : 0.f;
 }
 
 FText ADoorActor::GetInteractPrompt(const AActor* Interactor) const

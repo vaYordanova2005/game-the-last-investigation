@@ -159,7 +159,6 @@ namespace RoomPalette
 	const FLinearColor GlassShard(0.130f, 0.150f, 0.158f);
 	const FLinearColor DriedBlood(0.062f, 0.026f, 0.020f);
 	const FLinearColor Web(0.320f, 0.310f, 0.290f);
-	const FLinearColor Water(0.055f, 0.070f, 0.080f);
 	const FLinearColor Void(0.004f, 0.004f, 0.004f);
 	const FLinearColor NightSky(0.012f, 0.016f, 0.026f);
 	const FLinearColor Foliage(0.018f, 0.022f, 0.018f);

@@ -701,7 +701,7 @@ void AStormWindowActor::BuildOutsideWorld()
 	// A backdrop far enough out that it never enters the lantern's reach — it exists so the player
 	// sees storm-lit distance through the window instead of the empty void past the level.
 	//
-	// Neither of these may cast a shadow, and that is not a performance nicety. The storm's light
+	// The sky may not cast a shadow, and that is not a performance nicety. The storm's light
 	// is a *directional* light: it arrives from beyond the treeline, so a sixty-metre slab of sky
 	// standing between it and the window puts the entire room inside one enormous shadow. That is
 	// precisely what it did — the window went black and not one photon of storm light reached the
@@ -714,12 +714,14 @@ void AStormWindowActor::BuildOutsideWorld()
 	// wall, under the floor of whatever room the window is in, where nobody could see it — until the
 	// living room was built on the storey under the stair window, and sixty metres of black ground
 	// stood out of its west wall at mantel height, straight through the fireplace.
+	//
+	// Unlike the sky, the ground does cast a shadow. It lies below every window's sill, so no light
+	// on its way in through a window ever crosses it; what it shades is what is under it, and the
+	// cellar runs out under the stair window's ground. Without it the storm's shadowed lights came
+	// down through the earth and lit the cellar corridor's ceiling from below at every strike.
 	const float GroundNear = Setup.WallThickness * 0.5f;
 	const float GroundFar = 3300.f;
-	if (UStaticMeshComponent* Ground = Build.Box(FVector((GroundNear + GroundFar) * 0.5f, 0.f, -40.f), FRotator::ZeroRotator, FVector(GroundFar - GroundNear, 6000.f, 40.f), GroundMat, /*bBlockingCollision*/ false))
-	{
-		Ground->SetCastShadow(false);
-	}
+	Build.Box(FVector((GroundNear + GroundFar) * 0.5f, 0.f, -40.f), FRotator::ZeroRotator, FVector(GroundFar - GroundNear, 6000.f, 40.f), GroundMat, /*bBlockingCollision*/ false);
 
 	BuildTreeline();
 }
@@ -982,7 +984,8 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 		// Same sky, same instant: the flash is read from the lead, not rolled.
 		FlashAlpha = Lead->GetFlashAlpha();
 		StrikeIntensity = Lead->GetStrikeIntensity();
-		LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * (Setup.bOwnView ? 900.f : 260.f));
+		const float GlowScale = bViewUnderground ? 0.f : (Setup.bOwnView ? 900.f : 260.f);
+		LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * GlowScale);
 		SkyPortal->SetIntensity(SkyPortalCandelas * Setup.PortalScale * (1.f + FlashAlpha * 9.f));
 		if (Setup.bOwnView)
 		{
@@ -1029,10 +1032,19 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 	const float Target = (SubFlashesRemaining > 0 && bSubFlashOn) ? 1.f : 0.f;
 	FlashAlpha = (Target > FlashAlpha) ? Target : FMath::FInterpTo(FlashAlpha, Target, DeltaTime, 14.f);
 
+	// -StormFlash: the sky held at full flash, so where a strike's light reaches can be checked in a
+	// -RoomShot (a strike cannot be timed into a still). Without the flag nothing changes.
+	static const bool bForceFlash = FParse::Param(FCommandLine::Get(), TEXT("StormFlash"));
+	if (bForceFlash)
+	{
+		FlashAlpha = 1.f;
+		StrikeIntensity = StrikeLux.Y;
+	}
+
 	// Never drops to zero: the floor value is the overcast sky the storm sits under, and it is what
 	// keeps the window a faint blue rectangle between strikes.
 	LightningLight->SetIntensity(StormAmbientLux + FlashAlpha * StrikeIntensity);
-	LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * 260.f);
+	LightningGlow->SetIntensity(bViewUnderground ? 0.f : FlashAlpha * StrikeIntensity * 260.f);
 	// The window itself floods when the sky goes off: from inside a room, that — not the bolt — is
 	// what a strike actually looks like.
 	SkyPortal->SetIntensity(SkyPortalCandelas * (1.f + FlashAlpha * 9.f));

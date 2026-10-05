@@ -14,6 +14,7 @@ class AHallDoorActor;
 class AClueActor;
 class ALivingRoomActor;
 class AKitchenActor;
+class ACellarActor;
 
 /** Where the stair hall meets the corridor, handed over by the corridor that spawns it. */
 struct FStairHallSetup
@@ -142,6 +143,24 @@ private:
 	 */
 	static constexpr float ParlourHalf = 100.f;
 	static constexpr float ParlourHeight = 240.f;
+	/**
+	 * The cellar door, in the end wall under the north return flight (it was the cupboard under the
+	 * stairs). Hinged on the north side, so that open it lies along the north wall rather than
+	 * across the top of the stair.
+	 */
+	static constexpr float CellarDoorWidth = 84.f;
+	static constexpr float CellarDoorHeight = 200.f;
+	/** The cellar stair's well, north and south: under the hall floor it is walled at these faces. */
+	float CellarShaftNorthY() const { return NorthY() + 10.f; }
+	float CellarShaftSouthY() const { return NorthInnerY() - 10.f; }
+	/**
+	 * The hole the cellar stair goes down through the hall floor: from the top landing inside the
+	 * door to where the stair is low enough to pass under the floor. All of it behind the end wall,
+	 * the north spandrel and the panelling under the landing, so the hall never sees it.
+	 */
+	float CellarWellEastX() const { return FlightEastX() - 40.f; }
+	float CellarWellWestX() const { return FlightEastX() - 360.f; }
+
 	/** The portrait on the landing: north of the window, clear of the sconce beside it. */
 	float PortraitCenterY() const { return NorthInnerY() + 60.f; }
 
@@ -165,6 +184,8 @@ private:
 	void SpawnLivingRoom();
 	/** The kitchen behind the door in the north wall (AKitchenActor), in the same frame as the hall. */
 	void SpawnKitchen();
+	/** The cellar under the hall, down the stair behind the door under the north flight (ACellarActor). */
+	void SpawnCellar();
 
 	/** One flight: treads, risers, runner, stringers, and the invisible ramp that is walked on. */
 	void BuildFlight(FRoomBuilder& Build, const FVector& FootNosing, const FVector& Up, float Width, int32 Seed, bool bRunner);
@@ -215,6 +236,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<AKitchenActor> Kitchen;
 
+	UPROPERTY(Transient)
+	TObjectPtr<ACellarActor> Cellar;
+
 	/** The chandelier hangs from this, and this is what the wind moves. */
 	UPROPERTY(Transient)
 	TObjectPtr<USceneComponent> ChandelierPivot;
@@ -249,6 +273,8 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFloorboards;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatFloorboardsWorn;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatTiles;
+	/** The same chequer untiled, for the generated floor sheet that carries its own UVs. */
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatTilesSheet;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatMarble;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatCeiling;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBeam;

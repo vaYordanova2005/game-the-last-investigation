@@ -25,6 +25,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Door")
 	bool bIsLocked = true;
 
+	/** How far the leaf swings into the room when open. The dressing keeps its floor decals off this arc. */
+	static constexpr float OpenYaw = 100.f;
+
 private:
 	/** Planks, hinges and lock, built at BeginPlay from primitives and attached to the swinging leaf. */
 	void BuildDoorDetail();

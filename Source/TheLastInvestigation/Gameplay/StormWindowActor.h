@@ -108,6 +108,23 @@ public:
 	/** Lux of the strike currently in progress, before FlashAlpha scales it. */
 	float GetStrikeIntensity() const { return StrikeIntensity; }
 
+private:
+	/** See SetViewUnderground. One player, one world: a plain static is enough. */
+	static inline bool bViewUnderground = false;
+
+public:
+
+	/**
+	 * Whether the player's eye is underground (set by ACellarActor every frame). While it is, every
+	 * window's glow stays dark. The glows of windows without a view of their own are unshadowed and
+	 * light everything within 24m whatever is in the way, so for them this is the only fix. The
+	 * own-view glows cast shadows, and came through only because the ground outside did not: the
+	 * cellar runs out under it, and its own thin ceiling did not stop them. The ground casts shadows
+	 * now (checked with -StormFlash, the own-view glows left on underground: the cellar stayed dark),
+	 * so for those this is a second guard rather than the fix.
+	 */
+	static void SetViewUnderground(bool bUnderground) { bViewUnderground = bUnderground; }
+
 	/** Counts strikes since BeginPlay, so a listener can tell one flash from the next. */
 	int32 GetStrikeCount() const { return StrikeCount; }
 

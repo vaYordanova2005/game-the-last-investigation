@@ -282,6 +282,10 @@ void AInvestigationRoomActor::SpawnOccupants()
 		DressingSetup.WindowOpeningWidth = WindowOpeningWidth;
 		DressingSetup.WindowSillHeight = WindowSillHeight;
 		DressingSetup.WindowTopHeight = WindowTopHeight;
+		// The walls, the boards, the ceiling and the hook only: the furniture and everything else
+		// that was in here stands in the cellar now (ACellarActor), and this room is to be
+		// furnished another way.
+		DressingSetup.bContents = false;
 		Dressing->Configure(DressingSetup);
 		Dressing->SetStorm(Storm);
 		Dressing->FinishSpawning(DressingTransform);
