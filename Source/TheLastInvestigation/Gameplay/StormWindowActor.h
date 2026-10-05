@@ -115,11 +115,11 @@ private:
 public:
 
 	/**
-	 * Whether the player's eye is underground (set by ACellarActor every frame). The glows of the
-	 * windows without a view of their own are unshadowed fill, so they light everything within
-	 * their 24m whatever is in the way — which upstairs is nothing, and under the kitchen and the
-	 * living room was the cellar, flashing with every strike. While this is set they stay dark.
-	 * Every other storm light casts shadows and is stopped by the ground on its own.
+	 * Whether the player's eye is underground (set by ACellarActor every frame). While it is, every
+	 * window's glow stays dark. The glows of windows without a view of their own are unshadowed and
+	 * light everything within 24m whatever is in the way; the own-view glows do cast shadows, and
+	 * still came through into the cellar at full flash (checked with -StormFlash, not root-caused).
+	 * The directional light and the sky portals are stopped by the ground and are left alone.
 	 */
 	static void SetViewUnderground(bool bUnderground) { bViewUnderground = bUnderground; }
 

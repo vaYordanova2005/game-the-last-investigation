@@ -982,7 +982,7 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 		// Same sky, same instant: the flash is read from the lead, not rolled.
 		FlashAlpha = Lead->GetFlashAlpha();
 		StrikeIntensity = Lead->GetStrikeIntensity();
-		const float GlowScale = Setup.bOwnView ? 900.f : (bViewUnderground ? 0.f : 260.f);
+		const float GlowScale = bViewUnderground ? 0.f : (Setup.bOwnView ? 900.f : 260.f);
 		LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * GlowScale);
 		SkyPortal->SetIntensity(SkyPortalCandelas * Setup.PortalScale * (1.f + FlashAlpha * 9.f));
 		if (Setup.bOwnView)
@@ -1029,6 +1029,15 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 	// cutting to black and the flash leaves an afterimage.
 	const float Target = (SubFlashesRemaining > 0 && bSubFlashOn) ? 1.f : 0.f;
 	FlashAlpha = (Target > FlashAlpha) ? Target : FMath::FInterpTo(FlashAlpha, Target, DeltaTime, 14.f);
+
+	// -StormFlash: the sky held at full flash, so where a strike's light reaches can be checked in a
+	// -RoomShot (a strike cannot be timed into a still). Without the flag nothing changes.
+	static const bool bForceFlash = FParse::Param(FCommandLine::Get(), TEXT("StormFlash"));
+	if (bForceFlash)
+	{
+		FlashAlpha = 1.f;
+		StrikeIntensity = StrikeLux.Y;
+	}
 
 	// Never drops to zero: the floor value is the overcast sky the storm sits under, and it is what
 	// keeps the window a faint blue rectangle between strikes.
