@@ -5,6 +5,9 @@
 #include "InteractableInterface.h"
 #include "HallDoorActor.generated.h"
 
+class FRoomBuilder;
+class UMaterialInterface;
+
 class UStaticMeshComponent;
 class USceneComponent;
 
@@ -28,6 +31,11 @@ struct FHallDoorSetup
 	bool bSixPanel = false;
 	/** A fist-sized hole rotted through the bottom panel. */
 	bool bRotHole = false;
+	/**
+	 * A cellar door: ledged oak boards instead of panels, three iron straps across both faces
+	 * studded with nails, strap hinges, and a ring pull on a lock plate instead of a knob.
+	 */
+	bool bIronBound = false;
 };
 
 /**
@@ -58,6 +66,10 @@ public:
 
 private:
 	void BuildLeaf();
+	/** The house doors' joinery: stiles, rails, and four or six fields, on both faces. */
+	void BuildPanels(FRoomBuilder& Build, UMaterialInterface* FrameMat, UMaterialInterface* PanelMat);
+	/** The cellar door's: boards, ledges and a brace, iron straps and a ring pull (bIronBound). */
+	void BuildIronBound(FRoomBuilder& Build, UMaterialInterface* WoodMat, UMaterialInterface* FrameMat, UMaterialInterface* RustMat);
 
 	UPROPERTY(VisibleAnywhere, Category = "Door")
 	TObjectPtr<USceneComponent> HingeRoot;

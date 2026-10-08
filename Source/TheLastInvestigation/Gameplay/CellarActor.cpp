@@ -2,6 +2,7 @@
 #include "RoomBuildLibrary.h"
 #include "RoomDressingActor.h"
 #include "HallDoorActor.h"
+#include "WineCellarActor.h"
 #include "StormWindowActor.h" // RoomDressingActor.h's inline SetStorm needs the complete type
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -47,19 +48,22 @@ void ACellarActor::Configure(const FCellarSetup& InSetup)
 TArray<ACellarActor::FCellarRoom> ACellarActor::Rooms() const
 {
 	// West from the foot of the stair. The bedroom is the first door on the right, placed so its
-	// opening is where Room01's door is along its wall; the bare rooms are laid out from it, a
-	// brick's length apart, and the two on the left are staggered against the two on the right so
-	// no door looks straight into another.
+	// opening is where Room01's door is along its wall; the other rooms are laid out from it, a
+	// brick's length apart, and the doors on the left are staggered against the ones on the right
+	// so no door looks straight into another. The wine cellar is the room that was S2, widened
+	// west and deepened south: its east wall where S2's was, its door near its own east end.
 	const float BedCentreX = BedroomDoorX() - DoorOpeningCenterX;
 	const float BedWestOuter = BedCentreX - (RoomWidth + WallThickness) * 0.5f;
 	const float NorthTwoX = BedWestOuter - 10.f - (600.f + WallThickness) * 0.5f;
 	const float SouthOneX = FootX() - 42.f - (640.f + WallThickness) * 0.5f;
-	const float SouthTwoX = SouthOneX - (640.f + WallThickness) * 0.5f - 10.f - (600.f + WallThickness) * 0.5f;
+	const float WineX = SouthOneX - (640.f + WallThickness) * 0.5f - 10.f - (AWineCellarActor::Width + WallThickness) * 0.5f;
+	FCellarRoom Wine{ WineX, AWineCellarActor::Width, AWineCellarActor::Depth, false, WineX + AWineCellarActor::DoorX, false, 6303 };
+	Wine.bWine = true;
 	return {
 		{ BedCentreX, RoomWidth, RoomDepth, true, BedroomDoorX(), true, 6000 },
 		{ NorthTwoX, 600.f, 500.f, true, NorthTwoX - 110.f, false, 6101 },
 		{ SouthOneX, 640.f, 540.f, false, SouthOneX - 100.f, false, 6202 },
-		{ SouthTwoX, 600.f, 540.f, false, SouthTwoX + 90.f, false, 6303 },
+		Wine,
 	};
 }
 
@@ -74,10 +78,12 @@ FVector ACellarActor::RoomCentre(const FCellarRoom& Room) const
 
 float ACellarActor::PassageWestX() const
 {
+	// The wine cellar runs on west under the ground past where the corridor stops, so only its
+	// door decides how far the corridor has to go for it.
 	float West = BedroomDoorX();
 	for (const FCellarRoom& Room : Rooms())
 	{
-		West = FMath::Min(West, Room.CentreX - (Room.Width + WallThickness) * 0.5f);
+		West = FMath::Min(West, Room.bWine ? Room.DoorX - DoorHalf(Room) - 60.f : Room.CentreX - (Room.Width + WallThickness) * 0.5f);
 	}
 	return West - 30.f;
 }
@@ -110,15 +116,22 @@ void ACellarActor::BeginPlay()
 	BuildStair(Build);
 	for (const FCellarRoom& Room : Rooms())
 	{
-		BuildRoomShell(Build, Room);
-		if (Room.bBedroom)
+		if (Room.bWine)
 		{
-			SpawnBedroom(Room);
-			BuildMaidsCorner(Build, Room);
+			SpawnWineCellar(Room);
 		}
 		else
 		{
-			BuildBareRoom(Build, Room);
+			BuildRoomShell(Build, Room);
+			if (Room.bBedroom)
+			{
+				SpawnBedroom(Room);
+				BuildMaidsCorner(Build, Room);
+			}
+			else
+			{
+				BuildBareRoom(Build, Room);
+			}
 		}
 		SpawnDoor(Room);
 	}
@@ -795,6 +808,17 @@ void ACellarActor::BuildMaidsCorner(FRoomBuilder& Build, const FCellarRoom& Room
 	}
 }
 
+void ACellarActor::SpawnWineCellar(const FCellarRoom& Room)
+{
+	// In the cellar's frame, translated to the room's centre on its floor, like the bedroom.
+	const FTransform Transform(FRotator::ZeroRotator, GetActorTransform().TransformPosition(RoomCentre(Room)));
+	WineCellar = GetWorld()->SpawnActorDeferred<AWineCellarActor>(AWineCellarActor::StaticClass(), Transform, this);
+	if (WineCellar)
+	{
+		WineCellar->FinishSpawning(Transform);
+	}
+}
+
 void ACellarActor::SpawnDoor(const FCellarRoom& Room)
 {
 	// A door standing a crack open, that goes the rest of the way when pushed — the bedroom's too,
@@ -820,6 +844,13 @@ void ACellarActor::SpawnDoor(const FCellarRoom& Room)
 		// The bedroom's is a house door, panelled like the ones upstairs; the rest are cellar doors.
 		DoorSetup.bSixPanel = Room.bBedroom;
 		DoorSetup.bRotHole = (Room.Seed % 2) == 0;
+		if (Room.bWine)
+		{
+			// Oak boards in iron, darker than the plank doors: it was made to keep something in.
+			DoorSetup.bIronBound = true;
+			DoorSetup.bRotHole = false;
+			DoorSetup.WoodTint = FLinearColor(0.14f, 0.13f, 0.12f);
+		}
 		Door->Configure(DoorSetup);
 		Door->FinishSpawning(Transform);
 		Doors.Add(Door);

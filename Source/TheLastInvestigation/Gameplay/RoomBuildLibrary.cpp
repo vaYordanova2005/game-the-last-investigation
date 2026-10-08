@@ -57,6 +57,12 @@ namespace RoomSurfaces
 	// Drapery's 34, which the generated curtains' and bedding's UVs are laid out in.
 	const FRoomSurface NurseryWallpaper{ TEXT("nursery_wallpaper"), 160.f };
 	const FRoomSurface FloralFabric{ TEXT("floral_fabric"), 34.f };
+	// The wine cellar. Each at the size Poly Haven shot it at.
+	const FRoomSurface CellarBrick{ TEXT("castle_brick_01"), 150.f };
+	const FRoomSurface VaultBrick{ TEXT("medieval_red_brick"), 200.f };
+	const FRoomSurface CellarFlags{ TEXT("large_floor_tiles_02"), 300.f };
+	const FRoomSurface Leather{ TEXT("brown_leather"), 40.f };
+	const FRoomSurface DarkOak{ TEXT("black_oak_veneer"), 100.f };
 }
 
 namespace RoomProps
@@ -142,6 +148,43 @@ namespace RoomProps
 	const TCHAR* Ukulele = TEXT("Ukulele_01");
 	const TCHAR* AlarmClock = TEXT("alarm_clock_01");
 	const TCHAR* WickerBasket = TEXT("wicker_basket_02");
+	const TCHAR* WineBarrel = TEXT("wine_barrel_01");
+	const TCHAR* MetalRack = TEXT("worn_metal_rack");
+	const TCHAR* StorageCrate = TEXT("wooden_crate_02");
+	const TCHAR* CellarLantern = TEXT("wooden_lantern_01");
+	const TCHAR* WineVault = TEXT("wine_vault");
+	const TCHAR* WineArch = TEXT("wine_arch");
+	const TCHAR* WinePier = TEXT("wine_pier");
+	const TCHAR* WineRackBack = TEXT("wine_rack_back");
+	const TCHAR* WineRackSpine = TEXT("wine_rack_spine");
+	const TCHAR* WineBottles[4] = { TEXT("wine_bottle_a"), TEXT("wine_bottle_b"), TEXT("wine_bottle_c"), TEXT("wine_bottle_d") };
+	const TCHAR* WineBottleOpen = TEXT("wine_bottle_open");
+	const TCHAR* WineBottleOpenB = TEXT("wine_bottle_open_b");
+	const TCHAR* WineBottleFull = TEXT("wine_bottle_full");
+	const TCHAR* WineBottleBroken = TEXT("wine_bottle_broken");
+	const TCHAR* WineBottleNeck = TEXT("wine_bottle_neck");
+	const TCHAR* WineShards = TEXT("wine_shards");
+	const TCHAR* WineCork = TEXT("wine_cork");
+	const TCHAR* WineGlass = TEXT("wine_glass");
+	const TCHAR* WineDecanter = TEXT("wine_decanter");
+	const TCHAR* WineDecanterStopper = TEXT("wine_decanter_stopper");
+	const TCHAR* WineCrate = TEXT("wine_crate");
+	const TCHAR* WineCrateOpen = TEXT("wine_crate_open");
+	const TCHAR* CellarCandlestick = TEXT("cellar_candlestick");
+	const TCHAR* CellarChamberstick = TEXT("cellar_chamberstick");
+	const TCHAR* CellarCorkscrew = TEXT("cellar_corkscrew");
+	const TCHAR* CellarTable = TEXT("cellar_table");
+	const TCHAR* CellarWritingTable = TEXT("cellar_writing_table");
+	const TCHAR* CellarArmchair = TEXT("cellar_armchair");
+	const TCHAR* CellarPedestalTable = TEXT("cellar_pedestal_table");
+	const TCHAR* CellarBookshelf = TEXT("cellar_bookshelf");
+	const TCHAR* CellarWineCabinet = TEXT("cellar_wine_cabinet");
+	const TCHAR* CellarCradle = TEXT("cellar_cradle");
+	const TCHAR* CellarTray = TEXT("cellar_tray");
+	const TCHAR* CellarKeyRack = TEXT("cellar_key_rack");
+	const TCHAR* CellarClock = TEXT("cellar_clock");
+	const TCHAR* CellarCorkBoard = TEXT("cellar_cork_board");
+	const TCHAR* CellarPrintFrame = TEXT("cellar_print_frame");
 }
 
 namespace RoomPalette

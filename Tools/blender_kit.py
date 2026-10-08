@@ -35,6 +35,10 @@ class Part:
         # Blobs and cushions are smooth all over: no sharp edges marked anywhere on them.
         self.smooth = smooth
         self.cutter = None
+        # A part whose UVs are not a box projection: a barrel vault laid in courses along its curve,
+        # a label wrapped round a bottle. Called with the bmesh in the game frame, before the bake
+        # mirrors it, and box_uvs is skipped for it.
+        self.uv_fn = None
 
 
 def catmull(points, steps):
@@ -242,9 +246,12 @@ def bake(parts, name, slots):
     for index, part in enumerate(parts):
         if not part.bm.verts:
             continue
+        if part.uv_fn is not None:
+            part.uv_fn(part.bm)
         bmesh.ops.transform(part.bm, matrix=TO_BLENDER, verts=part.bm.verts)
         bmesh.ops.recalc_face_normals(part.bm, faces=part.bm.faces)
-        box_uvs(part.bm, slots[part.slot][1])
+        if part.uv_fn is None:
+            box_uvs(part.bm, slots[part.slot][1])
         mesh = bpy.data.meshes.new("{}_part{}".format(name, index))
         part.bm.to_mesh(mesh)
         mesh.shade_smooth()

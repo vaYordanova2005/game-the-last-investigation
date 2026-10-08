@@ -53,6 +53,20 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | `alarm_clock_01` | model | the alarm clock on her bedside table |
 | `wicker_basket_02` | model | the basket of soft toys in the corner |
 
+## Wine cellar — Poly Haven (CC0 / public domain)
+
+| Asset ID | Kind | Used for |
+|---|---|---|
+| `castle_brick_01` | texture | the wine cellar's stone-brick walls |
+| `medieval_red_brick` | texture | the brick barrel vault over the nave |
+| `large_floor_tiles_02` | texture | the cellar's stone floor |
+| `brown_leather` | texture | the two armchairs in the tasting alcove |
+| `black_oak_veneer` | texture | the racks, the tasting table and the cabinet |
+| `wine_barrel_01` | model | the barrels on their cradles |
+| `worn_metal_rack` | model | the rusted shelving |
+| `wooden_crate_02` | model | the storage crate |
+| `wooden_lantern_01` | model | the lantern hung on a pier |
+
 ## Generated in-repo
 
 | File | Made by | Used for |
@@ -64,5 +78,8 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | `Art/Source/Textures/nursery_wallpaper_*` | `Tools/make_nursery_art.py`, on Poly Haven's `decrepit_wallpaper` | her rosebud wallpaper |
 | `Art/Source/Textures/floral_fabric_*` | `Tools/make_nursery_art.py`, on Poly Haven's `rough_linen` | her curtains, quilt and pillowcases |
 | `Art/Source/Textures/child_drawings_*` | `Tools/make_nursery_art.py` | her drawings on the walls |
+| `Art/Source/Models/wine_*`, `cellar_*` | `Tools/make_wine_cellar.py` (Blender) | the wine cellar's vault, piers, racks, bottles, glassware and furniture |
+| `Art/Source/Textures/wine_paper_*` | `Tools/make_cellar_art.py` | the wine labels, the cellar book, the tasting notebook, the bin chart, the engraving |
+| `Art/Source/Textures/wine_brands_*` | `Tools/make_cellar_art.py` | the vineyards' brands burned into the crates |
 
-The stained-glass inscription is set in Cinzel (SIL Open Font License, `Content/Fonts/OFL.txt`).
+The stained-glass inscription, the wine labels and the crate brands are set in Cinzel (SIL Open Font License, `Content/Fonts/OFL.txt`).

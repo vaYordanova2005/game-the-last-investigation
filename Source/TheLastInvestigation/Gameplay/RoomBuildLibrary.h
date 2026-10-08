@@ -67,6 +67,16 @@ namespace RoomSurfaces
 	 */
 	extern const FRoomSurface NurseryWallpaper;
 	extern const FRoomSurface FloralFabric;
+	/**
+	 * The wine cellar: stone-brick walls, the brick barrel vault over its nave, cold stone flags,
+	 * the brown leather of the two armchairs, and the near-black oak of the racks and the furniture
+	 * (Tools/make_wine_cellar.py lays its models' UVs out in repeats of these sizes).
+	 */
+	extern const FRoomSurface CellarBrick;
+	extern const FRoomSurface VaultBrick;
+	extern const FRoomSurface CellarFlags;
+	extern const FRoomSurface Leather;
+	extern const FRoomSurface DarkOak;
 }
 
 /** Imported prop meshes, /Game/Meshes/<name>. Names match Tools/fetch_assets.py's manifest. */
@@ -170,6 +180,50 @@ namespace RoomProps
 	extern const TCHAR* Ukulele;
 	extern const TCHAR* AlarmClock;
 	extern const TCHAR* WickerBasket;
+	/** The wine cellar, from Poly Haven: a barrel, rusted shelving, a storage crate, a lantern. */
+	extern const TCHAR* WineBarrel;
+	extern const TCHAR* MetalRack;
+	extern const TCHAR* StorageCrate;
+	extern const TCHAR* CellarLantern;
+	/**
+	 * And generated in Blender by Tools/make_wine_cellar.py, with named material slots that
+	 * AWineCellarActor fills. The vault and the arch are in the room's frame; the racks, bottles and
+	 * furniture stand on their origin and face local +Y; wall things have theirs on the wall plane.
+	 */
+	extern const TCHAR* WineVault;
+	extern const TCHAR* WineArch;
+	extern const TCHAR* WinePier;
+	extern const TCHAR* WineRackBack;
+	extern const TCHAR* WineRackSpine;
+	/** Four bottlings for the racks: Bordeaux, Burgundy, Bordeaux, Bordeaux, each its own label. */
+	extern const TCHAR* WineBottles[4];
+	extern const TCHAR* WineBottleOpen;
+	extern const TCHAR* WineBottleOpenB;
+	extern const TCHAR* WineBottleFull;
+	extern const TCHAR* WineBottleBroken;
+	extern const TCHAR* WineBottleNeck;
+	extern const TCHAR* WineShards;
+	extern const TCHAR* WineCork;
+	extern const TCHAR* WineGlass;
+	extern const TCHAR* WineDecanter;
+	extern const TCHAR* WineDecanterStopper;
+	extern const TCHAR* WineCrate;
+	extern const TCHAR* WineCrateOpen;
+	extern const TCHAR* CellarCandlestick;
+	extern const TCHAR* CellarChamberstick;
+	extern const TCHAR* CellarCorkscrew;
+	extern const TCHAR* CellarTable;
+	extern const TCHAR* CellarWritingTable;
+	extern const TCHAR* CellarArmchair;
+	extern const TCHAR* CellarPedestalTable;
+	extern const TCHAR* CellarBookshelf;
+	extern const TCHAR* CellarWineCabinet;
+	extern const TCHAR* CellarCradle;
+	extern const TCHAR* CellarTray;
+	extern const TCHAR* CellarKeyRack;
+	extern const TCHAR* CellarClock;
+	extern const TCHAR* CellarCorkBoard;
+	extern const TCHAR* CellarPrintFrame;
 }
 
 /**
