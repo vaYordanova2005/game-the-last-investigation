@@ -221,34 +221,50 @@ void AHallDoorActor::BuildIronBound(FRoomBuilder& Build, UMaterialInterface* Woo
 		Build.Box(FVector(LeafHalf + 0.15f, Y, H * 0.5f), FRotator(90.f, 0.f, 0.f), FVector(H - 4.f, W / Boards - 1.2f, 0.3f), Mat, /*bBlockingCollision*/ false);
 	}
 	// The ledges on the room side and a brace between them.
-	for (const float Z : { 30.f, H - 34.f })
+	const float LedgeThickness = 3.2f;
+	const float LedgeZ[2] = { 30.f, H - 34.f };
+	for (const float Z : LedgeZ)
 	{
-		Build.Box(FVector(-(LeafHalf + 1.6f), W * 0.5f, Z), FRotator::ZeroRotator, FVector(3.2f, W - 6.f, 14.f), FrameMat, /*bBlockingCollision*/ false);
+		Build.Box(FVector(-(LeafHalf + LedgeThickness * 0.5f), W * 0.5f, Z), FRotator::ZeroRotator, FVector(LedgeThickness, W - 6.f, 14.f), FrameMat, /*bBlockingCollision*/ false);
 	}
 	const float BraceLength = FMath::Sqrt(FMath::Square(W - 16.f) + FMath::Square(H - 92.f));
 	const float BraceAngle = FMath::RadiansToDegrees(FMath::Atan2(H - 92.f, W - 16.f));
 	Build.Box(FVector(-(LeafHalf + 1.4f), W * 0.5f, H * 0.5f - 2.f), FRotator(0.f, 0.f, BraceAngle), FVector(2.8f, BraceLength, 12.f), FrameMat, /*bBlockingCollision*/ false);
 
-	// Three straps across both faces, nailed through: the corridor side's straps run the width; on
-	// the room side the top and bottom ones are the hinges, running on past the leaf's edge into the
-	// pintle on the jamb.
-	for (const float Z : { 24.f, H * 0.5f, H - 26.f })
+	// Three straps across both faces, nailed through. Each lies on whatever is under it: on the
+	// corridor side that is the boards, the width of the leaf; on the room side the top and bottom
+	// straps are the hinges and lie along the ledges (the ledge is what a hinge strap is screwed to),
+	// starting in the knuckle round the pintle at the leaf's hinge edge; the middle one has no ledge
+	// under it, so it lies on the boards and the brace crosses over it.
+	const float StrapThickness = 0.8f;
+	const float StrapZ[3] = { LedgeZ[0], H * 0.5f, LedgeZ[1] };
+	const float CorridorStrapZ[3] = { 24.f, H * 0.5f, H - 26.f };
+	const float PintleY = 0.5f;
+	for (int32 s = 0; s < 3; ++s)
 	{
 		for (const float Side : { 1.f, -1.f })
 		{
-			const float X = Side * (LeafHalf + (Side > 0.f ? 0.7f : 3.6f));
-			const float Length = W - 4.f;
-			Build.Box(FVector(X, W * 0.5f, Z), FRotator(0.f, 0.f, Random.FRandRange(-0.4f, 0.4f)), FVector(0.8f, Length, 6.f), RustMat, /*bBlockingCollision*/ false);
+			const bool bRoom = Side < 0.f;
+			const bool bHinge = bRoom && s != 1;
+			const float Z = bRoom ? StrapZ[s] : CorridorStrapZ[s];
+			// Out from the leaf's face by what it lies on: the boards (0.3) on the corridor side, the
+			// ledge on the room side, nothing under the middle room strap but the leaf itself.
+			const float Under = bRoom ? (bHinge ? LedgeThickness : 0.f) : 0.3f;
+			const float X = Side * (LeafHalf + Under + StrapThickness * 0.5f);
+			const float Y0 = bHinge ? PintleY : 2.f;
+			const float Y1 = W - 2.f;
+			Build.Box(FVector(X, (Y0 + Y1) * 0.5f, Z), FRotator(0.f, 0.f, Random.FRandRange(-0.4f, 0.4f)), FVector(StrapThickness, Y1 - Y0, 6.f), RustMat, /*bBlockingCollision*/ false);
 			for (int32 k = 0; k < 7; ++k)
 			{
 				const float Y = 6.f + (W - 12.f) * k / 6.f;
 				Build.Sph(FVector(X + Side * 0.5f, Y, Z + (k % 2 ? 1.4f : -1.4f)), 1.5f, StudMat);
 			}
+			// The knuckle round the pintle, at the strap's end.
+			if (bHinge)
+			{
+				Build.Cyl(FVector(X, PintleY, Z), FRotator::ZeroRotator, FVector(4.2f, 4.2f, 9.f), RustMat, /*bBlockingCollision*/ false);
+			}
 		}
-	}
-	for (const float Z : { 24.f, H - 26.f })
-	{
-		Build.Cyl(FVector(-(LeafHalf + 3.6f), 0.5f, Z), FRotator::ZeroRotator, FVector(4.2f, 4.2f, 9.f), RustMat, /*bBlockingCollision*/ false);
 	}
 
 	// The ring pull on its lock plate, both faces, and the keyhole under it.

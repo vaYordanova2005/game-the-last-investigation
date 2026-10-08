@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "WineCellarActor.h"
 #include "CellarActor.generated.h"
 
 class FRoomBuilder;
@@ -9,7 +10,6 @@ class USceneComponent;
 class UMaterialInstanceDynamic;
 class ARoomDressingActor;
 class AHallDoorActor;
-class AWineCellarActor;
 
 /** Where the cellar stair leaves the stair hall, handed over by the hall that spawns it. */
 struct FCellarSetup
@@ -93,9 +93,19 @@ public:
 	/** The bare rooms' doorways: a plank door in each, narrower than the house's. */
 	static constexpr float BareDoorWidth = 96.f;
 	static constexpr float BareDoorHeight = 200.f;
-	/** The wine cellar's: wider and taller, for a door that barrels went through. */
-	static constexpr float WineDoorWidth = 110.f;
-	static constexpr float WineDoorHeight = 212.f;
+	/** The wine cellar's: wider and taller, for a door that barrels went through. The wine cellar
+	 *  builds the wall it is in, so its numbers are the source and these only read them. */
+	static constexpr float WineDoorWidth = AWineCellarActor::DoorHalf * 2.f;
+	static constexpr float WineDoorHeight = AWineCellarActor::DoorHeight;
+	/**
+	 * How every cellar door is hung (SpawnDoor): the hinge this far in from its jamb and this far
+	 * proud of the corridor's face, a leaf this much narrower than the opening, opening to this.
+	 * Public because the wine cellar keeps its floor decals off the leaf's sweep.
+	 */
+	static constexpr float DoorHingeInset = 6.f;
+	static constexpr float DoorHingeProud = 2.6f;
+	static constexpr float DoorLeafClearance = 12.f;
+	static constexpr float DoorOpenYaw = 84.f;
 
 	/** How far the cellar floor is under the hall's: a storey and a ceiling, and clear of its slab. */
 	static constexpr float DepthBelowHall = 350.f;
@@ -186,3 +196,9 @@ private:
 
 	FCellarSetup Setup;
 };
+
+// The wine cellar builds its own shell, but it stands in the cellar's row of rooms: the cellar
+// places it by this wall thickness, and builds the corridor's wall over it from FloorZ +
+// RoomHeight up, which is exactly where the wine cellar's door wall stops (its AisleCeiling).
+static_assert(AWineCellarActor::WallThickness == ACellarActor::WallThickness, "The wine cellar's walls must be the cellar's thickness");
+static_assert(AWineCellarActor::AisleCeiling == ACellarActor::RoomHeight, "The wine cellar's door wall must stop where the corridor wall over it starts");

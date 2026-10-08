@@ -8,6 +8,7 @@ class FRoomBuilder;
 class USceneComponent;
 class UStaticMeshComponent;
 class UInstancedStaticMeshComponent;
+class UPrimitiveComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class ULocalFogVolumeComponent;
@@ -55,11 +56,12 @@ public:
 
 	virtual void BeginPlay() override;
 
-	/** Wall centre to wall centre. */
+	/** Wall centre to wall centre. The wall thickness is the cellar's (static_assert in CellarActor.h). */
 	static constexpr float Width = 1240.f;
 	static constexpr float Depth = 900.f;
 	static constexpr float WallThickness = 20.f;
-	/** The door in the north wall, its centre along X from the room's centre (ACellarActor::WineDoorWidth/Height). */
+	/** The door in the north wall, its centre along X from the room's centre. The source of the
+	 *  cellar's WineDoorWidth/WineDoorHeight, which hang the door in it. */
 	static constexpr float DoorX = 490.f;
 	static constexpr float DoorHalf = 55.f;
 	static constexpr float DoorHeight = 212.f;
@@ -67,7 +69,8 @@ public:
 	/** The inner faces of the walls. */
 	static constexpr float HalfX = Width * 0.5f - WallThickness * 0.5f;
 	static constexpr float HalfY = Depth * 0.5f - WallThickness * 0.5f;
-	/** The aisles' flat ceiling, the same height as the cellar's other rooms. */
+	/** The aisles' flat ceiling, the same height as the cellar's other rooms (ACellarActor::RoomHeight,
+	 *  static_assert in CellarActor.h): the corridor's wall over the door wall starts there. */
 	static constexpr float AisleCeiling = 305.f;
 
 	/** Two rows of piers at +-PierY, at these X; the beams run along the rows over them. */
@@ -76,6 +79,17 @@ public:
 	static constexpr float PierTop = 270.f;
 	static constexpr float BeamTop = 304.f;
 	static constexpr float BeamHalf = 15.f;
+
+	/**
+	 * The vault's inner face (Tools/make_wine_cellar.py: VAULT_*): a segmental arc springing off
+	 * the beams at +-VaultHalf and rising to the crown, i.e. a circle about X through
+	 * (0, VaultCentreZ) of radius VaultRadius (~209.7, centre ~205.3).
+	 */
+	static constexpr float VaultHalf = 185.f;
+	static constexpr float VaultSpring = BeamTop;
+	static constexpr float VaultCrown = 415.f;
+	static constexpr float VaultRadius = (VaultHalf * VaultHalf + (VaultCrown - VaultSpring) * (VaultCrown - VaultSpring)) / (2.f * (VaultCrown - VaultSpring));
+	static constexpr float VaultCentreZ = VaultCrown - VaultRadius;
 
 	/** The racks' cell grid (Tools/make_wine_cellar.py: RACK_*). */
 	static constexpr float RackPitch = 12.5f;
@@ -91,6 +105,25 @@ public:
 
 private:
 	static const float PierXs[4];
+	/** The bays between the piers, at the middle of each (the racks round them, the webs in their corners). */
+	static const float BayXs[3];
+
+	/** The long table (make_wine_cellar.py: tasting_table): centred on the nave's axis at
+	 *  TastingTableX, its six legs at +-LegX and 0 along it, +-LegY across. */
+	static constexpr float TastingTableX = 20.f;
+	static constexpr float TastingTableTop = 78.f;
+	static constexpr float TastingTableLegX = 130.f;
+	static constexpr float TastingTableLegY = 38.f;
+
+	/** The tasting alcove: the armchairs at AlcoveX, +-AlcoveChairY, facing each other across the
+	 *  table and each turned AlcoveChairTurn degrees to the room. */
+	static constexpr float AlcoveX = -500.f;
+	static constexpr float AlcoveChairY = 98.f;
+	static constexpr float AlcoveChairTurn = 12.f;
+	/** One armchair, Side -1 the north one: where it stands, and its yaw. */
+	static FVector AlcoveChair(float Side, float& OutYaw);
+	/** The little round table between them. */
+	static FVector AlcoveTable() { return FVector(AlcoveX - 5.f, 0.f, 0.f); }
 
 	/** One rack placed in the room: where, which way its front faces, and whether it is a spine. */
 	struct FRack
@@ -98,6 +131,18 @@ private:
 		FVector Location;
 		float Yaw;
 		bool bSpine;
+	};
+
+	/** The four walls, by the way their inner faces look: north is the door wall. */
+	enum class EWall : uint8 { North, South, East, West };
+
+	/** Something standing against a wall, as a rectangle on it: U along it (X on the north and
+	 *  south walls, Y on the east and west), Z up it. */
+	struct FWallKeepOut
+	{
+		EWall Wall;
+		FVector2D U;
+		FVector2D Z;
 	};
 
 	void CacheMaterials(FRoomBuilder& Build);
@@ -108,6 +153,9 @@ private:
 	void BuildTastingTable(FRoomBuilder& Build);
 	void BuildAlcove(FRoomBuilder& Build);
 	void BuildCorners(FRoomBuilder& Build);
+	/** Damp, moss and cracks on the walls and the vault's weeping. After everything that stands
+	 *  against a wall, since a wall decal has to know what it would land on. */
+	void BuildWallDamp(FRoomBuilder& Build);
 	void BuildFloor(FRoomBuilder& Build);
 	void BuildCobwebs(FRoomBuilder& Build);
 	void BuildMist();
@@ -130,11 +178,32 @@ private:
 	void Web(FRoomBuilder& Build, const FVector& Centre, const FRotator& Rotation, const FVector2D& Size);
 	AClueActor* SpawnClue(const FVector& LocalLocation, const FRotator& Rotation);
 
+	/**
+	 * Records Part's footprint on every wall it stands within a wall decal's reach of, so the damp
+	 * and the cracks keep off it. Read off its bounds after it is placed rather than written out a
+	 * second time, so a prop that is moved takes its keep-out with it.
+	 */
+	void KeepWallDecalsOff(const UPrimitiveComponent* Part);
+	/** The same for every part of an actor (a clue's body). */
+	void KeepWallDecalsOff(const AActor* Actor);
+	/** Whether a wall decal centred at U along Wall and Z up it, reaching HalfAlong and HalfUp
+	 *  either way, would land on something standing against it, or on the doorway. */
+	bool WallDecalHitsSomething(EWall Wall, float U, float Z, float HalfAlong, float HalfUp) const;
+	/**
+	 * Whether a floor decal centred at Point, reaching HalfExtent along X and Y, would reach the
+	 * doorway — the sill, the reveal, the stone surround's foot — or the quarter of the floor the
+	 * leaf sweeps as it opens (ACellarActor::SpawnDoor hangs it). The cellar's 10-05 rule.
+	 */
+	static bool FloorDecalReachesDoor(const FVector2D& Point, const FVector2D& HalfExtent);
+
+	TArray<FWallKeepOut> WallKeepOuts;
+
 	UPROPERTY(VisibleAnywhere, Category = "Wine Cellar")
 	TObjectPtr<USceneComponent> CellarRoot;
 
+	/** The ground mist, in overlapping pieces: a local fog volume is always a sphere (see BuildMist). */
 	UPROPERTY(Transient)
-	TObjectPtr<ULocalFogVolumeComponent> Mist;
+	TArray<TObjectPtr<ULocalFogVolumeComponent>> Mist;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AClueActor>> Clues;

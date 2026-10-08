@@ -2,7 +2,6 @@
 #include "RoomBuildLibrary.h"
 #include "RoomDressingActor.h"
 #include "HallDoorActor.h"
-#include "WineCellarActor.h"
 #include "StormWindowActor.h" // RoomDressingActor.h's inline SetStorm needs the complete type
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -829,16 +828,16 @@ void ACellarActor::SpawnDoor(const FCellarRoom& Room)
 	const float Half = DoorHalf(Room);
 	const float Face = Room.bNorth ? Setup.ShaftNorthY : Setup.ShaftSouthY;
 	const FVector Hinge = Room.bNorth
-		? FVector(Room.DoorX + Half - 6.f, Face - 2.6f, FloorZ())
-		: FVector(Room.DoorX - Half + 6.f, Face + 2.6f, FloorZ());
+		? FVector(Room.DoorX + Half - DoorHingeInset, Face - DoorHingeProud, FloorZ())
+		: FVector(Room.DoorX - Half + DoorHingeInset, Face + DoorHingeProud, FloorZ());
 	const FTransform Transform(FRotator(0.f, Room.bNorth ? 90.f : -90.f, 0.f), GetActorTransform().TransformPosition(Hinge));
 	if (AHallDoorActor* Door = GetWorld()->SpawnActorDeferred<AHallDoorActor>(AHallDoorActor::StaticClass(), Transform, this))
 	{
 		FHallDoorSetup DoorSetup;
-		DoorSetup.Width = Half * 2.f - 12.f;
+		DoorSetup.Width = Half * 2.f - DoorLeafClearance;
 		DoorSetup.Height = DoorHeight(Room) - 8.f;
 		DoorSetup.AjarYaw = 4.f;
-		DoorSetup.OpenYaw = 84.f;
+		DoorSetup.OpenYaw = DoorOpenYaw;
 		DoorSetup.Seed = Room.Seed;
 		DoorSetup.WoodTint = FLinearColor(0.20f, 0.20f, 0.19f);
 		// The bedroom's is a house door, panelled like the ones upstairs; the rest are cellar doors.

@@ -1,4 +1,5 @@
 #include "WineCellarActor.h"
+#include "CellarActor.h"
 #include "RoomBuildLibrary.h"
 #include "ClueActor.h"
 #include "Components/SceneComponent.h"
@@ -10,6 +11,7 @@
 #include "Engine/World.h"
 
 const float AWineCellarActor::PierXs[4] = { -360.f, -120.f, 120.f, 360.f };
+const float AWineCellarActor::BayXs[3] = { -240.f, 0.f, 240.f };
 
 namespace
 {
@@ -78,6 +80,18 @@ namespace
 	{
 		return FRotator(0.f, Yaw, 0.f).RotateVector(FVector(1.f, 0.f, 0.f));
 	}
+
+	/**
+	 * How far a decal aimed straight down reaches along X and Y, turned by its roll. Aimed down,
+	 * a decal lays its first size along Y and its second along X (09-27); the roll turns that
+	 * rectangle, and this is the box round it.
+	 */
+	FVector2D WineFloorDecalHalfExtent(const FVector2D& Size, float Roll)
+	{
+		const float Cos = FMath::Abs(FMath::Cos(FMath::DegreesToRadians(Roll)));
+		const float Sin = FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Roll)));
+		return FVector2D(Cos * Size.Y + Sin * Size.X, Cos * Size.X + Sin * Size.Y) * 0.5f;
+	}
 }
 
 AWineCellarActor::AWineCellarActor()
@@ -101,6 +115,7 @@ void AWineCellarActor::BeginPlay()
 	BuildTastingTable(Build);
 	BuildAlcove(Build);
 	BuildCorners(Build);
+	BuildWallDamp(Build);
 	BuildFloor(Build);
 	BuildCobwebs(Build);
 	BuildMist();
@@ -239,6 +254,109 @@ AClueActor* AWineCellarActor::SpawnClue(const FVector& LocalLocation, const FRot
 		Clues.Add(Clue);
 	}
 	return Clue;
+}
+
+FVector AWineCellarActor::AlcoveChair(float Side, float& OutYaw)
+{
+	// The chair faces its local +Y: the north one looks south across the table, the south one north.
+	OutYaw = Side < 0.f ? -AlcoveChairTurn : 180.f + AlcoveChairTurn;
+	return FVector(AlcoveX, Side * AlcoveChairY, 0.f);
+}
+
+void AWineCellarActor::KeepWallDecalsOff(const UPrimitiveComponent* Part)
+{
+	if (!Part || !Part->IsRegistered())
+	{
+		return;
+	}
+	// The room is translated from the cellar's frame and never turned, so its own box is the world
+	// box moved by the actor's location. A wall decal is put two centimetres off the plaster and
+	// reaches nine either way from there, so anything within a dozen of a wall is under its reach.
+	const FBox Box = Part->Bounds.GetBox().ShiftBy(-GetActorLocation());
+	const float Reach = 12.f;
+	const FVector2D AlongX(Box.Min.X, Box.Max.X);
+	const FVector2D AlongY(Box.Min.Y, Box.Max.Y);
+	const FVector2D Up(Box.Min.Z, Box.Max.Z);
+	if (Box.Min.Y < -HalfY + Reach)
+	{
+		WallKeepOuts.Add({ EWall::North, AlongX, Up });
+	}
+	if (Box.Max.Y > HalfY - Reach)
+	{
+		WallKeepOuts.Add({ EWall::South, AlongX, Up });
+	}
+	if (Box.Max.X > HalfX - Reach)
+	{
+		WallKeepOuts.Add({ EWall::East, AlongY, Up });
+	}
+	if (Box.Min.X < -HalfX + Reach)
+	{
+		WallKeepOuts.Add({ EWall::West, AlongY, Up });
+	}
+}
+
+void AWineCellarActor::KeepWallDecalsOff(const AActor* Actor)
+{
+	if (!Actor)
+	{
+		return;
+	}
+	TInlineComponentArray<UPrimitiveComponent*> Parts(Actor);
+	for (const UPrimitiveComponent* Part : Parts)
+	{
+		KeepWallDecalsOff(Part);
+	}
+}
+
+bool AWineCellarActor::WallDecalHitsSomething(EWall Wall, float U, float Z, float HalfAlong, float HalfUp) const
+{
+	// The doorway, with its stone surround (16 out from the opening either side, 18 over it): a
+	// decal projects straight through, smears down the reveal and lies on the leaf as it swings.
+	// A hand's width of margin, the cellar's (ACellarActor::DecalHitsDoorway).
+	if (Wall == EWall::North)
+	{
+		const float DoorMargin = 15.f;
+		if (FMath::Abs(U - DoorX) < DoorHalf + 16.f + HalfAlong + DoorMargin && Z - HalfUp < DoorHeight + 18.f + DoorMargin)
+		{
+			return true;
+		}
+	}
+	// Against a piece of furniture or a frame a few centimetres are enough: a decal's edge is already
+	// torn and faded by then.
+	const float Margin = 5.f;
+	for (const FWallKeepOut& Keep : WallKeepOuts)
+	{
+		if (Keep.Wall == Wall
+			&& U + HalfAlong + Margin > Keep.U.X && U - HalfAlong - Margin < Keep.U.Y
+			&& Z + HalfUp + Margin > Keep.Z.X && Z - HalfUp - Margin < Keep.Z.Y)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool AWineCellarActor::FloorDecalReachesDoor(const FVector2D& Point, const FVector2D& HalfExtent)
+{
+	const float Margin = 15.f;
+	// The doorway itself: the sill and the reveal in the wall's thickness, and the foot of the stone
+	// surround standing three centimetres proud of the wall either side. A floor decal is projected
+	// from four above the flags and reaches nine either way, so it takes in the bottom of all three.
+	const float SurroundHalf = DoorHalf + 16.f;
+	const float SurroundFace = -HalfY + 3.f;
+	if (FMath::Abs(Point.X - DoorX) < SurroundHalf + HalfExtent.X + Margin && Point.Y - HalfExtent.Y < SurroundFace + Margin)
+	{
+		return true;
+	}
+	// The leaf's sweep, as the cellar hangs it: hinged at the west jamb on the corridor's side, its
+	// leaf along +X when shut, swinging south into the room — a quarter disc of the leaf's width on
+	// the hinge's east side, pushed back past the hinge line by any opening beyond ninety degrees
+	// (ARoomDressingActor::ReachesDoorSwing). The footprint's half-diagonal stands in for its shape.
+	const FVector2D Hinge(DoorX - DoorHalf + ACellarActor::DoorHingeInset, -(Depth + WallThickness) * 0.5f + ACellarActor::DoorHingeProud);
+	const float Leaf = DoorHalf * 2.f - ACellarActor::DoorLeafClearance;
+	const float Overswing = Leaf * FMath::Sin(FMath::DegreesToRadians(FMath::Max(ACellarActor::DoorOpenYaw - 90.f, 0.f)));
+	return FVector2D::Distance(Point, Hinge) < Leaf + HalfExtent.Size() + Margin
+		&& Point.X + HalfExtent.X > Hinge.X - Overswing - Margin;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -431,49 +549,99 @@ void AWineCellarActor::BuildShell(FRoomBuilder& Build)
 	// The vault and its ribs, and the arch into the alcove. In the room's frame (make_wine_cellar.py).
 	Place(Build, RoomProps::WineVault, FVector::ZeroVector, FRotator::ZeroRotator, { { TEXT("Vault"), MatVaultSheet }, { TEXT("Rib"), MatStoneSheet } });
 	Place(Build, RoomProps::WineArch, FVector(PierXs[0], 0.f, 0.f), FRotator::ZeroRotator, { { TEXT("Stone"), MatStoneSheet } });
+}
 
+// ---------------------------------------------------------------------------------------------
+// Damp on the walls and the vault.
+// ---------------------------------------------------------------------------------------------
+
+void AWineCellarActor::BuildWallDamp(FRoomBuilder& Build)
+{
 	// Damp coming through the walls from the earth, low down and in the corners, and moss in the
 	// joints where it is wettest. Only where nothing stands against the wall: a decal reaches nine
-	// centimetres off it, and the racks' backs and the bottles' punts are inside that.
+	// centimetres off it, and the racks' backs, the barrels' far heads, the furniture backed up to
+	// the plaster and the paper pinned on it are all inside that. So the runs are laid along the
+	// stretches of bare wall between them (the north wall has none: a rack's back from the corner
+	// to the door, a rack and the door's surround leave nothing a stain fits in), and every decal
+	// is tested against what was recorded standing there (KeepWallDecalsOff) — a skipped one still
+	// draws all its numbers, so the ones after it do not move (09-29).
 	FRandomStream Random(4410);
 	const FLinearColor Damp(0.40f, 0.34f, 0.27f);
 	const FLinearColor Moss(0.16f, 0.22f, 0.08f);
-	struct FRun { FVector From; FVector To; FRotator Aim; };
+	struct FRun { EWall Wall; float From; float To; };
 	const FRun Runs[] = {
-		{ FVector(HalfX - 2.f, -HalfY + 30.f, 0.f), FVector(HalfX - 2.f, HalfY - 30.f, 0.f), FRotator(0.f, 0.f, 0.f) },
-		{ FVector(-HalfX + 2.f, -HalfY + 30.f, 0.f), FVector(-HalfX + 2.f, -60.f, 0.f), FRotator(0.f, 180.f, 0.f) },
-		{ FVector(-HalfX + 2.f, 60.f, 0.f), FVector(-HalfX + 2.f, 280.f, 0.f), FRotator(0.f, 180.f, 0.f) },
-		{ FVector(395.f, -HalfY + 2.f, 0.f), FVector(DoorL - 30.f, -HalfY + 2.f, 0.f), FRotator(0.f, -90.f, 0.f) },
-		{ FVector(395.f, HalfY - 2.f, 0.f), FVector(HalfX - 30.f, HalfY - 2.f, 0.f), FRotator(0.f, 90.f, 0.f) },
-		{ FVector(-HalfX + 30.f, HalfY - 2.f, 0.f), FVector(-395.f, HalfY - 2.f, 0.f), FRotator(0.f, 90.f, 0.f) },
+		// East: north of the barrels, under the key board; between the barrels and the storage crate;
+		// past the crate into the south-east corner.
+		{ EWall::East, -HalfY + 30.f, -150.f },
+		{ EWall::East, 140.f, 220.f },
+		{ EWall::East, 370.f, HalfY - 30.f },
+		// West: past the engraving towards the cabinet's corner; between the bookcase and the cork
+		// board; the south-west corner past it.
+		{ EWall::West, -HalfY + 30.f, -170.f },
+		{ EWall::West, 120.f, 230.f },
+		{ EWall::West, 360.f, HalfY - 30.f },
+		// South: the two gaps between the back racks and the shelving and the writing table.
+		{ EWall::South, 380.f, 420.f },
+		{ EWall::South, -420.f, -380.f },
 	};
 	for (const FRun& Run : Runs)
 	{
-		const int32 Count = FMath::Max(2, FMath::RoundToInt(FVector::Dist(Run.From, Run.To) / 120.f));
+		// On the inner face two centimetres out, aimed at the wall; U runs along it.
+		FVector Normal;
+		FVector Along;
+		switch (Run.Wall)
+		{
+		case EWall::East:  Normal = FVector(1.f, 0.f, 0.f);  Along = FVector(0.f, 1.f, 0.f); break;
+		case EWall::West:  Normal = FVector(-1.f, 0.f, 0.f); Along = FVector(0.f, 1.f, 0.f); break;
+		case EWall::South: Normal = FVector(0.f, 1.f, 0.f);  Along = FVector(1.f, 0.f, 0.f); break;
+		default:           Normal = FVector(0.f, -1.f, 0.f); Along = FVector(1.f, 0.f, 0.f); break;
+		}
+		const float Plane = FMath::Abs(Normal.X) > 0.5f ? HalfX - 2.f : HalfY - 2.f;
+		const FRotator Aim = Normal.Rotation();
+		const int32 Count = FMath::Max(2, FMath::RoundToInt((Run.To - Run.From) / 120.f));
 		for (int32 i = 0; i < Count; ++i)
 		{
+			// Every number drawn into a local first, in order, the crack's whether or not there is one.
 			const float T01 = Random.FRandRange(0.f, 1.f);
 			const float Height = Random.FRandRange(40.f, 140.f);
 			const float WidthCm = Random.FRandRange(70.f, 170.f);
 			const float Opacity = Random.FRandRange(0.45f, 0.75f);
 			const bool bMoss = Random.FRand() < 0.35f;
-			const FVector At = FMath::Lerp(Run.From, Run.To, T01) + FVector(0.f, 0.f, Height * 0.35f);
-			Build.Stain(RoomSurfaces::Damp, At, Run.Aim, FVector2D(WidthCm, Height), bMoss ? Moss : Damp * 0.8f, bMoss ? Opacity * 0.6f : Opacity, 1.2f);
-			if (Random.FRand() < 0.4f)
+			const bool bCrack = Random.FRand() < 0.4f;
+			const float CrackWidth = Random.FRandRange(60.f, 140.f);
+			const float CrackHeight = Random.FRandRange(80.f, 180.f);
+			const float CrackRise = Random.FRandRange(60.f, 160.f);
+			const float CrackOpacity = Random.FRandRange(0.5f, 0.85f);
+			const float CrackSharpness = Random.FRandRange(16.f, 26.f);
+
+			const float U = FMath::Lerp(Run.From, Run.To, T01);
+			const FVector At = Normal * Plane + Along * U + FVector(0.f, 0.f, Height * 0.35f);
+			if (!WallDecalHitsSomething(Run.Wall, U, At.Z, WidthCm * 0.5f, Height * 0.5f))
 			{
-				const FVector2D Size(Random.FRandRange(60.f, 140.f), Random.FRandRange(80.f, 180.f));
-				Build.Crack(At + FVector(0.f, 0.f, Random.FRandRange(60.f, 160.f)), Run.Aim, Size, Random.FRandRange(0.5f, 0.85f), Random.FRandRange(16.f, 26.f));
+				Build.Stain(RoomSurfaces::Damp, At, Aim, FVector2D(WidthCm, Height), bMoss ? Moss : Damp * 0.8f, bMoss ? Opacity * 0.6f : Opacity, 1.2f);
+			}
+			const FVector CrackAt = At + FVector(0.f, 0.f, CrackRise);
+			if (bCrack && !WallDecalHitsSomething(Run.Wall, U, CrackAt.Z, CrackWidth * 0.5f, CrackHeight * 0.5f))
+			{
+				Build.Crack(CrackAt, Aim, FVector2D(CrackWidth, CrackHeight), CrackOpacity, CrackSharpness);
 			}
 		}
 	}
-	// The vault weeps where it meets the end walls and along its springing: dark streaks, aimed up.
+
+	// The vault weeps where it meets the end walls and along its springing: dark streaks. Each is put
+	// six centimetres in from the vault's face on its real curve and aimed out along the normal
+	// there, so the projection meets the brick squarely: aimed straight up with nine centimetres of
+	// reach, the stains on the steep part of the curve came out as thin bands.
 	for (int32 i = 0; i < 10; ++i)
 	{
 		const float X = (i % 2 ? 1.f : -1.f) * Random.FRandRange(HalfX - 140.f, HalfX - 20.f);
 		const float Y = Random.FRandRange(-150.f, 150.f);
-		const float Z = 415.f - FMath::Square(Y) / 420.f;
-		Build.Stain(RoomSurfaces::Damp, FVector(X, Y, Z - 6.f), FRotator(90.f, 0.f, Random.FRandRange(0.f, 360.f)),
-			FVector2D(Random.FRandRange(60.f, 140.f), Random.FRandRange(50.f, 110.f)), i % 3 == 0 ? Moss : Damp * 0.7f, 0.6f, 1.3f);
+		const float Roll = Random.FRandRange(0.f, 360.f);
+		const FVector2D Size(Random.FRandRange(60.f, 140.f), Random.FRandRange(50.f, 110.f));
+		const float Z = VaultCentreZ + FMath::Sqrt(FMath::Square(VaultRadius) - FMath::Square(Y));
+		const FVector Normal = FVector(0.f, Y, Z - VaultCentreZ).GetSafeNormal();
+		const FQuat Facing = FQuat(Normal, FMath::DegreesToRadians(Roll)) * FRotationMatrix::MakeFromX(Normal).ToQuat();
+		Build.Stain(RoomSurfaces::Damp, FVector(X, Y, Z) - Normal * 6.f, Facing.Rotator(), Size, i % 3 == 0 ? Moss : Damp * 0.7f, 0.6f, 1.3f);
 	}
 }
 
@@ -546,7 +714,7 @@ void AWineCellarActor::BuildRacks(FRoomBuilder& Build)
 {
 	TArray<FRack> Racks;
 	// Against the walls, at the back of each bay.
-	for (const float X : { -240.f, 0.f, 240.f })
+	for (const float X : BayXs)
 	{
 		Racks.Add({ FVector(X, -HalfY + RackBackDepth * 0.5f, 0.f), 0.f, false });
 		Racks.Add({ FVector(X, HalfY - RackBackDepth * 0.5f, 0.f), 180.f, false });
@@ -566,8 +734,8 @@ void AWineCellarActor::BuildRacks(FRoomBuilder& Build)
 	for (int32 i = 0; i < Racks.Num(); ++i)
 	{
 		const FRack& Rack = Racks[i];
-		Place(Build, Rack.bSpine ? RoomProps::WineRackSpine : RoomProps::WineRackBack, Rack.Location, FRotator(0.f, Rack.Yaw, 0.f),
-			{ { TEXT("Oak"), MatRackOak }, { TEXT("Brass"), MatBrass } });
+		KeepWallDecalsOff(Place(Build, Rack.bSpine ? RoomProps::WineRackSpine : RoomProps::WineRackBack, Rack.Location, FRotator(0.f, Rack.Yaw, 0.f),
+			{ { TEXT("Oak"), MatRackOak }, { TEXT("Brass"), MatBrass } }));
 		const float RackDepth = Rack.bSpine ? RackSpineDepth : RackBackDepth;
 		Blocker(Build, Rack.Location + FVector(0.f, 0.f, 145.f), FVector(184.f, RackDepth + 4.f, 290.f), Rack.Yaw);
 		FillRack(Rack, 52000 + i * 37, PerWine);
@@ -605,11 +773,12 @@ void AWineCellarActor::BuildEastEnd(FRoomBuilder& Build)
 	const float BarrelHalfLength = 43.6f;
 	for (const float Y : { -86.f, 0.f, 86.f })
 	{
-		Place(Build, RoomProps::CellarCradle, FVector(BarrelX, Y, 0.f), FRotator(0.f, 90.f + Random.FRandRange(-2.f, 2.f), 0.f), { { TEXT("Wood"), MatWood } });
+		KeepWallDecalsOff(Place(Build, RoomProps::CellarCradle, FVector(BarrelX, Y, 0.f), FRotator(0.f, 90.f + Random.FRandRange(-2.f, 2.f), 0.f), { { TEXT("Wood"), MatWood } }));
 		const FVector Axis(-1.f, 0.f, 0.f);
 		if (UStaticMeshComponent* Barrel = Build.Prop(RoomProps::WineBarrel, FVector(BarrelX + BarrelHalfLength, Y, BarrelZ), AlongAxis(Axis, Random.FRandRange(0.f, 360.f)), 0.f, false))
 		{
 			FRoomShapes::TintSlots(Barrel, FLinearColor(0.26f, 0.23f, 0.20f));
+			KeepWallDecalsOff(Barrel);
 		}
 		Blocker(Build, FVector(BarrelX, Y, 45.f), FVector(90.f, 78.f, 90.f));
 		// A wooden spigot in the middle barrel's head, and what dripped from it, long dried.
@@ -628,12 +797,14 @@ void AWineCellarActor::BuildEastEnd(FRoomBuilder& Build)
 	if (UStaticMeshComponent* Shelves = Build.Prop(RoomProps::MetalRack, FVector(505.f, HalfY - 31.f, 0.f), FRotator(0.f, 180.f + 2.f, 0.f), 0.f, false))
 	{
 		FRoomShapes::TintSlots(Shelves, FLinearColor(0.55f, 0.50f, 0.46f));
+		KeepWallDecalsOff(Shelves);
 	}
 	Blocker(Build, FVector(505.f, HalfY - 31.f, 95.f), FVector(92.f, 60.f, 190.f));
 	// The storage crate along the east wall, and a stack of wine cases by it with their brands.
 	if (UStaticMeshComponent* Store = Build.Prop(RoomProps::StorageCrate, FVector(HalfX - 28.f, 300.f, 1.f), FRotator(0.f, 90.f, 0.f), 0.f, false))
 	{
 		FRoomShapes::TintSlots(Store, FLinearColor(0.45f, 0.42f, 0.38f));
+		KeepWallDecalsOff(Store);
 	}
 	Blocker(Build, FVector(HalfX - 28.f, 300.f, 23.f), FVector(54.f, 118.f, 46.f));
 	struct FCase { FVector At; float Yaw; int32 Brand; bool bOpen; };
@@ -669,8 +840,8 @@ void AWineCellarActor::BuildEastEnd(FRoomBuilder& Build)
 	}
 
 	// The keys, on a board on the east wall by the door, where whoever came down took them from.
-	Place(Build, RoomProps::CellarKeyRack, FVector(HalfX, -320.f, 152.f), FRotator(0.f, 90.f, 0.f),
-		{ { TEXT("Wood"), MatWood }, { TEXT("Iron"), MatIron }, { TEXT("Brass"), MatBrass }, { TEXT("Tag"), MatTag } });
+	KeepWallDecalsOff(Place(Build, RoomProps::CellarKeyRack, FVector(HalfX, -320.f, 152.f), FRotator(0.f, 90.f, 0.f),
+		{ { TEXT("Wood"), MatWood }, { TEXT("Iron"), MatIron }, { TEXT("Brass"), MatBrass }, { TEXT("Tag"), MatTag } }));
 
 	// A lantern hung on an iron hook on the pier by the door: the light the cellar was walked with,
 	// left where it was hung, dusted over, its candle long gone.
@@ -690,8 +861,8 @@ void AWineCellarActor::BuildEastEnd(FRoomBuilder& Build)
 void AWineCellarActor::BuildTastingTable(FRoomBuilder& Build)
 {
 	FRandomStream Random(4430);
-	const FVector T(20.f, 0.f, 0.f);
-	const float Top = 78.f;
+	const FVector T(TastingTableX, 0.f, 0.f);
+	const float Top = TastingTableTop;
 	Place(Build, RoomProps::CellarTable, T, FRotator::ZeroRotator, { { TEXT("Oak"), MatOak } });
 	Blocker(Build, T + FVector(0.f, 0.f, 39.f), FVector(300.f, 100.f, 78.f));
 	auto On = [&](float X, float Y) { return T + FVector(X, Y, Top); };
@@ -766,26 +937,24 @@ void AWineCellarActor::BuildTastingTable(FRoomBuilder& Build)
 
 void AWineCellarActor::BuildAlcove(FRoomBuilder& Build)
 {
-	const float CX = -500.f;
-
 	// The two armchairs, facing each other across the table and turned a little to the room, as two
 	// people sit who are talking and not only drinking.
-	struct FChair { FVector At; float Yaw; };
-	const FChair Chairs[] = { { FVector(CX, -98.f, 0.f), -12.f }, { FVector(CX, 98.f, 0.f), 192.f } };
-	for (const FChair& Chair : Chairs)
+	for (const float Side : { -1.f, 1.f })
 	{
-		Place(Build, RoomProps::CellarArmchair, Chair.At, FRotator(0.f, Chair.Yaw, 0.f),
+		float Yaw;
+		const FVector At = AlcoveChair(Side, Yaw);
+		Place(Build, RoomProps::CellarArmchair, At, FRotator(0.f, Yaw, 0.f),
 			{ { TEXT("Leather"), MatLeather }, { TEXT("Brass"), MatBrass }, { TEXT("Wood"), MatWood } });
-		Blocker(Build, Chair.At + FVector(0.f, 0.f, 45.f), FVector(90.f, 86.f, 90.f), Chair.Yaw);
-		const FVector Fwd = FRotator(0.f, Chair.Yaw, 0.f).RotateVector(FVector(0.f, 1.f, 0.f));
+		Blocker(Build, At + FVector(0.f, 0.f, 45.f), FVector(90.f, 86.f, 90.f), Yaw);
+		const FVector Fwd = FRotator(0.f, Yaw, 0.f).RotateVector(FVector(0.f, 1.f, 0.f));
 		// Dust on the seat and the arms, settled where nobody has sat since.
-		Build.Stain(RoomSurfaces::Damp, Chair.At + Fwd * 4.f + FVector(0.f, 0.f, 56.f), FRotator(-90.f, 0.f, Chair.Yaw), FVector2D(84.f, 80.f),
+		Build.Stain(RoomSurfaces::Damp, At + Fwd * 4.f + FVector(0.f, 0.f, 56.f), FRotator(-90.f, 0.f, Yaw), FVector2D(84.f, 80.f),
 			FLinearColor(0.42f, 0.40f, 0.36f), 0.3f, 1.5f);
 	}
 
 	// The table between them, and on it what was left: the bottle on its tray with the candle burned
 	// down into a puddle beside it, the cork, and the two glasses, each on the side of its chair.
-	const FVector Table(CX - 5.f, 0.f, 0.f);
+	const FVector Table = AlcoveTable();
 	Place(Build, RoomProps::CellarPedestalTable, Table, FRotator(0.f, 20.f, 0.f), { { TEXT("Marble"), MatMarble }, { TEXT("Oak"), MatOak } });
 	Blocker(Build, Table + FVector(0.f, 0.f, 31.f), FVector(60.f, 60.f, 62.f));
 	const float Top = 62.6f;
@@ -807,20 +976,26 @@ void AWineCellarActor::BuildAlcove(FRoomBuilder& Build)
 	}
 
 	// The bookcase against the end wall between the chairs: books on wine, and the tasting journals.
-	Place(Build, RoomProps::CellarBookshelf, FVector(-HalfX + 16.f, 0.f, 0.f), FRotator(0.f, -90.f, 0.f),
+	KeepWallDecalsOff(Place(Build, RoomProps::CellarBookshelf, FVector(-HalfX + 16.f, 0.f, 0.f), FRotator(0.f, -90.f, 0.f),
 		{ { TEXT("Oak"), MatOak }, { TEXT("Gilt"), MatGilt }, { TEXT("Pages"), MatPages }, { TEXT("BookRed"), MatBooks[0] },
-		  { TEXT("BookGreen"), MatBooks[1] }, { TEXT("BookBrown"), MatBooks[2] }, { TEXT("BookBlack"), MatBooks[3] }, { TEXT("BookTan"), MatBooks[4] } });
+		  { TEXT("BookGreen"), MatBooks[1] }, { TEXT("BookBrown"), MatBooks[2] }, { TEXT("BookBlack"), MatBooks[3] }, { TEXT("BookTan"), MatBooks[4] } }));
 	Blocker(Build, FVector(-HalfX + 16.f, 0.f, 56.f), FVector(32.f, 96.f, 112.f));
 	Build.Stain(RoomSurfaces::Damp, FVector(-HalfX + 16.f, 0.f, 116.f), FRotator(-90.f, 0.f, 0.f), FVector2D(96.f, 34.f), FLinearColor(0.42f, 0.40f, 0.36f), 0.4f, 1.4f);
 
 	// The clock over it, stopped, its glass smashed out and its hand hanging; and a small engraving of
 	// a chateau among its vines to one side.
-	Place(Build, RoomProps::CellarClock, FVector(-HalfX, 0.f, 182.f), FRotator(0.f, -90.f, 0.f),
+	KeepWallDecalsOff(Place(Build, RoomProps::CellarClock, FVector(-HalfX, 0.f, 182.f), FRotator(0.f, -90.f, 0.f),
 		{ { TEXT("Oak"), MatOak }, { TEXT("Shadow"), MatShadow }, { TEXT("Dial"), MatDial }, { TEXT("Brass"), MatBrass },
-		  { TEXT("Ink"), MatInk }, { TEXT("Crystal"), MatCrystal } });
-	Place(Build, RoomProps::CellarPrintFrame, FVector(-HalfX, -128.f, 136.f), FRotator(0.f, -90.f, 0.f),
-		{ { TEXT("Oak"), MatOak }, { TEXT("Gilt"), MatGilt }, { TEXT("Shadow"), MatShadow } });
-	Paper(Build, 14, FVector(-HalfX + 0.75f, -128.f, 156.f), FVector(1.f, 0.f, 0.f), FVector::UpVector, 26.f, 32.f);
+		  { TEXT("Ink"), MatInk }, { TEXT("Crystal"), MatCrystal } }));
+	KeepWallDecalsOff(Place(Build, RoomProps::CellarPrintFrame, FVector(-HalfX, -128.f, 136.f), FRotator(0.f, -90.f, 0.f),
+		{ { TEXT("Oak"), MatOak }, { TEXT("Gilt"), MatGilt }, { TEXT("Shadow"), MatShadow } }));
+	// Paper hung on a wall takes the wall's decals as if printed on it (the kitchen's calendar), so it
+	// takes none, whatever the keep-outs leave near it.
+	if (UStaticMeshComponent* Print = Paper(Build, 14, FVector(-HalfX + 0.75f, -128.f, 156.f), FVector(1.f, 0.f, 0.f), FVector::UpVector, 26.f, 32.f))
+	{
+		Print->SetReceivesDecals(false);
+		KeepWallDecalsOff(Print);
+	}
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -833,8 +1008,8 @@ void AWineCellarActor::BuildCorners(FRoomBuilder& Build)
 
 	// North-west: the cabinet the best bottles stood in, behind glass.
 	const FVector Cabinet(-500.f, -HalfY + 24.f, 0.f);
-	Place(Build, RoomProps::CellarWineCabinet, Cabinet, FRotator::ZeroRotator,
-		{ { TEXT("Oak"), MatOak }, { TEXT("Brass"), MatBrass }, { TEXT("Shadow"), MatShadow }, { TEXT("Crystal"), MatCrystalDusty } });
+	KeepWallDecalsOff(Place(Build, RoomProps::CellarWineCabinet, Cabinet, FRotator::ZeroRotator,
+		{ { TEXT("Oak"), MatOak }, { TEXT("Brass"), MatBrass }, { TEXT("Shadow"), MatShadow }, { TEXT("Crystal"), MatCrystalDusty } }));
 	Blocker(Build, Cabinet + FVector(0.f, 0.f, 103.f), FVector(114.f, 48.f, 206.f));
 	for (const float ShelfZ : { 92.f, 124.f, 158.f })
 	{
@@ -856,7 +1031,7 @@ void AWineCellarActor::BuildCorners(FRoomBuilder& Build)
 	// page written up, the ink and the pen; the bin chart pinned over it; the cork collection on the
 	// end wall beside it.
 	const FVector Desk(-500.f, HalfY - 28.f, 0.f);
-	Place(Build, RoomProps::CellarWritingTable, Desk, FRotator(0.f, 180.f, 0.f), { { TEXT("Oak"), MatOak }, { TEXT("Brass"), MatBrass } });
+	KeepWallDecalsOff(Place(Build, RoomProps::CellarWritingTable, Desk, FRotator(0.f, 180.f, 0.f), { { TEXT("Oak"), MatOak }, { TEXT("Brass"), MatBrass } }));
 	Blocker(Build, Desk + FVector(0.f, 0.f, 38.f), FVector(96.f, 52.f, 76.f));
 	if (UStaticMeshComponent* Chair = Build.Prop(RoomProps::KitchenChair, Desk + FVector(22.f, -64.f, 0.f), FRotator(0.f, -14.f, 0.f), 0.f, false))
 	{
@@ -883,7 +1058,7 @@ void AWineCellarActor::BuildCorners(FRoomBuilder& Build)
 		B.Cyl(FVector(30.f, -6.f, 0.5f), FRotator(90.f, -30.f, 0.f), FVector(0.9f, 0.9f, 17.f), MatOak, false);
 		B.Stain(RoomSurfaces::Damp, FVector(10.f, 0.f, 5.f), FRotator(-90.f, 0.f, 0.f), FVector2D(50.f, 90.f), FLinearColor(0.42f, 0.40f, 0.36f), 0.3f, 1.4f);
 	}
-	if (AClueActor* Chart = SpawnClue(FVector(-500.f, HalfY - 1.2f, 168.f), FRotator::ZeroRotator))
+	if (AClueActor* Chart = SpawnClue(FVector(Desk.X, HalfY - 1.2f, 168.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Chart, Chart->GetRootScene());
 		Paper(B, 12, FVector::ZeroVector, FVector(0.f, -1.f, 0.f), FVector::UpVector, 80.f, 40.f);
@@ -893,15 +1068,22 @@ void AWineCellarActor::BuildCorners(FRoomBuilder& Build)
 		}
 		// The fourth corner has lost its pin and curls away from the wall.
 		B.Box(FVector(38.f, -1.4f, -18.f), FRotator(0.f, 0.f, -18.f), FVector(6.f, 0.3f, 4.f), MatPages, false);
+		// Pinned to the wall: none of the wall's decals on it, and none put near it.
+		TInlineComponentArray<UPrimitiveComponent*> Parts(Chart);
+		for (UPrimitiveComponent* Part : Parts)
+		{
+			Part->SetReceivesDecals(false);
+		}
+		KeepWallDecalsOff(Chart);
 	}
-	Place(Build, RoomProps::CellarCorkBoard, FVector(-HalfX, 300.f, 94.f), FRotator(0.f, -90.f, 0.f),
-		{ { TEXT("Oak"), MatOak }, { TEXT("Felt"), MatFelt }, { TEXT("Cork"), MatCork }, { TEXT("Stain"), MatWineStain } });
+	KeepWallDecalsOff(Place(Build, RoomProps::CellarCorkBoard, FVector(-HalfX, 300.f, 94.f), FRotator(0.f, -90.f, 0.f),
+		{ { TEXT("Oak"), MatOak }, { TEXT("Felt"), MatFelt }, { TEXT("Cork"), MatCork }, { TEXT("Stain"), MatWineStain } }));
 	// The corks that have dropped out of the bottom of it, on the floor below.
 	for (int32 i = 0; i < 9; ++i)
 	{
 		const FVector At(-HalfX + Random.FRandRange(6.f, 40.f), 300.f + Random.FRandRange(-26.f, 26.f), 1.2f);
-		Place(Build, RoomProps::WineCork, At, AlongAxis(Heading(Random.FRandRange(0.f, 360.f)), Random.FRandRange(0.f, 360.f)),
-			{ { TEXT("Cork"), MatCork }, { TEXT("Stain"), MatWineStain } });
+		KeepWallDecalsOff(Place(Build, RoomProps::WineCork, At, AlongAxis(Heading(Random.FRandRange(0.f, 360.f)), Random.FRandRange(0.f, 360.f)),
+			{ { TEXT("Cork"), MatCork }, { TEXT("Stain"), MatWineStain } }));
 	}
 }
 
@@ -921,27 +1103,50 @@ void AWineCellarActor::BuildFloor(FRoomBuilder& Build)
 	Build.Stain(RoomSurfaces::Floorboards, FVector(260.f, 70.f, 4.f), FRotator(-90.f, 0.f, 20.f), FVector2D(150.f, 90.f), Water, 0.8f, 1.2f, 0.1f);
 	Build.Stain(RoomSurfaces::Floorboards, FVector(-250.f, -60.f, 4.f), FRotator(-90.f, 0.f, 70.f), FVector2D(70.f, 46.f), Water, 0.75f, 1.3f, 0.1f);
 	Build.Stain(RoomSurfaces::Floorboards, FVector(0.f, -330.f, 4.f), FRotator(-90.f, 0.f, -10.f), FVector2D(90.f, 60.f), Water, 0.8f, 1.2f, 0.1f);
-	// Damp patches across the flags, and moss round the foot of every pier.
+	// Damp patches across the flags, and moss round the foot of every pier. None of them near the
+	// door: projected from four above the flags they take in the sill, the foot of the reveal and
+	// the foot of the leaf wherever it stands in its swing (FloorDecalReachesDoor). A skipped one
+	// still draws its numbers, each into a local in order (09-29).
 	for (int32 i = 0; i < 16; ++i)
 	{
-		const FVector At(Random.FRandRange(-HalfX + 40.f, HalfX - 40.f), Random.FRandRange(-HalfY + 40.f, HalfY - 40.f), 4.f);
-		const FVector2D Size(Random.FRandRange(80.f, 200.f), Random.FRandRange(60.f, 160.f));
+		const float X = Random.FRandRange(-HalfX + 40.f, HalfX - 40.f);
+		const float Y = Random.FRandRange(-HalfY + 40.f, HalfY - 40.f);
+		const float SizeX = Random.FRandRange(80.f, 200.f);
+		const float SizeY = Random.FRandRange(60.f, 160.f);
 		const float Roll = Random.FRandRange(0.f, 360.f);
-		Build.Stain(RoomSurfaces::Damp, At, FRotator(-90.f, 0.f, Roll), Size, Damp, Random.FRandRange(0.35f, 0.6f), 1.3f);
+		const float Opacity = Random.FRandRange(0.35f, 0.6f);
+		const FVector2D Size(SizeX, SizeY);
+		if (FloorDecalReachesDoor(FVector2D(X, Y), WineFloorDecalHalfExtent(Size, Roll)))
+		{
+			continue;
+		}
+		Build.Stain(RoomSurfaces::Damp, FVector(X, Y, 4.f), FRotator(-90.f, 0.f, Roll), Size, Damp, Opacity, 1.3f);
 	}
 	for (const float X : PierXs)
 	{
 		for (const float Side : { -1.f, 1.f })
 		{
 			const float Roll = Random.FRandRange(0.f, 360.f);
-			Build.Stain(RoomSurfaces::Damp, FVector(X, Side * PierY, 4.f), FRotator(-90.f, 0.f, Roll), FVector2D(110.f, 110.f), Moss, 0.5f, 1.3f);
+			const FVector2D Size(110.f, 110.f);
+			if (FloorDecalReachesDoor(FVector2D(X, Side * PierY), WineFloorDecalHalfExtent(Size, Roll)))
+			{
+				continue;
+			}
+			Build.Stain(RoomSurfaces::Damp, FVector(X, Side * PierY, 4.f), FRotator(-90.f, 0.f, Roll), Size, Moss, 0.5f, 1.3f);
 		}
 	}
-	// Dirt and dust driven into the corners, where nobody's broom reached.
+	// Dirt and dust driven into the corners, where nobody's broom reached — but for the north-east
+	// corner, which is the door's: that corner is under half a metre from the surround, and a patch
+	// that size there lay on the sill and in the leaf's sweep.
 	for (const FVector2D Corner : { FVector2D(-1.f, -1.f), FVector2D(1.f, -1.f), FVector2D(-1.f, 1.f), FVector2D(1.f, 1.f) })
 	{
-		const FVector At(Corner.X * (HalfX - 30.f), Corner.Y * (HalfY - 30.f), 4.f);
-		Build.Stain(RoomSurfaces::Damp, At, FRotator(-90.f, 0.f, 45.f), FVector2D(110.f, 110.f), Dirt, 0.7f, 1.2f);
+		const FVector2D At(Corner.X * (HalfX - 30.f), Corner.Y * (HalfY - 30.f));
+		const FVector2D Size(110.f, 110.f);
+		if (FloorDecalReachesDoor(At, WineFloorDecalHalfExtent(Size, 45.f)))
+		{
+			continue;
+		}
+		Build.Stain(RoomSurfaces::Damp, FVector(At.X, At.Y, 4.f), FRotator(-90.f, 0.f, 45.f), Size, Dirt, 0.7f, 1.2f);
 	}
 
 	// Corks dropped and kicked about, mostly round the table and in front of the racks.
@@ -987,9 +1192,8 @@ void AWineCellarActor::BuildCobwebs(FRoomBuilder& Build)
 	auto Upright = [](float Yaw) { return FRotator(0.f, Yaw, 90.f); };
 
 	// Across the back corners of every bay, high up, where the spine meets the back rack.
-	for (int32 Bay = 0; Bay < 3; ++Bay)
+	for (const float BayX : BayXs)
 	{
-		const float BayX = -240.f + Bay * 240.f;
 		for (const float Side : { -1.f, 1.f })
 		{
 			for (const float Corner : { -1.f, 1.f })
@@ -1008,25 +1212,25 @@ void AWineCellarActor::BuildCobwebs(FRoomBuilder& Build)
 	// Under the armchairs, between their feet, and under the little table.
 	for (const float Side : { -1.f, 1.f })
 	{
-		const float Yaw = Side < 0.f ? -12.f : 192.f;
-		const FVector Chair(-500.f, Side * 98.f, 0.f);
+		float Yaw;
+		const FVector Chair = AlcoveChair(Side, Yaw);
 		const FVector Front = FRotator(0.f, Yaw, 0.f).RotateVector(FVector(0.f, 36.f, 0.f));
 		Web(Build, Chair + Front + FVector(0.f, 0.f, 6.f), Upright(Yaw), FVector2D(72.f, 11.f));
 		Web(Build, Chair + FVector(0.f, 0.f, 6.f), Upright(Yaw + 90.f), FVector2D(60.f, 10.f));
 	}
 	for (int32 k = 0; k < 3; ++k)
 	{
-		Web(Build, FVector(-505.f, 0.f, 9.f) + Heading(20.f + 120.f * k + 60.f) * 10.f, Upright(20.f + 120.f * k + 150.f), FVector2D(22.f, 16.f));
+		Web(Build, AlcoveTable() + FVector(0.f, 0.f, 9.f) + Heading(20.f + 120.f * k + 60.f) * 10.f, Upright(20.f + 120.f * k + 150.f), FVector2D(22.f, 16.f));
 	}
-	// Under the long table, in the angles of its legs and stretchers.
-	for (const float X : { -110.f, 150.f })
+	// Under the long table, in the angles of its end legs and stretchers.
+	for (const float End : { -1.f, 1.f })
 	{
 		for (const float Side : { -1.f, 1.f })
 		{
-			Web(Build, FVector(X, Side * 38.f, 36.f), Upright(0.f), FVector2D(36.f, 44.f));
+			Web(Build, FVector(TastingTableX + End * TastingTableLegX, Side * TastingTableLegY, 36.f), Upright(0.f), FVector2D(36.f, 44.f));
 		}
 	}
-	Web(Build, FVector(20.f, 0.f, 40.f), Upright(90.f), FVector2D(60.f, 46.f));
+	Web(Build, FVector(TastingTableX, 0.f, 40.f), Upright(90.f), FVector2D(60.f, 46.f));
 	// In the vault's corners at the end walls, and slung under the ends of the beams.
 	for (const float End : { -1.f, 1.f })
 	{
@@ -1044,25 +1248,42 @@ void AWineCellarActor::BuildCobwebs(FRoomBuilder& Build)
 
 void AWineCellarActor::BuildMist()
 {
-	Mist = NewObject<ULocalFogVolumeComponent>(this, TEXT("GroundMist"));
-	if (!Mist)
-	{
-		return;
-	}
-	Mist->SetMobility(EComponentMobility::Movable);
-	Mist->AttachToComponent(CellarRoot, FAttachmentTransformRules::KeepRelativeTransform);
-	// The volume is a sphere of radius 500 scaled to an ellipsoid over the room, its centre on the
-	// floor so the lower half is under it; the height fog inside it falls off within a few tens of
-	// centimetres of the flags.
+	// A local fog volume is ALWAYS a sphere: its scene proxy replaces the component's scale with the
+	// largest of its three axes (FLocalFogVolumeSceneProxy::UpdateComponentTransform), so a volume
+	// scaled to an ellipsoid over the room was a sphere of the room's half-length — 6.7m about a
+	// centre 4.4m from the north and south walls — and the mist ran two metres out into the cellar
+	// corridor past the door and half a metre into the room next door. So it is two spheres, each
+	// as big as the room's half-depth allows less a margin, their centres on the floor (the lower
+	// halves are under it) and as far apart along the nave as keeps their ends off the end walls.
+	// The middle of the nave, where they overlap, gets both: each is at half the density the one
+	// volume had, so the overlap is the old mist and the two ends half of it.
+	//
+	// The height fog is defined in the sphere's own unit space (falloff per unit radius, scaled by a
+	// hundredth), so the falloff is worked out from the radius to keep the mist's thickness the same
+	// in centimetres: it halves every ~66cm up from the flags, as it did in the one big volume.
 	const float Base = ULocalFogVolumeComponent::GetBaseVolumeSize();
-	Mist->SetRelativeLocation(FVector(0.f, 0.f, 0.f));
-	Mist->SetRelativeScale3D(FVector(HalfX * 1.1f / Base, HalfY * 1.1f / Base, 300.f / Base));
-	Mist->SetRadialFogExtinction(0.f);
-	Mist->SetHeightFogExtinction(0.9f);
-	Mist->SetHeightFogFalloff(700.f);
-	Mist->SetHeightFogOffset(0.f);
-	Mist->SetFogAlbedo(FLinearColor(0.72f, 0.72f, 0.70f));
-	Mist->SetFogPhaseG(0.25f);
-	Mist->RegisterComponent();
-	AddInstanceComponent(Mist);
+	const float Radius = HalfY - 10.f;
+	const float CentreX = HalfX - 10.f - Radius;
+	const float ScaleHeightCm = HalfX * 1.1f / 7.f;
+	for (const float Side : { -1.f, 1.f })
+	{
+		ULocalFogVolumeComponent* Volume = NewObject<ULocalFogVolumeComponent>(this, Side < 0.f ? TEXT("GroundMistWest") : TEXT("GroundMistEast"));
+		if (!Volume)
+		{
+			continue;
+		}
+		Volume->SetMobility(EComponentMobility::Movable);
+		Volume->AttachToComponent(CellarRoot, FAttachmentTransformRules::KeepRelativeTransform);
+		Volume->SetRelativeLocation(FVector(Side * CentreX, 0.f, 0.f));
+		Volume->SetRelativeScale3D(FVector(Radius / Base));
+		Volume->SetRadialFogExtinction(0.f);
+		Volume->SetHeightFogExtinction(0.45f);
+		Volume->SetHeightFogFalloff(100.f * Radius / ScaleHeightCm);
+		Volume->SetHeightFogOffset(0.f);
+		Volume->SetFogAlbedo(FLinearColor(0.72f, 0.72f, 0.70f));
+		Volume->SetFogPhaseG(0.25f);
+		Volume->RegisterComponent();
+		AddInstanceComponent(Volume);
+		Mist.Add(Volume);
+	}
 }
