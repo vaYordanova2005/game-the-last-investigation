@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "WineCellarActor.h"
+#include "LaundryActor.h"
 #include "CellarActor.generated.h"
 
 class FRoomBuilder;
@@ -47,8 +48,11 @@ struct FCellarSetup
  * widened west past the corridor's end and south under the ground outside, where nothing is over
  * it but earth and a vault can stand four metres high. Its door is oak boards bound in iron.
  *
- * The other two rooms are bare cellar rooms — brick, flags, joists, damp — behind plank doors
- * that stand a crack open and give when pushed. What goes in them is not decided yet.
+ * The first room on the left, across the corridor from the maid's room, is her laundry
+ * (ALaundryActor), which builds its own shell like the wine cellar.
+ *
+ * The last room is a bare cellar room — brick, flags, joists, damp — behind a plank door that
+ * stands a crack open and gives when pushed. What goes in it is not decided yet.
  *
  *                       north
  *            +-----------+ +----------------------+
@@ -57,8 +61,8 @@ struct FCellarSetup
  *            +---[d]-----+ +-------[opening]------+
  *            | corridor  <---------------------------- foot <-- stair, down westward -- top | door (hall)
  *  +-------------[D]--------+ +----[d]-------+
- *  |  wine cellar           | |  room S1     |
- *  |  (vaulted)             | |  (bare)      |
+ *  |  wine cellar           | |  laundry     |
+ *  |  (vaulted)             | |              |
  *  +------------------------+ +--------------+
  *                       south (under the hall)
  *
@@ -128,6 +132,8 @@ private:
 		int32 Seed;
 		/** The wine cellar, which builds its own shell (AWineCellarActor). */
 		bool bWine = false;
+		/** The laundry, which builds its own shell too (ALaundryActor). */
+		bool bLaundry = false;
 	};
 
 	float FloorZ() const { return Setup.GroundZ - DepthBelowHall; }
@@ -161,6 +167,7 @@ private:
 	void BuildMaidsCorner(FRoomBuilder& Build, const FCellarRoom& Room);
 	void SpawnDoor(const FCellarRoom& Room);
 	void SpawnWineCellar(const FCellarRoom& Room);
+	void SpawnLaundry(const FCellarRoom& Room);
 
 	UPROPERTY(VisibleAnywhere, Category = "Cellar")
 	TObjectPtr<USceneComponent> CellarRoot;
@@ -173,6 +180,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<AWineCellarActor> WineCellar;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ALaundryActor> Laundry;
 
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBrick;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatTread;
@@ -202,3 +212,10 @@ private:
 // RoomHeight up, which is exactly where the wine cellar's door wall stops (its AisleCeiling).
 static_assert(AWineCellarActor::WallThickness == ACellarActor::WallThickness, "The wine cellar's walls must be the cellar's thickness");
 static_assert(AWineCellarActor::AisleCeiling == ACellarActor::RoomHeight, "The wine cellar's door wall must stop where the corridor wall over it starts");
+// The laundry is the room that was S1, building its own shell to the cellar's numbers: the same
+// wall thickness and height (the corridor's wall over its door wall starts at RoomHeight), and the
+// bare rooms' doorway, which SpawnDoor hangs the plank door in.
+static_assert(ALaundryActor::WallThickness == ACellarActor::WallThickness, "The laundry's walls must be the cellar's thickness");
+static_assert(ALaundryActor::Height == ACellarActor::RoomHeight, "The laundry's door wall must stop where the corridor wall over it starts");
+static_assert(ALaundryActor::DoorHalf * 2.f == ACellarActor::BareDoorWidth && ALaundryActor::DoorHeight == ACellarActor::BareDoorHeight,
+	"The laundry's doorway must be the bare rooms' doorway, which the cellar hangs its door in");
