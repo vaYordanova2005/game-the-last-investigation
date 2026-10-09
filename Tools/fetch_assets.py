@@ -60,6 +60,13 @@ TEXTURES = {
     # Polished, scratched cherry: tinted near black it is a lacquered piano case that has been
     # dusted and knocked about for sixty years, which a flat colour could never be.
     "lacquered_cherry_wood": "the grand piano and its stool",
+    # The wine cellar: stone-brick walls, a brick barrel vault, cold flags, the leather of the two
+    # armchairs in the tasting alcove, and the near-black oak the racks were joined from.
+    "castle_brick_01": "the wine cellar's stone-brick walls",
+    "medieval_red_brick": "the brick barrel vault over the wine cellar",
+    "large_floor_tiles_02": "the wine cellar's stone floor",
+    "brown_leather": "the two leather armchairs in the tasting alcove",
+    "black_oak_veneer": "the wine racks, the tasting table and the cabinet",
 }
 
 # The three maps the master material wants. nor_dx because UE expects DirectX-convention normals;
@@ -119,6 +126,12 @@ MODELS = {
     "Ukulele_01": "the ukulele she was learning, against the west wall",
     "alarm_clock_01": "the alarm clock on her bedside table",
     "wicker_basket_02": "the basket of soft toys by the toy shelf",
+    # The wine cellar. Its racks, bottles, glassware and alcove furniture are generated in Blender
+    # (Tools/make_wine_cellar.py); these are the cellar things Poly Haven does have.
+    "wine_barrel_01": "the barrels on their cradles at the east end of the wine cellar",
+    "worn_metal_rack": "the rusted metal shelves in the wine cellar",
+    "wooden_crate_02": "the wine crates stacked in the wine cellar",
+    "wooden_lantern_01": "the dust-covered lantern hanging on a pier in the wine cellar",
 }
 
 

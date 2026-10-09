@@ -975,6 +975,19 @@ def build_models(master):
             unreal.log_error("Failed to import mesh " + model_id)
             continue
 
+        # An empty NANITE file beside the FBX (Tools/make_wine_cellar.py writes them) turns Nanite on:
+        # the wine racks and their bottles go into the cellar by the thousand, and drawn the ordinary
+        # way every one of them would be drawn again into every face of the lantern's shadow.
+        if os.path.isfile(os.path.join(folder, "NANITE")):
+            try:
+                nanite = mesh.get_editor_property("nanite_settings")
+                if not nanite.get_editor_property("enabled"):
+                    nanite.set_editor_property("enabled", True)
+                    mesh.set_editor_property("nanite_settings", nanite)
+                    unreal.log("Nanite on for " + model_id)
+            except Exception as error:
+                unreal.log_warning("Could not enable Nanite on {} ({})".format(model_id, error))
+
         # Simple collision. Without it a line trace by channel passes straight through the prop,
         # so the detective could look at a cabinet and get no interaction prompt.
         try:
@@ -1230,6 +1243,8 @@ def rebuild_surfaces():
         unreal.log_error("No " + MASTER_PATH + " — run the whole pipeline first")
         return
     only = only_requested()
+    # A set that ships an opacity map (the wine crates' brands) hangs off the masked master.
+    masked = ASSET_LIB.load_asset(MASKED_PATH)
     sets = import_surface_textures()
     for set_name, maps in sorted(sets.items()):
         # neutral_arm.png lives beside the library but is the props' fallback ARM, not a surface.
@@ -1239,7 +1254,7 @@ def rebuild_surfaces():
             continue
         if not only and ASSET_LIB.does_asset_exist("{}/MI_{}".format(MATERIAL_PACKAGE, set_name)):
             continue
-        make_instance("MI_" + set_name, master, maps, TILING.get(set_name, 2.0))
+        make_instance("MI_" + set_name, master, maps, TILING.get(set_name, 2.0), masked)
         unreal.log("Surface MI_{} ({} maps)".format(set_name, len(maps)))
 
 

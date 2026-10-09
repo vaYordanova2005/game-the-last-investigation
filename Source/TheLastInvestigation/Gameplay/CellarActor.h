@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "WineCellarActor.h"
 #include "CellarActor.generated.h"
 
 class FRoomBuilder;
@@ -42,19 +43,23 @@ struct FCellarSetup
  * way. What the cellar bedroom does not have is the window (there is no view from under the
  * ground) and the hook with the collapse beneath it. Its door is a panelled house door.
  *
- * The other three rooms are bare cellar rooms — brick, flags, joists, damp — behind plank doors
+ * The second room on the left is the wine cellar (AWineCellarActor): the room that was S2,
+ * widened west past the corridor's end and south under the ground outside, where nothing is over
+ * it but earth and a vault can stand four metres high. Its door is oak boards bound in iron.
+ *
+ * The other two rooms are bare cellar rooms — brick, flags, joists, damp — behind plank doors
  * that stand a crack open and give when pushed. What goes in them is not decided yet.
  *
  *                       north
- *      +-----------+ +----------------------+
- *      |  room N2  | |  bedroom (Room01's   |
- *      |  (bare)   | |  furniture)          |
- *      +---[d]-----+ +-------[opening]------+
- *      | corridor  <---------------------------- foot <-- stair, down westward -- top | door (hall)
- *      +---[d]-----+ +----[d]-------+
- *      |  room S2  | |  room S1     |
- *      |  (bare)   | |  (bare)      |
- *      +-----------+ +--------------+
+ *            +-----------+ +----------------------+
+ *            |  room N2  | |  bedroom (Room01's   |
+ *            |  (bare)   | |  furniture)          |
+ *            +---[d]-----+ +-------[opening]------+
+ *            | corridor  <---------------------------- foot <-- stair, down westward -- top | door (hall)
+ *  +-------------[D]--------+ +----[d]-------+
+ *  |  wine cellar           | |  room S1     |
+ *  |  (vaulted)             | |  (bare)      |
+ *  +------------------------+ +--------------+
  *                       south (under the hall)
  *
  * The stair runs west down a well along the hall's north wall, under the north flight and the
@@ -88,6 +93,19 @@ public:
 	/** The bare rooms' doorways: a plank door in each, narrower than the house's. */
 	static constexpr float BareDoorWidth = 96.f;
 	static constexpr float BareDoorHeight = 200.f;
+	/** The wine cellar's: wider and taller, for a door that barrels went through. The wine cellar
+	 *  builds the wall it is in, so its numbers are the source and these only read them. */
+	static constexpr float WineDoorWidth = AWineCellarActor::DoorHalf * 2.f;
+	static constexpr float WineDoorHeight = AWineCellarActor::DoorHeight;
+	/**
+	 * How every cellar door is hung (SpawnDoor): the hinge this far in from its jamb and this far
+	 * proud of the corridor's face, a leaf this much narrower than the opening, opening to this.
+	 * Public because the wine cellar keeps its floor decals off the leaf's sweep.
+	 */
+	static constexpr float DoorHingeInset = 6.f;
+	static constexpr float DoorHingeProud = 2.6f;
+	static constexpr float DoorLeafClearance = 12.f;
+	static constexpr float DoorOpenYaw = 84.f;
 
 	/** How far the cellar floor is under the hall's: a storey and a ceiling, and clear of its slab. */
 	static constexpr float DepthBelowHall = 350.f;
@@ -108,6 +126,8 @@ private:
 		/** Room01's furniture, built by an ARoomDressingActor; otherwise a bare cellar room. */
 		bool bBedroom;
 		int32 Seed;
+		/** The wine cellar, which builds its own shell (AWineCellarActor). */
+		bool bWine = false;
 	};
 
 	float FloorZ() const { return Setup.GroundZ - DepthBelowHall; }
@@ -122,8 +142,8 @@ private:
 	float PassageWestX() const;
 	TArray<FCellarRoom> Rooms() const;
 	FVector RoomCentre(const FCellarRoom& Room) const;
-	float DoorHalf(const FCellarRoom& Room) const { return (Room.bBedroom ? DoorOpeningWidth : BareDoorWidth) * 0.5f; }
-	float DoorHeight(const FCellarRoom& Room) const { return Room.bBedroom ? DoorOpeningHeight : BareDoorHeight; }
+	float DoorHalf(const FCellarRoom& Room) const { return (Room.bBedroom ? DoorOpeningWidth : Room.bWine ? WineDoorWidth : BareDoorWidth) * 0.5f; }
+	float DoorHeight(const FCellarRoom& Room) const { return Room.bBedroom ? DoorOpeningHeight : Room.bWine ? WineDoorHeight : BareDoorHeight; }
 	/** Whether a wall decal centred at X, reaching HalfAlong either way and down to Bottom, on the
 	 *  corridor's north or south wall (from either face), would reach the doorway of one of the
 	 *  Candidates: every room for the corridor's face, the room itself for its own. */
@@ -140,6 +160,7 @@ private:
 	/** The maid's brooms and pails, against the bedroom's blind east wall (in the dressing's frame). */
 	void BuildMaidsCorner(FRoomBuilder& Build, const FCellarRoom& Room);
 	void SpawnDoor(const FCellarRoom& Room);
+	void SpawnWineCellar(const FCellarRoom& Room);
 
 	UPROPERTY(VisibleAnywhere, Category = "Cellar")
 	TObjectPtr<USceneComponent> CellarRoot;
@@ -149,6 +170,9 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AHallDoorActor>> Doors;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AWineCellarActor> WineCellar;
 
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBrick;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatTread;
@@ -172,3 +196,9 @@ private:
 
 	FCellarSetup Setup;
 };
+
+// The wine cellar builds its own shell, but it stands in the cellar's row of rooms: the cellar
+// places it by this wall thickness, and builds the corridor's wall over it from FloorZ +
+// RoomHeight up, which is exactly where the wine cellar's door wall stops (its AisleCeiling).
+static_assert(AWineCellarActor::WallThickness == ACellarActor::WallThickness, "The wine cellar's walls must be the cellar's thickness");
+static_assert(AWineCellarActor::AisleCeiling == ACellarActor::RoomHeight, "The wine cellar's door wall must stop where the corridor wall over it starts");
