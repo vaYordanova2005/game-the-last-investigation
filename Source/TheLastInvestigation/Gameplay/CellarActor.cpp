@@ -54,14 +54,17 @@ TArray<ACellarActor::FCellarRoom> ACellarActor::Rooms() const
 	const float BedCentreX = BedroomDoorX() - DoorOpeningCenterX;
 	const float BedWestOuter = BedCentreX - (RoomWidth + WallThickness) * 0.5f;
 	const float NorthTwoX = BedWestOuter - 10.f - (600.f + WallThickness) * 0.5f;
-	const float SouthOneX = FootX() - 42.f - (640.f + WallThickness) * 0.5f;
-	const float WineX = SouthOneX - (640.f + WallThickness) * 0.5f - 10.f - (AWineCellarActor::Width + WallThickness) * 0.5f;
+	const float SouthOneX = FootX() - 42.f - (ALaundryActor::Width + WallThickness) * 0.5f;
+	const float WineX = SouthOneX - (ALaundryActor::Width + WallThickness) * 0.5f - 10.f - (AWineCellarActor::Width + WallThickness) * 0.5f;
 	FCellarRoom Wine{ WineX, AWineCellarActor::Width, AWineCellarActor::Depth, false, WineX + AWineCellarActor::DoorX, false, 6303 };
 	Wine.bWine = true;
+	// The laundry, across the corridor from the maid's room: the room that was S1.
+	FCellarRoom LaundryRoom{ SouthOneX, ALaundryActor::Width, ALaundryActor::Depth, false, SouthOneX + ALaundryActor::DoorX, false, 6202 };
+	LaundryRoom.bLaundry = true;
 	return {
 		{ BedCentreX, RoomWidth, RoomDepth, true, BedroomDoorX(), true, 6000 },
 		{ NorthTwoX, 600.f, 500.f, true, NorthTwoX - 110.f, false, 6101 },
-		{ SouthOneX, 640.f, 540.f, false, SouthOneX - 100.f, false, 6202 },
+		LaundryRoom,
 		Wine,
 	};
 }
@@ -118,6 +121,10 @@ void ACellarActor::BeginPlay()
 		if (Room.bWine)
 		{
 			SpawnWineCellar(Room);
+		}
+		else if (Room.bLaundry)
+		{
+			SpawnLaundry(Room);
 		}
 		else
 		{
@@ -815,6 +822,17 @@ void ACellarActor::SpawnWineCellar(const FCellarRoom& Room)
 	if (WineCellar)
 	{
 		WineCellar->FinishSpawning(Transform);
+	}
+}
+
+void ACellarActor::SpawnLaundry(const FCellarRoom& Room)
+{
+	// In the cellar's frame, translated to the room's centre on its floor, like the wine cellar.
+	const FTransform Transform(FRotator::ZeroRotator, GetActorTransform().TransformPosition(RoomCentre(Room)));
+	Laundry = GetWorld()->SpawnActorDeferred<ALaundryActor>(ALaundryActor::StaticClass(), Transform, this);
+	if (Laundry)
+	{
+		Laundry->FinishSpawning(Transform);
 	}
 }
 
