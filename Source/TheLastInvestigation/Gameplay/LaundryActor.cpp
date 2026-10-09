@@ -205,8 +205,26 @@ UStaticMeshComponent* ALaundryActor::Paper(FRoomBuilder& Build, const TCHAR* Rec
 	return Sheet;
 }
 
-void ALaundryActor::Pipe(FRoomBuilder& Build, TConstArrayView<FVector> Points, float Diameter, UMaterialInterface* Mat, float BracketEvery)
+void ALaundryActor::Pipe(FRoomBuilder& Build, TConstArrayView<FVector> Points, float Diameter, UMaterialInterface* Mat, float BracketEvery, bool bTakesDecals)
 {
+	// A run clipped four centimetres off the render is inside every wall decal's reach: the damp and
+	// the brick would print across it. Either it takes none, or (a run with a decal of its own) the
+	// walls keep theirs off it.
+	auto Finish = [&](UStaticMeshComponent* Part)
+	{
+		if (!Part)
+		{
+			return;
+		}
+		if (bTakesDecals)
+		{
+			KeepWallDecalsOff(Part);
+		}
+		else
+		{
+			Part->SetReceivesDecals(false);
+		}
+	};
 	for (int32 i = 0; i + 1 < Points.Num(); ++i)
 	{
 		const FVector Span = Points[i + 1] - Points[i];
@@ -215,7 +233,7 @@ void ALaundryActor::Pipe(FRoomBuilder& Build, TConstArrayView<FVector> Points, f
 		{
 			continue;
 		}
-		Build.Cyl((Points[i] + Points[i + 1]) * 0.5f, FRotationMatrix::MakeFromZ(Span).Rotator(), FVector(Diameter, Diameter, Length), Mat, /*bBlockingCollision*/ false);
+		Finish(Build.Cyl((Points[i] + Points[i + 1]) * 0.5f, FRotationMatrix::MakeFromZ(Span).Rotator(), FVector(Diameter, Diameter, Length), Mat, /*bBlockingCollision*/ false));
 		// Collars along the run: the clips that hold it, or the sockets where two lengths are joined.
 		if (BracketEvery > 0.f)
 		{
@@ -223,14 +241,14 @@ void ALaundryActor::Pipe(FRoomBuilder& Build, TConstArrayView<FVector> Points, f
 			for (int32 k = 1; k <= Count; ++k)
 			{
 				const FVector At = Points[i] + Span * (k / (Count + 1.f));
-				Build.Cyl(At, FRotationMatrix::MakeFromZ(Span).Rotator(), FVector(Diameter * 1.35f, Diameter * 1.35f, 2.2f), Mat, false);
+				Finish(Build.Cyl(At, FRotationMatrix::MakeFromZ(Span).Rotator(), FVector(Diameter * 1.35f, Diameter * 1.35f, 2.2f), Mat, false));
 			}
 		}
 	}
 	// A fitting at every turn and at the ends: an elbow is fatter than the pipe it joins.
 	for (int32 i = 0; i < Points.Num(); ++i)
 	{
-		Build.Sph(Points[i], Diameter * 1.3f, Mat);
+		Finish(Build.Sph(Points[i], Diameter * 1.3f, Mat));
 	}
 }
 
@@ -550,10 +568,20 @@ void ALaundryActor::BuildPipes(FRoomBuilder& Build)
 	Pipe(Build, { FVector(ColdIn, NorthY, ColdZ), FVector(ColdIn, HeaterPipeY, ColdZ), FVector(ColdIn, HeaterPipeY, HeaterTop + 26.f) }, D, MatPipeIron);
 	Pipe(Build, { FVector(HotOut, HeaterPipeY, HeaterTop + 26.f), FVector(HotOut, HeaterPipeY, HotZ), FVector(HotOut, NorthY, HotZ), FVector(EastX, NorthY, HotZ),
 		FVector(EastX, SouthY, HotZ), FVector(HotTapX, SouthY, HotZ), FVector(HotTapX, SouthY, TapZ + 70.f) }, D, MatPipeIron, 110.f);
-	// Gate valves on the heater's pipes, wheels to the room.
+	// Gate valves on the heater's pipes, wheels to the room. The model's pipe runs along its X and the
+	// wheel stands on its +Z: pitch 90 stands the pipe up (X to world +Z) and turns +Z to world -X,
+	// away from the east wall. Inside the east wall's decal reach, so no decals on them.
+	const FRotator ValveTurn(90.f, 0.f, 0.f);
+	auto Valve = [&](const FVector& At)
+	{
+		if (UStaticMeshComponent* Part = Place(Build, LaundryProps::Valve, At, ValveTurn, { { TEXT("Brass"), MatBrass }, { TEXT("Iron"), MatIron } }))
+		{
+			Part->SetReceivesDecals(false);
+		}
+	};
 	for (const float X : { ColdIn, HotOut })
 	{
-		Place(Build, LaundryProps::Valve, FVector(X, HeaterPipeY, HeaterTop + 52.f), FRotator(90.f, 180.f, 0.f), { { TEXT("Brass"), MatBrass }, { TEXT("Iron"), MatIron } });
+		Valve(FVector(X, HeaterPipeY, HeaterTop + 52.f));
 	}
 	// The drops to the washer, each with its valve, into the wall behind the machine.
 	const FVector WasherAt = Washer();
@@ -561,7 +589,7 @@ void ALaundryActor::BuildPipes(FRoomBuilder& Build)
 	{
 		const float Z = Y < WasherAt.Y ? ColdZ : HotZ;
 		Pipe(Build, { FVector(EastX, Y, Z), FVector(EastX, Y, MachineTop + 20.f), FVector(HalfX + 2.f, Y, MachineTop + 20.f) }, D, MatPipeIron);
-		Place(Build, LaundryProps::Valve, FVector(EastX, Y, MachineTop + 44.f), FRotator(90.f, 180.f, 0.f), { { TEXT("Brass"), MatBrass }, { TEXT("Iron"), MatIron } });
+		Valve(FVector(EastX, Y, MachineTop + 44.f));
 	}
 	// The gas to the heater's thermostat, low along the east wall.
 	Pipe(Build, { FVector(HeaterAt.X + 22.f, HeaterAt.Y + HeaterRadius - 4.f, 30.f), FVector(EastX, HeaterAt.Y + HeaterRadius - 4.f, 30.f),
@@ -572,7 +600,8 @@ void ALaundryActor::BuildPipes(FRoomBuilder& Build)
 	// it and a drip mark on the floor under it (BuildFloor).
 	const float SoilY = -110.f;
 	const float SoilZ = Height - 18.f - 6.5f;
-	Pipe(Build, { FVector(-HalfX - 4.f, SoilY, SoilZ), FVector(HalfX + 4.f, SoilY, SoilZ) }, 11.f, MatLead, 150.f);
+	// It keeps its decals for that rust run, so the east and west walls keep theirs off its ends.
+	Pipe(Build, { FVector(-HalfX - 4.f, SoilY, SoilZ), FVector(HalfX + 4.f, SoilY, SoilZ) }, 11.f, MatLead, 150.f, /*bTakesDecals*/ true);
 	for (float X = -HalfX + 52.f; X < HalfX; X += 156.f)
 	{
 		Build.Box(FVector(X, SoilY, SoilZ + 6.f), FRotator::ZeroRotator, FVector(2.f, 13.f, 1.f), MatIron, false);
@@ -677,7 +706,8 @@ void ALaundryActor::BuildSinkAndTable(FRoomBuilder& Build)
 		{ { TEXT("Tin"), MatTin }, { TEXT("ThreadA"), MatThreads[0] }, { TEXT("ThreadB"), MatThreads[1] }, { TEXT("ThreadC"), MatThreads[2] },
 		  { TEXT("Wood"), MatWood }, { TEXT("Cushion"), MatCushion }, { TEXT("Iron"), MatIron }, { TEXT("Chrome"), MatChrome } });
 	Place(Build, LaundryProps::Gloves, On(-2.f, -16.f), FRotator(0.f, 30.f, 0.f), { { TEXT("Rubber"), MatGlove } });
-	Place(Build, LaundryProps::PegTin, On(48.f, 14.f), FRotator(0.f, Random.FRandRange(0.f, 360.f), 0.f),
+	const float PegTinYaw = Random.FRandRange(0.f, 360.f);
+	Place(Build, LaundryProps::PegTin, On(48.f, 14.f), FRotator(0.f, PegTinYaw, 0.f),
 		{ { TEXT("Tin"), MatTin }, { TEXT("Wood"), MatWood }, { TEXT("Iron"), MatIron } });
 	Build.Box(On(62.f, -12.f) + FVector(0.f, 0.f, 0.4f), FRotator(0.f, 20.f, 0.f), FVector(16.f, 24.f, 0.8f), MatIron, false);
 	Place(Build, LaundryProps::Iron, On(62.f, -12.f) + FVector(0.f, 0.f, 0.8f), FRotator(0.f, 200.f, 0.f),
@@ -717,9 +747,17 @@ void ALaundryActor::BuildSinkAndTable(FRoomBuilder& Build)
 	KeepWallDecalsOff(Place(Build, LaundryProps::Radio, Shelf(44.f), FRotator(0.f, 184.f, 0.f),
 		{ { TEXT("Wood"), MatWood }, { TEXT("Grille"), MatGrille }, { TEXT("Label"), MatLabel }, { TEXT("Ink"), MatInk }, { TEXT("Bakelite"), MatBakelite },
 		  { TEXT("Rubber"), MatRubber } }));
-	// The radio's flex, down from the shelf to a socket on the wall under it.
-	Build.Cyl(FVector(ShelfAt.X + 60.f, HalfY - 1.2f, ShelfAt.Z - 30.f), FRotator::ZeroRotator, FVector(0.6f, 0.6f, 56.f), MatRubber, false);
-	Build.Box(FVector(ShelfAt.X + 60.f, HalfY - 1.5f, ShelfAt.Z - 60.f), FRotator::ZeroRotator, FVector(8.f, 3.f, 8.f), MatBakelite, false);
+	// The radio's flex, down from the shelf to a socket on the wall under it: both on the wall's face,
+	// so none of the wall's decals on either.
+	for (UStaticMeshComponent* Part : {
+		Build.Cyl(FVector(ShelfAt.X + 60.f, HalfY - 1.2f, ShelfAt.Z - 30.f), FRotator::ZeroRotator, FVector(0.6f, 0.6f, 56.f), MatRubber, false),
+		Build.Box(FVector(ShelfAt.X + 60.f, HalfY - 1.5f, ShelfAt.Z - 60.f), FRotator::ZeroRotator, FVector(8.f, 3.f, 8.f), MatBakelite, false) })
+	{
+		if (Part)
+		{
+			Part->SetReceivesDecals(false);
+		}
+	}
 
 	// The stool, pulled out from the table.
 	Place(Build, LaundryProps::Stool, FVector(CounterAt.X - 18.f, CounterAt.Y - 70.f, 0.f), FRotator(0.f, 25.f, 0.f), { { TEXT("Wood"), MatWood } });
@@ -753,7 +791,11 @@ void ALaundryActor::BuildWestWall(FRoomBuilder& Build)
 		{
 			const float Y = Random.FRandRange(-38.f, 38.f);
 			const float Z = i == 0 ? Random.FRandRange(14.f, 40.f) : Random.FRandRange(60.f, 190.f);
-			const FVector2D Size(Random.FRandRange(10.f, 26.f), Random.FRandRange(12.f, 30.f));
+			// The height before the width: the order the build drew them in while they sat in the
+			// constructor's arguments (MSVC took those right to left), so nothing moves.
+			const float SizeUp = Random.FRandRange(12.f, 30.f);
+			const float SizeAlong = Random.FRandRange(10.f, 26.f);
+			const FVector2D Size(SizeAlong, SizeUp);
 			const float Roll = Random.FRandRange(0.f, 360.f);
 			Build.Stain(RoomSurfaces::RoughWood, FVector(At.X + CabinetDepth * 0.5f + 6.f, At.Y + Y, Z), FRotator(0.f, 180.f, Roll), Size,
 				FLinearColor(0.30f, 0.24f, 0.18f), 0.8f, 1.4f);
@@ -771,17 +813,21 @@ void ALaundryActor::BuildWestWall(FRoomBuilder& Build)
 	Place(Build, LaundryProps::SheetStack, OnShelf(94.f, -22.f, 0.f), FRotator(0.f, -88.f, 0.f), { { TEXT("Sheet"), MatSheet } });
 	for (int32 i = 0; i < 3; ++i)
 	{
-		Place(Build, i == 1 ? LaundryProps::Starch : LaundryProps::Detergent, OnShelf(94.f, 14.f + i * 13.f, -4.f), FRotator(0.f, -90.f + Random.FRandRange(-10.f, 10.f), 0.f),
+		const float Turn = Random.FRandRange(-10.f, 10.f);
+		Place(Build, i == 1 ? LaundryProps::Starch : LaundryProps::Detergent, OnShelf(94.f, 14.f + i * 13.f, -4.f), FRotator(0.f, -90.f + Turn, 0.f),
 			{ { TEXT("Card"), MatCard }, { TEXT("Shadow"), MatShadow }, { TEXT("Label"), MatLabel } });
 	}
 	for (int32 i = 0; i < 4; ++i)
 	{
-		Place(Build, i % 2 ? LaundryProps::Spray : LaundryProps::Softener, OnShelf(138.f, -36.f + i * 11.f, Random.FRandRange(-6.f, 4.f)),
-			FRotator(0.f, -90.f + Random.FRandRange(-30.f, 30.f), 0.f),
+		// The turn before the depth: the order the build drew them in from the call's arguments.
+		const float Turn = Random.FRandRange(-30.f, 30.f);
+		const float Out = Random.FRandRange(-6.f, 4.f);
+		Place(Build, i % 2 ? LaundryProps::Spray : LaundryProps::Softener, OnShelf(138.f, -36.f + i * 11.f, Out), FRotator(0.f, -90.f + Turn, 0.f),
 			{ { TEXT("Bottle"), i % 2 ? MatPlastic.Get() : MatAmber.Get() }, { TEXT("Cap"), MatCap }, { TEXT("Label"), MatLabel } });
 	}
 	Place(Build, LaundryProps::TowelStack, OnShelf(138.f, 24.f, 0.f), FRotator(0.f, -88.f, 0.f), { { TEXT("TowelA"), MatTowel }, { TEXT("TowelB"), MatTowel } });
-	Place(Build, LaundryProps::Basket, OnShelf(182.f, 0.f, 2.f), FRotator(0.f, -90.f, 0.f), { { TEXT("Wicker"), MatWicker } });
+	// Above the unit's posts and against the west wall, so out of the unit's own keep-out: one of its own.
+	KeepWallDecalsOff(Place(Build, LaundryProps::Basket, OnShelf(182.f, 0.f, 2.f), FRotator(0.f, -90.f, 0.f), { { TEXT("Wicker"), MatWicker } }));
 	Place(Build, LaundryProps::Rag, OnShelf(6.f, -20.f, 0.f), FRotator(0.f, 10.f, 0.f), { { TEXT("ClothD"), MatGreyCloth } });
 	Place(Build, LaundryProps::Detergent, OnShelf(6.f, 24.f, 2.f), FRotator(0.f, -70.f, 0.f), { { TEXT("Card"), MatCard }, { TEXT("Shadow"), MatShadow }, { TEXT("Label"), MatLabel } });
 
@@ -793,9 +839,9 @@ void ALaundryActor::BuildWestWall(FRoomBuilder& Build)
 	KeepWallDecalsOff(Place(Build, LaundryProps::IroningBoard, FVector(BoardFoot, 148.f, 0.f), BoardTurn.Rotator(),
 		{ { TEXT("Wood"), MatWood }, { TEXT("Cover"), MatCover }, { TEXT("Iron"), MatIron }, { TEXT("Rubber"), MatRubber } }));
 
-	// The corner: two baskets one inside the other, and a third on its side by them.
-	Place(Build, LaundryProps::Basket, FVector(-HalfX + 40.f, HalfY - 34.f, 0.f), FRotator(0.f, 84.f, 0.f), { { TEXT("Wicker"), MatWicker } });
-	Place(Build, LaundryProps::Basket, FVector(-HalfX + 40.f, HalfY - 34.f, 4.f), FRotator(0.f, 76.f, 0.f), { { TEXT("Wicker"), MatWicker } });
+	// The corner: two baskets one inside the other, their backs against the south wall.
+	KeepWallDecalsOff(Place(Build, LaundryProps::Basket, FVector(-HalfX + 40.f, HalfY - 34.f, 0.f), FRotator(0.f, 84.f, 0.f), { { TEXT("Wicker"), MatWicker } }));
+	KeepWallDecalsOff(Place(Build, LaundryProps::Basket, FVector(-HalfX + 40.f, HalfY - 34.f, 4.f), FRotator(0.f, 76.f, 0.f), { { TEXT("Wicker"), MatWicker } }));
 	Blocker(Build, FVector(-HalfX + 40.f, HalfY - 34.f, 18.f), FVector(64.f, 46.f, 36.f), 84.f);
 }
 
@@ -844,12 +890,23 @@ void ALaundryActor::BuildDrying(FRoomBuilder& Build)
 	for (int32 i = 0; i + 1 < Line.Num(); ++i)
 	{
 		const FVector Span = Line[i + 1] - Line[i];
-		Build.Cyl((Line[i] + Line[i + 1]) * 0.5f, FRotationMatrix::MakeFromZ(Span).Rotator(), FVector(0.45f, 0.45f, Span.Size()), MatStrings, false);
+		if (UStaticMeshComponent* Part = Build.Cyl((Line[i] + Line[i + 1]) * 0.5f, FRotationMatrix::MakeFromZ(Span).Rotator(), FVector(0.45f, 0.45f, Span.Size()), MatStrings, false))
+		{
+			Part->SetReceivesDecals(false);
+		}
 	}
+	// The eyes are screwed into the plaster, inside the east and west walls' decal reach: no decals.
 	for (const float Side : { -1.f, 1.f })
 	{
-		Build.Cyl(FVector(Side * (HalfX - 3.f), LineY, LineAt(HalfX)), FRotator(90.f, 0.f, 0.f), FVector(0.6f, 0.6f, 6.f), MatIron, false);
-		Build.Cyl(FVector(Side * (HalfX - 6.f), LineY, LineAt(HalfX)), FRotator::ZeroRotator, FVector(2.6f, 2.6f, 0.6f), MatIron, false);
+		for (UStaticMeshComponent* Part : {
+			Build.Cyl(FVector(Side * (HalfX - 3.f), LineY, LineAt(HalfX)), FRotator(90.f, 0.f, 0.f), FVector(0.6f, 0.6f, 6.f), MatIron, false),
+			Build.Cyl(FVector(Side * (HalfX - 6.f), LineY, LineAt(HalfX)), FRotator::ZeroRotator, FVector(2.6f, 2.6f, 0.6f), MatIron, false) })
+		{
+			if (Part)
+			{
+				Part->SetReceivesDecals(false);
+			}
+		}
 	}
 	struct FPegged { const TCHAR* Name; float X; float Width; UMaterialInterface* Mat; const TCHAR* Slot; };
 	const FPegged Pegged[] = {
@@ -904,7 +961,9 @@ void ALaundryActor::BuildDoorWall(FRoomBuilder& Build)
 	{
 		FRoomBuilder B(Calendar, Calendar->GetRootScene());
 		Paper(B, TEXT("calendar"), FVector::ZeroVector, FVector(0.f, 1.f, 0.f), FVector::UpVector, 30.f, 42.f);
-		B.Cyl(FVector(0.f, 0.4f, 19.6f), FRotator(90.f, 0.f, 0.f), FVector(0.5f, 0.5f, 2.f), MatIron, false);
+		// The nail out of the wall (roll 90 turns the cylinder's axis to Y), from the plaster 0.8 behind
+		// the sheet to 1.6 proud of it.
+		B.Cyl(FVector(0.f, 0.4f, 19.6f), FRotator(0.f, 0.f, 90.f), FVector(0.5f, 0.5f, 2.4f), MatIron, false);
 		Pinned(Calendar);
 	}
 	// The week's laundry, ruled up by hand and pinned at its corners; one corner has lost its pin.
@@ -928,8 +987,9 @@ void ALaundryActor::BuildDoorWall(FRoomBuilder& Build)
 		Pinned(Note);
 	}
 
-	// The light: a bare bulb on its flex from the beam, dead. Nobody has turned it on in years.
-	const FVector Rose(0.f, -6.f, Height - 18.f);
+	// The light: a bare bulb on its flex from the beam, dead. Nobody has turned it on in years. The
+	// rose is screwed to the beam's underside (BuildShell: the beam at Y 60, 22 deep under the joists).
+	const FVector Rose(0.f, 60.f, Height - 18.f - 22.f);
 	Build.Cyl(Rose + FVector(0.f, 0.f, -1.5f), FRotator::ZeroRotator, FVector(8.f, 8.f, 3.f), MatBakelite, false);
 	Build.Cyl(Rose + FVector(0.f, 0.f, -24.f), FRotator::ZeroRotator, FVector(0.6f, 0.6f, 42.f), MatRubber, false);
 	Build.Cyl(Rose + FVector(0.f, 0.f, -48.f), FRotator::ZeroRotator, FVector(3.6f, 3.6f, 6.f), MatBakelite, false);
@@ -1090,7 +1150,11 @@ void ALaundryActor::BuildFloor(FRoomBuilder& Build)
 	{
 		const float X = Random.FRandRange(-HalfX + 60.f, HalfX - 120.f);
 		const float Y = Random.FRandRange(-HalfY + 80.f, HalfY - 80.f);
-		const FVector2D Size(Random.FRandRange(60.f, 140.f), Random.FRandRange(40.f, 90.f));
+		// The second size before the first: the order the build drew them in while they sat in the
+		// constructor's arguments (MSVC took those right to left), so the cracks stay where they were.
+		const float SizeSecond = Random.FRandRange(40.f, 90.f);
+		const float SizeFirst = Random.FRandRange(60.f, 140.f);
+		const FVector2D Size(SizeFirst, SizeSecond);
 		const float Roll = Random.FRandRange(0.f, 360.f);
 		if (!FloorDecalReachesDoor(FVector2D(X, Y), LaundryFloorDecalHalfExtent(Size, Roll)))
 		{
@@ -1144,7 +1208,8 @@ void ALaundryActor::BuildCobwebs(FRoomBuilder& Build)
 	{
 		const float X = -HalfX + 52.f + 52.f * Random.RandRange(0, 10);
 		const float Y = Random.FRandRange(-HalfY + 30.f, HalfY - 30.f);
-		Web(Build, FVector(X, Y, Height - 20.f), Upright(0.f), FVector2D(42.f, Random.FRandRange(10.f, 20.f)));
+		const float Drop = Random.FRandRange(10.f, 20.f);
+		Web(Build, FVector(X, Y, Height - 20.f), Upright(0.f), FVector2D(42.f, Drop));
 	}
 	// Between the heater's pipes and the wall; under the table's ends.
 	Web(Build, Heater() + FVector(0.f, -18.f, HeaterTop + 40.f), Upright(0.f), FVector2D(36.f, 40.f));
@@ -1152,7 +1217,9 @@ void ALaundryActor::BuildCobwebs(FRoomBuilder& Build)
 	{
 		Web(Build, Counter() + FVector(Side * (CounterLength * 0.5f - 8.f), 0.f, 40.f), Upright(90.f), FVector2D(50.f, 30.f));
 	}
-	Web(Build, Shelving() + FVector(10.f, 0.f, 186.f), Upright(0.f), FVector2D(30.f, 22.f));
+	// In the gap between the shelving's north end and the door wall: clear of the basket on its top,
+	// and just out of the door wall's decal reach.
+	Web(Build, Shelving() + FVector(-2.f, -55.f, 186.f), Upright(0.f), FVector2D(30.f, 22.f));
 	Web(Build, Airer() + FVector(0.f, -AirerLength * 0.5f + 4.f, 20.f), Upright(0.f), FVector2D(30.f, 26.f));
 }
 

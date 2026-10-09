@@ -161,8 +161,9 @@ private:
 	void Blocker(FRoomBuilder& Build, const FVector& Centre, const FVector& Size, float Yaw = 0.f);
 	/** A rectangle of the paper atlas (Tools/make_laundry_art.py) laid on a plane: Normal out of it, Up its top. */
 	UStaticMeshComponent* Paper(FRoomBuilder& Build, const TCHAR* Rect, const FVector& Centre, const FVector& Normal, const FVector& Up, float W, float H);
-	/** A pipe through the points, with an elbow at every turn and a bracket every so often. */
-	void Pipe(FRoomBuilder& Build, TConstArrayView<FVector> Points, float Diameter, UMaterialInterface* Mat, float BracketEvery = 0.f);
+	/** A pipe through the points, with an elbow at every turn and a bracket every so often. Its parts
+	 *  take no decals, unless bTakesDecals: then they keep the wall decals off themselves instead. */
+	void Pipe(FRoomBuilder& Build, TConstArrayView<FVector> Points, float Diameter, UMaterialInterface* Mat, float BracketEvery = 0.f, bool bTakesDecals = false);
 	/** A cobweb as a plane. */
 	void Web(FRoomBuilder& Build, const FVector& Centre, const FRotator& Rotation, const FVector2D& Size);
 	AClueActor* SpawnClue(const FVector& LocalLocation, const FRotator& Rotation);
