@@ -35,6 +35,10 @@ namespace
 	};
 	constexpr int32 WineCount = UE_ARRAY_COUNT(Wines);
 
+	/** The walls' brick, and the corridor's face of the door wall (shared with the narrow strip by the door). */
+	const FLinearColor WineWallTint(0.29f, 0.30f, 0.34f);
+	const FLinearColor WineCorridorBrickTint(0.150f, 0.130f, 0.112f);
+
 	/** Cells of the wine_paper atlas (make_cellar_art.py): column, row, and the used size in pixels. */
 	struct FPaperCell
 	{
@@ -367,9 +371,9 @@ bool AWineCellarActor::FloorDecalReachesDoor(const FVector2D& Point, const FVect
 void AWineCellarActor::CacheMaterials(FRoomBuilder& Build)
 {
 	// castle_brick_01 is a warm grey-brown at linear (0.26, 0.20, 0.13): held at about 0.07, warm.
-	MatWall = Build.Surface(RoomSurfaces::CellarBrick, FLinearColor(0.29f, 0.30f, 0.34f));
+	MatWall = Build.Surface(RoomSurfaces::CellarBrick, WineWallTint);
 	// The corridor's face of the door wall is the corridor's brick, as on every other cellar door.
-	MatCorridorBrick = Build.Surface(RoomSurfaces::Substrate, FLinearColor(0.150f, 0.130f, 0.112f));
+	MatCorridorBrick = Build.Surface(RoomSurfaces::Substrate, WineCorridorBrickTint);
 	// Cold flags: large_floor_tiles_02 is a neutral grey at 0.19; kept a shade cooler than the walls.
 	MatFlags = Build.Surface(RoomSurfaces::CellarFlags, FLinearColor(0.36f, 0.35f, 0.34f));
 	MatStone = Build.Surface(RoomSurfaces::Stone, FLinearColor(0.40f, 0.42f, 0.46f));
@@ -473,6 +477,24 @@ void AWineCellarActor::BuildShell(FRoomBuilder& Build)
 	// as the aisles' ceiling — above that the corridor's own wall carries on (ACellarActor).
 	const float DoorL = DoorX - DoorHalf;
 	const float DoorR = DoorX + DoorHalf;
+	// The strip of wall between the door and the east wall is 85cm wide and 305 tall, and the builder
+	// gives the larger repeat count to a part's longest side and lays it along the face's U, which on
+	// this face is across: built square the brick came out stretched into vertical stripes, and
+	// pitched ninety (the kitchen's chimney piers) its courses stood on end. So it gets an instance of
+	// its own, made straight from the asset like the paper and never registered with the builder
+	// (which would re-tile it), its repeats written out for U across and V up.
+	auto NarrowStrip = [this](const FRoomSurface& Surface, const FLinearColor& Tint, float StripWidth, float StripHeight) -> UMaterialInterface*
+	{
+		UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, *FString::Printf(TEXT("/Game/Materials/MI_%s.MI_%s"), Surface.Set, Surface.Set));
+		UMaterialInstanceDynamic* Mat = Parent ? UMaterialInstanceDynamic::Create(Parent, this) : nullptr;
+		if (Mat)
+		{
+			Mat->SetVectorParameterValue(TEXT("Tint"), Tint);
+			Mat->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(StripWidth / Surface.TexelSizeCm, StripHeight / Surface.TexelSizeCm, 0.f, 1.f));
+			Mat->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(0.31f, 0.17f, 0.f, 1.f));
+		}
+		return Mat;
+	};
 	for (const float Skin : { -1.f, 1.f })
 	{
 		UMaterialInterface* Mat = Skin > 0.f ? MatWall.Get() : MatCorridorBrick.Get();
@@ -480,7 +502,10 @@ void AWineCellarActor::BuildShell(FRoomBuilder& Build)
 		const float LeftWidth = DoorL - (-WH - T * 0.5f);
 		const float RightWidth = (WH + T * 0.5f) - DoorR;
 		Build.Box(FVector(-WH - T * 0.5f + LeftWidth * 0.5f, Y, AisleCeiling * 0.5f), FRotator::ZeroRotator, FVector(LeftWidth, T * 0.5f, AisleCeiling), Mat);
-		Build.Box(FVector(DoorR + RightWidth * 0.5f, Y, AisleCeiling * 0.5f), FRotator::ZeroRotator, FVector(RightWidth, T * 0.5f, AisleCeiling), Mat);
+		UMaterialInterface* StripMat = Skin > 0.f
+			? NarrowStrip(RoomSurfaces::CellarBrick, WineWallTint, RightWidth, AisleCeiling)
+			: NarrowStrip(RoomSurfaces::Substrate, WineCorridorBrickTint, RightWidth, AisleCeiling);
+		Build.Box(FVector(DoorR + RightWidth * 0.5f, Y, AisleCeiling * 0.5f), FRotator::ZeroRotator, FVector(RightWidth, T * 0.5f, AisleCeiling), StripMat ? StripMat : Mat);
 		Build.Box(FVector(DoorX, Y, (DoorHeight + AisleCeiling) * 0.5f), FRotator::ZeroRotator, FVector(DoorHalf * 2.f, T * 0.5f, AisleCeiling - DoorHeight), Mat);
 	}
 	// A dressed stone surround on both faces, the reveal lined in stone and a worn sill: this door
