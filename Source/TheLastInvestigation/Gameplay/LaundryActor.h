@@ -101,6 +101,9 @@ private:
 	static constexpr float SinkDepth = 50.f;
 	static constexpr float HeaterRadius = 27.f;
 	static constexpr float HeaterTop = 172.f;
+	/** The model's flue stub on the dome (make_laundry.py: heater), carried on to the ceiling in C++. */
+	static constexpr float HeaterFlueRadius = 5.f;
+	static constexpr float HeaterFlueStubTop = HeaterTop + 40.f;
 	static constexpr float BasketHeight = 28.f;
 	static constexpr float IroningLength = 122.f;
 

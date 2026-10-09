@@ -620,6 +620,23 @@ void ALaundryActor::BuildMachines(FRoomBuilder& Build)
 		{ { TEXT("Enamel"), MatEnamel }, { TEXT("Iron"), MatIron }, { TEXT("Shadow"), MatShadow }, { TEXT("Copper"), MatCopper },
 		  { TEXT("Brass"), MatBrass }, { TEXT("Dial"), MatDial }, { TEXT("Knob"), MatKnob } }));
 	Blocker(Build, HeaterAt + FVector(0.f, 0.f, 90.f), FVector(60.f, 60.f, 180.f));
+	// The flue, on from the model's stub straight up through the ceiling boards (Height..Height+10),
+	// ending a few centimetres into them. It stands in the gap between the joists at X 236 and 288,
+	// 7.6cm clear of the heater's pipes and 1.9cm clear of the cold valve's wheel. Started exactly at
+	// the stub's cap, not overlapping it: two cylinders of one radius over each other z-fight. A
+	// socket over the joint and a plate where it goes through the boards.
+	{
+		const float FlueEnd = Height + 4.f;
+		const float FlueRun = FlueEnd - HeaterFlueStubTop;
+		const float D = HeaterFlueRadius * 2.f;
+		Build.Cyl(HeaterAt + FVector(0.f, 0.f, HeaterFlueStubTop + FlueRun * 0.5f), FRotator::ZeroRotator, FVector(D, D, FlueRun), MatPipeIron, false);
+		Build.Cyl(HeaterAt + FVector(0.f, 0.f, HeaterFlueStubTop), FRotator::ZeroRotator, FVector(D + 2.4f, D + 2.4f, 5.f), MatPipeIron, false);
+		Build.Cyl(HeaterAt + FVector(0.f, 0.f, Height - 0.5f), FRotator::ZeroRotator, FVector(D + 9.f, D + 9.f, 1.f), MatPipeIron, false);
+		// Soot and rust on the boards round it: aimed up from four under the boards, so it reaches
+		// them (and the plate) and nothing lower; nothing else stands within its reach there.
+		Build.Stain(RoomSurfaces::Damp, HeaterAt + FVector(0.f, 0.f, Height - 4.f), FRotator(90.f, 0.f, 0.f), FVector2D(38.f, 34.f),
+			FLinearColor(0.06f, 0.05f, 0.045f), 0.7f, 1.3f);
+	}
 
 	auto MachineSlots = [this](UStaticMeshComponent* Mesh)
 	{
