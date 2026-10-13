@@ -13,21 +13,6 @@ namespace
 {
 	const FLinearColor LightningColor(0.72f, 0.82f, 1.f); // cold blue-white
 
-	/**
-	 * One hanging drape, as a generated surface.
-	 *
-	 * The sheet is a graph x = f(y, z) in the pivot's space: y runs across the curtain towards the
-	 * middle of the window (SignedWidth carries which way that is for this side), z runs down from
-	 * the pole, and x is depth, with -x towards the room. Two sine waves of different period give
-	 * the folds; their phase drifts with height, because a fold in real cloth does not fall in a
-	 * straight line; and their amplitude opens towards the hem, because the top is gathered on the
-	 * rings and the bottom is not.
-	 *
-	 * Where the cloth has gone is decided per column by Keep(), and quads with any corner outside
-	 * it are never emitted. That is the whole reason for generating a mesh rather than stacking
-	 * slabs: the hem becomes a contour that can wander, double back and thin to a thread, which is
-	 * what rotted cloth does and what no arrangement of rectangles can be made to do.
-	 */
 	/** A drape's cut beyond its size (FStormWindowSetup's Drape* fields): all one for the linen. */
 	struct FDrapeStyle
 	{
@@ -69,9 +54,24 @@ namespace
 		}
 	}
 
+	/**
+	 * One hanging drape, as a generated surface.
+	 *
+	 * The sheet is a graph x = f(y, z) in the pivot's space: y runs across the curtain towards the
+	 * middle of the window (SignedWidth carries which way that is for this side), z runs down from
+	 * the pole, and x is depth, with -x towards the room. Two sine waves of different period give
+	 * the folds; their phase drifts with height, because a fold in real cloth does not fall in a
+	 * straight line; and their amplitude opens towards the hem, because the top is gathered on the
+	 * rings and the bottom is not.
+	 *
+	 * Where the cloth has gone is decided per column by Keep(), and quads with any corner outside
+	 * it are never emitted. That is the whole reason for generating a mesh rather than stacking
+	 * slabs: the hem becomes a contour that can wander, double back and thin to a thread, which is
+	 * what rotted cloth does and what no arrangement of rectangles can be made to do.
+	 */
 	UProceduralMeshComponent* BuildDrapeMesh(AActor* Owner, USceneComponent* Pivot, UMaterialInterface* Cloth,
 		float SignedWidth, float Length, int32 Seed, const FDrapeStyle& Style = FDrapeStyle(),
-		FVector* OutTieFront = nullptr, float WallX = 16.f)
+		FVector* OutTieFront = nullptr, float WallX = 16.f, FVector* OutTieHook = nullptr)
 	{
 		if (!Owner || !Pivot)
 		{
@@ -381,6 +381,10 @@ namespace
 				if (OutTieFront)
 				{
 					*OutTieFront = Surface(0.5f, Style.Tie + Sag) + FVector(Out - 2.f, 0.f, 0.f);
+				}
+				if (OutTieHook)
+				{
+					*OutTieHook = Hook;
 				}
 			}
 			if (TV.Num() > 0)
@@ -808,8 +812,14 @@ void AStormWindowActor::BuildWindow()
 		// The tears come from the drape's own seed, not from Random, so a window with a seed of its own
 		// has to carry it in here too or its curtains are torn exactly where every other window's are.
 		FVector TieFront = FVector::ZeroVector;
+		FVector Hook = FVector::ZeroVector;
 		BuildDrapeMesh(this, Pivot, ClothMat, -SideSign * Setup.DrapeWidth, DrapeLength, (Side == 0 ? 1104 : 1955) + Setup.Seed % 100003, Style,
-			&TieFront, Setup.PoleProud);
+			&TieFront, Setup.PoleProud, &Hook);
+		if (Style.Trim && Style.Tie > 0.f)
+		{
+			// Where the cord is made fast on the wall, for whoever lays decals on that wall (GetTieHooks).
+			TieHooks.Add(Pivot->GetComponentTransform().TransformPosition(Hook));
+		}
 
 		// A few threads still hanging where the hem tore away. These are boxes and have every
 		// right to be: a thread is a straight thin thing, which is the one shape a box is honest
@@ -818,16 +828,18 @@ void AStormWindowActor::BuildWindow()
 		for (int32 i = 0; i < 5; ++i)
 		{
 			const float Hang = Random.FRandRange(7.f, 30.f);
-			// Drawn in the order MSVC evaluated them when they were constructor arguments (right to
-			// left), so every window's threads stay where they were.
+			// Drawn in the order MSVC evaluated them when they were arguments of the Box() call, and
+			// of the constructors inside it: right to left at both levels, so the size (its Y before
+			// its X), then the turn, then the place (Z, Y, X). Checked against a test build of the old
+			// call; every window's threads stay where they were.
+			const float SizeY = Random.FRandRange(0.8f, 2.4f);
+			const float SizeX = Random.FRandRange(0.6f, 1.8f);
+			const FVector Size(SizeX, SizeY, Hang);
+			const FRotator Turn(0.f, 0.f, Random.FRandRange(-11.f, 11.f));
 			const float AtZ = Random.FRandRange(0.42f, 0.9f);
 			const float AtY = Random.FRandRange(4.f, 58.f);
 			const float AtX = Random.FRandRange(-5.f, 2.f);
 			const FVector At(AtX, -SideSign * AtY, -DrapeLength * AtZ - Hang * 0.5f);
-			const FRotator Turn(0.f, 0.f, Random.FRandRange(-11.f, 11.f));
-			const float SizeY = Random.FRandRange(0.8f, 2.4f);
-			const float SizeX = Random.FRandRange(0.6f, 1.8f);
-			const FVector Size(SizeX, SizeY, Hang);
 			if (Style.Tie <= 0.f && !Setup.bDrapeToFloor)
 			{
 				CurtainBuild.Box(At, Turn, Size, ClothMat, /*bBlockingCollision*/ false);
@@ -837,6 +849,11 @@ void AStormWindowActor::BuildWindow()
 		// The tieback's tassel, hanging off the front of the cord (the cord itself is swept round the
 		// cloth in BuildDrapeMesh). Where a side's cord has given way the drape just hangs loose: the
 		// cord and tassel lying on the boards under it were taken out on the user's notes.
+		//
+		// The tassel's twist is drawn on every trimmed drape, tied or not, so a side whose cord has
+		// gone still takes its number and nothing drawn after it moves (a skipped placement still
+		// draws all its numbers, 09-29). Windows without trim draw nothing here, as before.
+		const float Twist = Setup.CurtainTrim ? Random.FRandRange(-4.f, 4.f) : 0.f;
 		if (Setup.CurtainTrim && bTied)
 		{
 			// A skirt of threads, a waist, a ball, a knot: a lathe from the skirt's hem up to the knot.
@@ -851,7 +868,6 @@ void AStormWindowActor::BuildWindow()
 			Tassel.Add(FVector2D(2.1f, 19.f));
 			Tassel.Add(FVector2D(0.8f, 20.5f));
 			Tassel.Add(FVector2D(0.f, 21.f));
-			const float Twist = Random.FRandRange(-4.f, 4.f);
 			// Built on the pivot, so it swings with the cloth it hangs from.
 			CurtainBuild.Cyl(TieFront - FVector(0.f, 0.f, 5.f), FRotator::ZeroRotator, FVector(0.8f, 0.8f, 10.f), Setup.CurtainTrim, false);
 			CurtainBuild.Lathe(TieFront - FVector(0.f, 0.f, 10.f + 21.f), FRotator(0.f, 0.f, Twist), Tassel, 16, Setup.CurtainTrim, 34.f);

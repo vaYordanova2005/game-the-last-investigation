@@ -7,6 +7,7 @@
 class FRoomBuilder;
 class USceneComponent;
 class UStaticMeshComponent;
+class UPrimitiveComponent;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
@@ -136,6 +137,24 @@ private:
 		float U1;
 	};
 
+	/** Something standing within a wall decal's reach of a wall: its extent along the wall (U) and up it (Z). */
+	struct FWallKeepOut
+	{
+		EWall Wall;
+		FVector2D U;
+		FVector2D Z;
+	};
+
+	/**
+	 * The footprint of something standing on the floor, in the room's frame. Along: the wall a
+	 * bookcase run lines, whose own wall-foot dust is meant to lie at its feet and is not kept off it.
+	 */
+	struct FFloorKeepOut
+	{
+		FBox2D Box;
+		TOptional<EWall> Along;
+	};
+
 	// Plan helpers, in the room frame. North is -Y, as everywhere in the house.
 	float WestX() const { return Setup.WestX; }
 	float EastX() const { return Setup.EastX; }
@@ -158,6 +177,8 @@ private:
 	void CacheMaterials(FRoomBuilder& Build);
 	void BuildShell(FRoomBuilder& Build);
 	void BuildFloor(FRoomBuilder& Build);
+	/** The dust and the damp on the floor, laid once the furniture stands (FloorKeepOuts). */
+	void BuildFloorDust(FRoomBuilder& Build);
 	void BuildWalls(FRoomBuilder& Build);
 	void BuildWindows(FRoomBuilder& Build);
 	void BuildShelves(FRoomBuilder& Build);
@@ -189,8 +210,29 @@ private:
 	FVector WallPoint(EWall Wall, float U, float Z, float Proud) const;
 	/** The yaw that turns a prop's local +Y — the way every prop here faces — out of a wall. */
 	static float FacingYaw(EWall Wall);
-	/** Whether a wall decal at (U, Z) of that size would land on a bookcase, an opening or the breast. */
-	bool WallDecalHitsSomething(EWall Wall, float U, float Z, float HalfU, float HalfZ) const;
+	/**
+	 * Whether a wall decal at (U, Z) of that size would land on a bookcase, an opening, the breast or
+	 * anything recorded by KeepWallDecalsOff. bOpenings off for the patches that are meant to sit just
+	 * outside a window's architrave.
+	 */
+	bool WallDecalHitsSomething(EWall Wall, float U, float Z, float HalfU, float HalfZ, bool bOpenings = true) const;
+	/**
+	 * Records a placed part that stands within a wall decal's reach of a wall, read off its bounds
+	 * (the wine cellar's KeepWallDecalsOff). Except: the wall whose keep-out is already the shelf-run
+	 * test, so a bookcase bay only adds the wall its end stands against. A part that takes no decals
+	 * needs no keep-out and is passed over.
+	 */
+	void KeepWallDecalsOff(const UPrimitiveComponent* Part, TOptional<EWall> Except = TOptional<EWall>());
+	void KeepWallDecalsOff(const AActor* Actor);
+	/** Records a placed part standing on the floor, within a floor decal's reach, read off its bounds. */
+	void KeepFloorDustOff(const UPrimitiveComponent* Part, TOptional<EWall> Along = TOptional<EWall>());
+	/**
+	 * Whether a floor decal centred there with that rolled half extent would reach something standing
+	 * on the floor. AlongWall: the wall a wall-foot strip runs along, whose bookcases it may touch.
+	 */
+	bool FloorDustHitsSomething(const FVector2D& Centre, const FVector2D& HalfExtent, TOptional<EWall> AlongWall = TOptional<EWall>()) const;
+	/** A part's bounds in the room's frame. */
+	FBox RoomBox(const UPrimitiveComponent* Part) const;
 
 	/** Places a generated model and puts the room's materials on its named slots. */
 	UStaticMeshComponent* Place(FRoomBuilder& Build, const TCHAR* Name, const FVector& Location, const FRotator& Rotation,
@@ -235,6 +277,9 @@ private:
 
 	TArray<FOpening> Openings;
 	TArray<FShelfRun> ShelfRuns;
+	TArray<FWallKeepOut> WallKeepOuts;
+	/** The footprints of what stands on the floor, in the room's frame (KeepFloorDustOff). */
+	TArray<FFloorKeepOut> FloorKeepOuts;
 	FLibrarySetup Setup;
 	FRandomStream Random;
 

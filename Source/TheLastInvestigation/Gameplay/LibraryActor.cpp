@@ -2,6 +2,7 @@
 #include "RoomBuildLibrary.h"
 #include "ClueActor.h"
 #include "StormWindowActor.h"
+#include "NurseryActor.h"
 #include "DustMotesComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -104,6 +105,20 @@ namespace
 		}
 	}
 
+	// A decal reaches nine centimetres either way along its aim (FRoomBuilder::Stain). The floor's are
+	// aimed down from four over the parquet (whose top is at zero), so they reach up to thirteen: the
+	// foot of anything standing on the boards.
+	constexpr float LibraryDecalReach = 9.f;
+	constexpr float LibraryFloorDecalZ = 4.f;
+
+	/** A floor decal's half extent on the plan, X and Y: aimed down, its first size runs along world Y and its second along X before the roll (09-27). */
+	FVector2D LibraryFloorDecalHalfExtent(const FVector2D& Size, float Roll)
+	{
+		const float Cos = FMath::Abs(FMath::Cos(FMath::DegreesToRadians(Roll)));
+		const float Sin = FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Roll)));
+		return FVector2D((Sin * Size.X + Cos * Size.Y) * 0.5f, (Cos * Size.X + Sin * Size.Y) * 0.5f);
+	}
+
 	/** Keeps the walls' decals off things pinned or hung on them (the kitchen calendar's note). */
 	void LibraryNoDecals(UPrimitiveComponent* Part)
 	{
@@ -174,11 +189,15 @@ void ALibraryActor::BeginPlay()
 	BuildDesk(Build);
 	BuildReadingCorner(Build);
 	BuildDecor(Build);
+	// The floor's dust once the furniture stands, so it can be kept from under what stands against the
+	// walls. Nothing from BuildFloor to here draws from Random, so the stream is the one it was.
+	BuildFloorDust(Build);
 	BuildCeiling(Build);
-	BuildDamage(Build);
-
+	// The windows and the clues before the damp: the tiebacks' hooks and the calendar's nail are on the
+	// walls it is laid on. Neither draws from this room's stream.
 	SpawnWindows();
 	BuildClues();
+	BuildDamage(Build);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -542,32 +561,142 @@ void ALibraryActor::AimAt(EWall Wall, float U, float Z, float Roll, FVector& Out
 	}
 }
 
-bool ALibraryActor::WallDecalHitsSomething(EWall Wall, float U, float Z, float HalfU, float HalfZ) const
+bool ALibraryActor::WallDecalHitsSomething(EWall Wall, float U, float Z, float HalfU, float HalfZ, bool bOpenings) const
 {
 	// A wall decal projects onto everything within reach of the wall (the wine cellar's 10-08 note):
 	// the bookcases stand against it from the floor to 470, the arch and the windows have their
 	// architraves round them, and the breast stands out of the east wall. A decal near any of those
 	// goes elsewhere.
 	const float Margin = 15.f;
+	// Over the bookcases the margin is only a couple of centimetres: a decal's box is hard-edged, and
+	// one whose bottom clears the cornice's top does not touch it. With the full margin every stain
+	// in the frieze over a run was thrown out, which is nearly all of three walls' (their bottom is
+	// at 474, the cornice stops at 470).
+	const float CaseTopMargin = 2.f;
 	for (const FShelfRun& Run : ShelfRuns)
 	{
-		if (Run.Wall == Wall && U + HalfU > Run.U0 - Margin && U - HalfU < Run.U1 + Margin && Z - HalfZ < CaseTop + Margin)
+		if (Run.Wall == Wall && U + HalfU > Run.U0 - Margin && U - HalfU < Run.U1 + Margin && Z - HalfZ < CaseTop + CaseTopMargin)
 		{
 			return true;
 		}
 	}
-	for (const FOpening& Opening : Openings)
+	if (bOpenings)
 	{
-		const float Surround = Opening.Wall == EWall::North ? ArchArchitrave : 14.f;
-		if (Opening.Wall == Wall && FMath::Abs(U - Opening.CenterU) < Opening.HalfU + Surround + Margin + HalfU
-			&& Z + HalfZ > Opening.BottomZ - Margin && Z - HalfZ < Opening.TopZ + Surround + Margin)
+		for (const FOpening& Opening : Openings)
 		{
-			return true;
+			const float Surround = Opening.Wall == EWall::North ? ArchArchitrave : 14.f;
+			if (Opening.Wall == Wall && FMath::Abs(U - Opening.CenterU) < Opening.HalfU + Surround + Margin + HalfU
+				&& Z + HalfZ > Opening.BottomZ - Margin && Z - HalfZ < Opening.TopZ + Surround + Margin)
+			{
+				return true;
+			}
 		}
 	}
 	if (Wall == EWall::East && FMath::Abs(U - BreastY) < BreastHalf + Margin + HalfU)
 	{
 		return true;
+	}
+	// Against a piece of furniture, a hook or a nail a few centimetres are enough: a decal's edge is
+	// already torn and faded by then (the wine cellar's figure).
+	const float KeepMargin = 5.f;
+	for (const FWallKeepOut& Keep : WallKeepOuts)
+	{
+		if (Keep.Wall == Wall
+			&& U + HalfU + KeepMargin > Keep.U.X && U - HalfU - KeepMargin < Keep.U.Y
+			&& Z + HalfZ + KeepMargin > Keep.Z.X && Z - HalfZ - KeepMargin < Keep.Z.Y)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+FBox ALibraryActor::RoomBox(const UPrimitiveComponent* Part) const
+{
+	return Part->Bounds.GetBox().TransformBy(GetActorTransform().Inverse());
+}
+
+void ALibraryActor::KeepWallDecalsOff(const UPrimitiveComponent* Part, TOptional<EWall> Except)
+{
+	if (!Part || !Part->IsRegistered() || !Part->bReceivesDecals)
+	{
+		return;
+	}
+	// A wall decal is put two centimetres off the plaster and reaches nine either way from there, so
+	// anything within a dozen of a wall is under its reach (the wine cellar's figure).
+	const FBox Box = RoomBox(Part);
+	const float Reach = 12.f;
+	const FVector2D AlongX(Box.Min.X, Box.Max.X);
+	const FVector2D AlongY(Box.Min.Y, Box.Max.Y);
+	const FVector2D Up(Box.Min.Z, Box.Max.Z);
+	auto Add = [&](EWall Wall, const FVector2D& Along)
+	{
+		if (!Except.IsSet() || Except.GetValue() != Wall)
+		{
+			WallKeepOuts.Add({ Wall, Along, Up });
+		}
+	};
+	if (Box.Min.Y < NorthY() + Reach)
+	{
+		Add(EWall::North, AlongX);
+	}
+	if (Box.Max.Y > SouthY() - Reach)
+	{
+		Add(EWall::South, AlongX);
+	}
+	if (Box.Max.X > EastX() - Reach)
+	{
+		Add(EWall::East, AlongY);
+	}
+	if (Box.Min.X < WestX() + Reach)
+	{
+		Add(EWall::West, AlongY);
+	}
+}
+
+void ALibraryActor::KeepWallDecalsOff(const AActor* Actor)
+{
+	if (!Actor)
+	{
+		return;
+	}
+	TInlineComponentArray<UPrimitiveComponent*> Parts(Actor);
+	for (const UPrimitiveComponent* Part : Parts)
+	{
+		KeepWallDecalsOff(Part);
+	}
+}
+
+void ALibraryActor::KeepFloorDustOff(const UPrimitiveComponent* Part, TOptional<EWall> Along)
+{
+	if (!Part || !Part->IsRegistered())
+	{
+		return;
+	}
+	const FBox Box = RoomBox(Part);
+	if (Box.Min.Z < LibraryFloorDecalZ + LibraryDecalReach)
+	{
+		FloorKeepOuts.Add({ FBox2D(FVector2D(Box.Min.X, Box.Min.Y), FVector2D(Box.Max.X, Box.Max.Y)), Along });
+	}
+}
+
+bool ALibraryActor::FloorDustHitsSomething(const FVector2D& Centre, const FVector2D& HalfExtent, TOptional<EWall> AlongWall) const
+{
+	// No margin: a decal's box is hard-edged. What the dust must not do is run in under a hearth or a
+	// cabinet and smear up its face, or run on along one wall into the bookcases standing out from the
+	// next. The bookcases of the wall a strip runs along are what it is laid at the foot of, so those
+	// it may touch.
+	const FBox2D Footprint(Centre - HalfExtent, Centre + HalfExtent);
+	for (const FFloorKeepOut& Keep : FloorKeepOuts)
+	{
+		if (AlongWall.IsSet() && Keep.Along.IsSet() && AlongWall.GetValue() == Keep.Along.GetValue())
+		{
+			continue;
+		}
+		if (Footprint.Intersect(Keep.Box))
+		{
+			return true;
+		}
 	}
 	return false;
 }
@@ -581,13 +710,18 @@ void ALibraryActor::BuildShell(FRoomBuilder& Build)
 	const float Z1 = RoomHeight + 10.f;
 
 	// Solid, colliding and never seen. The north wall up to the corridor's ceiling is the corridor's
-	// south wall; the west wall below the hall's ceiling is the hall's east wall and the living
-	// room's; the east wall up to the girl's ceiling is her west wall. Everything over those is ours.
+	// south wall, and the east wall up to the girl's ceiling is her west wall: only what is over
+	// those is ours. The west wall is built full height all the same: below the hall's ceiling it
+	// stands inside the hall's own east wall, and two black boxes in one place draw nothing new.
 	Build.Box(FVector(WestX() - T * 0.5f, (NorthY() + SouthY() + T) * 0.5f, (Z0 + Z1) * 0.5f), FRotator::ZeroRotator,
 		FVector(T, SouthY() + T - NorthY(), Z1 - Z0), MatShell);
-	const float NurserySouthOuter = NorthY() + 500.f + T;
-	Build.Box(FVector(EastX() + T * 0.5f, (NorthY() + NurserySouthOuter) * 0.5f, (325.f + Z1) * 0.5f), FRotator::ZeroRotator,
-		FVector(T, NurserySouthOuter - NorthY(), Z1 - 325.f), MatShell);
+	// Her room shares this one's north face (both are the corridor's south wall seen from behind), so
+	// her south wall's far side is her depth and a wall on from it. Her wall stands to her ceiling
+	// slab's top; ours starts from the middle of that slab.
+	const float NurserySouthOuter = NorthY() + ANurseryActor::RoomDepth + T;
+	const float NurseryWallTop = ANurseryActor::RoomHeight + 5.f;
+	Build.Box(FVector(EastX() + T * 0.5f, (NorthY() + NurserySouthOuter) * 0.5f, (NurseryWallTop + Z1) * 0.5f), FRotator::ZeroRotator,
+		FVector(T, NurserySouthOuter - NorthY(), Z1 - NurseryWallTop), MatShell);
 	Build.Box(FVector(EastX() + T * 0.5f, (NurserySouthOuter + SouthY() + T) * 0.5f, (Z0 + Z1) * 0.5f), FRotator::ZeroRotator,
 		FVector(T, SouthY() + T - NurserySouthOuter, Z1 - Z0), MatShell);
 	Build.Box(FVector(MidX(), NorthY() - T * 0.5f, (Setup.CorridorHeight - 5.f + Z1) * 0.5f), FRotator::ZeroRotator,
@@ -610,10 +744,21 @@ void ALibraryActor::BuildFloor(FRoomBuilder& Build)
 	// Herringbone, wall to wall, as the living room's below: the floor that was laid to be shown. One
 	// box, turned so its long side is its local X (the builder's tiling rule); it collides.
 	Build.Box(FVector(MidX(), MidY(), -2.f), FRotator(0.f, 90.f, 0.f), FVector(SouthY() - NorthY(), EastX() - WestX(), 4.f), MatParquet);
+}
+
+void ALibraryActor::BuildFloorDust(FRoomBuilder& Build)
+{
+	// What stands on the floor against a wall, read off what was placed (KeepFloorDustOff): the
+	// bookcases, the filing cabinet, the record cabinet and the bust's column. And the chimney breast,
+	// whose shell is a few boxes, from the numbers it is built from.
+	FloorKeepOuts.Add({ FBox2D(FVector2D(BreastFaceX(), BreastY - BreastHalf), FVector2D(EastX(), BreastY + BreastHalf)), TOptional<EWall>() });
 
 	// Dust along the feet of the bookcases and the walls, where nobody's feet went. Aimed down, the
 	// first size runs along world Y: roll 90 along the north and south walls, none along the east
-	// and west (the 09-27 note). Kept off the arch's sill (Y over 610).
+	// and west (the 09-27 note). Kept off the arch's sill (Y over 610), and off whatever stands on
+	// the floor: along the east wall a strip ran into the hearth and under the filing cabinet, along
+	// the south wall under the record cabinet and the bust's column, and at the corners on into the
+	// next wall's bookcases. A skipped strip has drawn all its numbers (09-29).
 	for (int32 i = 0; i < 18; ++i)
 	{
 		const int32 Side = i % 4;
@@ -625,18 +770,23 @@ void ALibraryActor::BuildFloor(FRoomBuilder& Build)
 		const float Turn = Random.FRandRange(-6.f, 6.f);
 		FVector2D Spot;
 		float Roll = 0.f;
+		EWall Wall = EWall::West;
 		switch (Side)
 		{
-		case 0: Spot = FVector2D(FMath::Lerp(WestX() + 60.f, EastX() - 60.f, Along), NorthY() + LowerDepth + Out); Roll = 90.f; break;
-		case 1: Spot = FVector2D(FMath::Lerp(WestX() + 60.f, EastX() - 60.f, Along), SouthY() - Out); Roll = 90.f; break;
-		case 2: Spot = FVector2D(EastX() - LowerDepth - Out, FMath::Lerp(NorthY() + 80.f, SouthY() - 60.f, Along)); break;
+		case 0: Spot = FVector2D(FMath::Lerp(WestX() + 60.f, EastX() - 60.f, Along), NorthY() + LowerDepth + Out); Roll = 90.f; Wall = EWall::North; break;
+		case 1: Spot = FVector2D(FMath::Lerp(WestX() + 60.f, EastX() - 60.f, Along), SouthY() - Out); Roll = 90.f; Wall = EWall::South; break;
+		case 2: Spot = FVector2D(EastX() - LowerDepth - Out, FMath::Lerp(NorthY() + 80.f, SouthY() - 60.f, Along)); Wall = EWall::East; break;
 		default: Spot = FVector2D(WestX() + LowerDepth + Out, FMath::Lerp(NorthY() + 80.f, SouthY() - 60.f, Along)); break;
 		}
 		if (Side == 0 && FMath::Abs(Spot.X - Setup.ArchX) < ArchHalf + 60.f)
 		{
 			continue;
 		}
-		Build.Stain(RoomSurfaces::Damp, FVector(Spot.X, Spot.Y, 4.f), FRotator(-90.f, 0.f, Roll + Turn), FVector2D(Length, Width), LibraryDust, Opacity, 1.35f);
+		if (FloorDustHitsSomething(Spot, LibraryFloorDecalHalfExtent(FVector2D(Length, Width), Roll + Turn), Wall))
+		{
+			continue;
+		}
+		Build.Stain(RoomSurfaces::Damp, FVector(Spot.X, Spot.Y, LibraryFloorDecalZ), FRotator(-90.f, 0.f, Roll + Turn), FVector2D(Length, Width), LibraryDust, Opacity, 1.35f);
 	}
 	// A thin film over the whole floor, and the way he walked every evening from the arch to the desk
 	// and from the desk to the fire: darker, where the dust never settled.
@@ -657,11 +807,18 @@ void ALibraryActor::BuildFloor(FRoomBuilder& Build)
 		Build.Stain(RoomSurfaces::Damp, FVector(P.X, P.Y, 4.f), FRotator(-90.f, 0.f, 0.f), FVector2D(150.f, 80.f),
 			FLinearColor(0.10f, 0.085f, 0.07f), 0.28f, 1.3f, 0.8f);
 	}
-	// Under the windows the rain has been in at the sills for years.
+	// Under the windows the rain has been in at the sills for years: 70 out from the wall and 140
+	// along it under each 150-wide window. Aimed down with no roll, the first size runs out along
+	// world Y and the second along the wall (09-27); at roll 90 the two swapped, and half of each
+	// stain was inside the wall and the rest a narrow tongue running a metre into the room.
+	// Its box starts seven centimetres off the plaster: the skirting's face is at three and a half,
+	// and at 38 out the box took it in and smeared the damp up it. And its edge is torn less than the
+	// house's usual: this is the darkest, most opaque stain on the floor, and at 1.25 the noise pushed
+	// the patch out past its box on every side, so it was cut off square there and read as a mat.
 	for (const float X : WindowXs)
 	{
-		Build.Stain(RoomSurfaces::Damp, FVector(X, SouthY() - 38.f, 4.f), FRotator(-90.f, 0.f, 90.f), FVector2D(70.f, 140.f),
-			FLinearColor(0.16f, 0.12f, 0.09f), 0.6f, 1.25f, 0.6f);
+		Build.Stain(RoomSurfaces::Damp, FVector(X, SouthY() - 42.f, LibraryFloorDecalZ), FRotator(-90.f, 0.f, 0.f), FVector2D(70.f, 140.f),
+			FLinearColor(0.16f, 0.12f, 0.09f), 0.6f, 0.55f, 0.6f);
 	}
 }
 
@@ -933,6 +1090,12 @@ void ALibraryActor::BuildShelves(FRoomBuilder& Build)
 				{ { TEXT("Oak"), MatOak }, { TEXT("Brass"), MatBrass }, { TEXT("Shadow"), F(TEXT("Shadow")) } }))
 			{
 				Case->SetRelativeScale3D(FVector(Scale, 1.f, 1.f));
+				// The bay at a run's end stands with its side against the next wall (the west run's last
+				// against the south wall): that wall's damp, and the dust along that wall's foot, keep off
+				// it. Its own wall's damp is the shelf-run test in WallDecalHitsSomething, and its own
+				// wall's dust is laid at its feet on purpose.
+				KeepWallDecalsOff(Case, Run.Wall);
+				KeepFloorDustOff(Case, Run.Wall);
 			}
 			FillBay(FTransform(FRotator(0.f, Yaw, 0.f), At), Scale, Stream);
 		}
@@ -963,9 +1126,10 @@ void ALibraryActor::BuildFireplace(FRoomBuilder& Build)
 
 	// The chimneypiece, cold: soot in the firebox, the last logs burnt through on the basket, the ash
 	// never cleared. The hearth stone is a step to walk over, not a wall.
-	Place(Build, LibraryProps::Fireplace, FVector(FaceX, BreastY, 0.f), FRotator(0.f, Facing, 0.f),
+	// Its hearth stone lies out in front of the breast, where the wall-foot dust must not reach under it.
+	KeepFloorDustOff(Place(Build, LibraryProps::Fireplace, FVector(FaceX, BreastY, 0.f), FRotator(0.f, Facing, 0.f),
 		{ { TEXT("Marble"), MatMarble }, { TEXT("Shadow"), F(TEXT("Shadow")) }, { TEXT("Brick"), MatSootBrick }, { TEXT("Iron"), MatIron },
-		  { TEXT("Charcoal"), F(TEXT("Charcoal")) }, { TEXT("Ash"), F(TEXT("Ash")) } });
+		  { TEXT("Charcoal"), F(TEXT("Charcoal")) }, { TEXT("Ash"), F(TEXT("Ash")) } }));
 	// The breast is hollow where the firebox is; nobody walks into a fireplace.
 	Blocker(Build, FVector(FaceX - 6.f, BreastY, 70.f), FVector(16.f, 200.f, 140.f));
 	Place(Build, LibraryProps::FireTools, FVector(FaceX - 22.f, BreastY + 92.f, 3.f), FRotator(0.f, Facing - 8.f, 0.f),
@@ -1113,20 +1277,28 @@ void ALibraryActor::BuildDecor(FRoomBuilder& Build)
 	// map over each.
 	const float PierA = (WindowXs[0] + WindowXs[1]) * 0.5f;
 	const float PierB = (WindowXs[1] + WindowXs[2]) * 0.5f;
+	// Both pieces between the windows stand within a wall decal's reach of the south wall, and on the
+	// floor the wall-foot dust runs along: kept off both, from their bounds.
 	const FVector Cabinet(PierB, SouthY() - 25.f, 0.f);
-	Place(Build, LibraryProps::RecordCabinet, Cabinet, FRotator(0.f, 180.f, 0.f),
+	UStaticMeshComponent* RecordCabinet = Place(Build, LibraryProps::RecordCabinet, Cabinet, FRotator(0.f, 180.f, 0.f),
 		{ { TEXT("Oak"), MatOak }, { TEXT("Card"), F(TEXT("Card")) }, { TEXT("Shadow"), F(TEXT("Shadow")) }, { TEXT("Brass"), MatBrass } });
-	Place(Build, LibraryProps::Gramophone, Cabinet + FVector(2.f, 4.f, 78.f), FRotator(0.f, 168.f, 0.f),
-		{ { TEXT("Oak"), MatOak }, { TEXT("Felt"), F(TEXT("Felt")) }, { TEXT("Record"), F(TEXT("Record")) }, { TEXT("Wax"), F(TEXT("Wax")) }, { TEXT("Brass"), MatBrass } });
+	KeepWallDecalsOff(RecordCabinet);
+	KeepFloorDustOff(RecordCabinet);
+	KeepWallDecalsOff(Place(Build, LibraryProps::Gramophone, Cabinet + FVector(2.f, 4.f, 78.f), FRotator(0.f, 168.f, 0.f),
+		{ { TEXT("Oak"), MatOak }, { TEXT("Felt"), F(TEXT("Felt")) }, { TEXT("Record"), F(TEXT("Record")) }, { TEXT("Wax"), F(TEXT("Wax")) }, { TEXT("Brass"), MatBrass } }));
 	Dust(Build, Cabinet + FVector(0.f, 0.f, 78.f), FVector2D(46.f, 66.f), 0.45f);
 	Blocker(Build, Cabinet + FVector(0.f, 0.f, 50.f), FVector(66.f, 46.f, 100.f));
 
 	const FVector Column(PierA, SouthY() - 28.f, 0.f);
-	Place(Build, LibraryProps::Pedestal, Column, FRotator(0.f, 12.f, 0.f), { { TEXT("Marble"), MatMarble }, { TEXT("Shadow"), F(TEXT("Shadow")) } });
+	UStaticMeshComponent* Pedestal = Place(Build, LibraryProps::Pedestal, Column, FRotator(0.f, 12.f, 0.f),
+		{ { TEXT("Marble"), MatMarble }, { TEXT("Shadow"), F(TEXT("Shadow")) } });
+	KeepWallDecalsOff(Pedestal);
+	KeepFloorDustOff(Pedestal);
 	if (UStaticMeshComponent* Bust = Build.PropSeated(RoomProps::Bust, Column + FVector(0.f, -2.f, 112.f), FRotator(0.f, 180.f, 0.f), 56.f, false))
 	{
 		// marble_bust_01 is white marble; a tint multiplies, and white takes it: a dark bronze.
 		FRoomShapes::TintSlots(Bust, FLinearColor(0.15f, 0.095f, 0.05f));
+		KeepWallDecalsOff(Bust);
 	}
 	Blocker(Build, Column + FVector(0.f, 0.f, 80.f), FVector(42.f, 42.f, 160.f));
 
@@ -1181,10 +1353,13 @@ void ALibraryActor::BuildDecor(FRoomBuilder& Build)
 	// the month on the wall over it.
 	USceneComponent* FilingFrame = Pivot(FilingSeat(), FRotator(0.f, FacingYaw(EWall::East), 0.f), TEXT("FilingFrame"));
 	FRoomBuilder Fi(this, FilingFrame);
-	Place(Fi, LibraryProps::FilingCabinet, FVector::ZeroVector, FRotator::ZeroRotator,
+	// It stands back to the one bare stretch of the east wall, where the panelling's damp lands.
+	UStaticMeshComponent* Filing = Place(Fi, LibraryProps::FilingCabinet, FVector::ZeroVector, FRotator::ZeroRotator,
 		{ { TEXT("Oak"), MatOak }, { TEXT("Brass"), MatBrass }, { TEXT("Shadow"), F(TEXT("Shadow")) } });
-	Place(Fi, LibraryProps::FilingDrawer, FVector(0.f, 33.f + 34.f, 71.f), FRotator::ZeroRotator,
-		{ { TEXT("Oak"), MatOak }, { TEXT("Brass"), MatBrass }, { TEXT("Card"), F(TEXT("Card")) } });
+	KeepWallDecalsOff(Filing);
+	KeepFloorDustOff(Filing);
+	KeepWallDecalsOff(Place(Fi, LibraryProps::FilingDrawer, FVector(0.f, 33.f + 34.f, 71.f), FRotator::ZeroRotator,
+		{ { TEXT("Oak"), MatOak }, { TEXT("Brass"), MatBrass }, { TEXT("Card"), F(TEXT("Card")) } }));
 	Blocker(Fi, FVector(0.f, 14.f, 68.f), FVector(52.f, 96.f, 136.f));
 	Dust(Fi, FVector(0.f, 0.f, 135.f), FVector2D(66.f, 50.f), 0.45f);
 
@@ -1297,8 +1472,12 @@ void ALibraryActor::BuildDamage(FRoomBuilder& Build)
 	};
 	for (const FRun& R : Walls)
 	{
-		// Water down from the ceiling line, over the bookcases' tops: stains in the frieze. Every number
-		// is drawn before the test, in order (09-29, 10-05).
+		// Water down from the ceiling line: stains in the frieze, between the crown moulding (down to
+		// 486) and the bookcases' tops (470) or the panelling. Their box stops four centimetres over the
+		// cornices, so they are laid over the bookcases too (WallDecalHitsSomething). There the frieze
+		// is a slot behind the cases' cornices and under the crown, and from the floor it shows only as
+		// a sliver across the room: what reads is the damp over the windows and the panelled stretches.
+		// Every number is drawn before the test, in order (09-29, 10-05).
 		for (int32 i = 0; i < 5; ++i)
 		{
 			const float U = Random.FRandRange(R.U0 + 40.f, R.U1 - 40.f);
@@ -1339,6 +1518,13 @@ void ALibraryActor::BuildDamage(FRoomBuilder& Build)
 				// The piers carry a map each; the damp keeps clear of the frames.
 				continue;
 			}
+			// And off what stands against the wall beside the windows: the tiebacks' hooks, the west
+			// bookcases' end in the corner. Not the openings' test: these are meant to sit just past
+			// the architraves, which that test keeps a hand's width clear of.
+			if (WallDecalHitsSomething(EWall::South, U, Z, SU * 0.5f, SZ * 0.5f, /*bOpenings*/ false))
+			{
+				continue;
+			}
 			AimAt(EWall::South, U, Z, 0.f, Location, Rotation);
 			Build.Stain(RoomSurfaces::Damp, Location, Rotation, FVector2D(SU, SZ), MouldTint, Opacity, 1.1f);
 		}
@@ -1375,8 +1561,9 @@ void ALibraryActor::SpawnWindows()
 		WindowSetup.GlowScale = 0.f;
 		// Theatre drapes, after the user's reference: crimson velvet, wide, in deep folds, to the
 		// floor, tied back on gold cords with tassels, gold fringe on what is left of the hem. The
-		// east window's right-hand cord has given way and that drape hangs loose (nothing of the cord is left). The pole stands
-		// further out for the folds, and the sill is a narrow board they fall past.
+		// east window's right-hand cord has given way and that drape hangs loose (nothing of the
+		// cord is left). The pole stands further out for the folds, and the sill is a narrow board
+		// they fall past.
 		WindowSetup.CurtainSurface = &LibraryVelvet;
 		WindowSetup.CurtainTint = LibraryVelvetTint;
 		WindowSetup.DrapeWidth = 86.f;
@@ -1392,6 +1579,15 @@ void ALibraryActor::SpawnWindows()
 		Window->SetLead(LeadStorm);
 		Window->FinishSpawning(Transform);
 		Windows.Add(Window);
+		// The tiebacks' cords are made fast on hooks a centimetre off the plaster beside the window,
+		// inside the reach of the damp round the frames (BuildDamage). The cord leaves the hook for the
+		// cloth, so a hand's breadth round it is kept clear.
+		const float HookReach = 6.f;
+		for (const FVector& Hook : Window->GetTieHooks())
+		{
+			const FVector Local = GetActorTransform().InverseTransformPosition(Hook);
+			WallKeepOuts.Add({ EWall::South, FVector2D(Local.X - HookReach, Local.X + HookReach), FVector2D(Local.Z - HookReach, Local.Z + HookReach) });
+		}
 	}
 }
 
@@ -1449,5 +1645,7 @@ void ALibraryActor::BuildClues()
 		FRoomBuilder B(Calendar, Calendar->GetRootScene());
 		Paper(B, TEXT("calendar"), FVector::ZeroVector, FVector(-1.f, 0.f, 0.f), FVector::UpVector, 30.f, 42.f);
 		B.Sph(FVector(0.4f, 0.f, 22.f), 1.4f, MatIron);
+		// The sheet takes no decals; the nail it hangs on does, and the wall's damp keeps off it.
+		KeepWallDecalsOff(Calendar);
 	}
 }

@@ -158,6 +158,14 @@ public:
 	int32 GetStrikeCount() const { return StrikeCount; }
 
 	/**
+	 * Where each tieback cord is made fast on the wall beside the window, in world space: one per
+	 * drape that is tied back with a trim (FStormWindowSetup::DrapeTie, CurtainTrim), filled when the
+	 * window is built. The hook stands a centimetre off the plaster, inside the reach of any decal
+	 * laid on that wall, so the room that owns the wall keeps its damp off it.
+	 */
+	const TArray<FVector>& GetTieHooks() const { return TieHooks; }
+
+	/**
 	 * Makes this a second window onto another storm rather than a storm of its own. Must be called
 	 * before BeginPlay.
 	 *
@@ -221,6 +229,9 @@ private:
 	 * about the pole), Y the billow into the room (pitch). (1, 0) for every curtain but the long ones.
 	 */
 	TArray<FVector2D> CurtainSwing;
+
+	/** See GetTieHooks. */
+	TArray<FVector> TieHooks;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USceneComponent>> Trees;
