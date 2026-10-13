@@ -818,9 +818,16 @@ void AStormWindowActor::BuildWindow()
 		for (int32 i = 0; i < 5; ++i)
 		{
 			const float Hang = Random.FRandRange(7.f, 30.f);
-			const FVector At(Random.FRandRange(-5.f, 2.f), -SideSign * Random.FRandRange(4.f, 58.f), -DrapeLength * Random.FRandRange(0.42f, 0.9f) - Hang * 0.5f);
+			// Drawn in the order MSVC evaluated them when they were constructor arguments (right to
+			// left), so every window's threads stay where they were.
+			const float AtZ = Random.FRandRange(0.42f, 0.9f);
+			const float AtY = Random.FRandRange(4.f, 58.f);
+			const float AtX = Random.FRandRange(-5.f, 2.f);
+			const FVector At(AtX, -SideSign * AtY, -DrapeLength * AtZ - Hang * 0.5f);
 			const FRotator Turn(0.f, 0.f, Random.FRandRange(-11.f, 11.f));
-			const FVector Size(Random.FRandRange(0.6f, 1.8f), Random.FRandRange(0.8f, 2.4f), Hang);
+			const float SizeY = Random.FRandRange(0.8f, 2.4f);
+			const float SizeX = Random.FRandRange(0.6f, 1.8f);
+			const FVector Size(SizeX, SizeY, Hang);
 			if (Style.Tie <= 0.f && !Setup.bDrapeToFloor)
 			{
 				CurtainBuild.Box(At, Turn, Size, ClothMat, /*bBlockingCollision*/ false);
@@ -867,6 +874,22 @@ void AStormWindowActor::BuildWindow()
 		}
 
 		Curtains.Add(Pivot);
+		// A floor-length drape swung sideways from the pole carries its hem a third of a metre along
+		// the wall, into whatever stands between the windows (the library's record cabinet and bust
+		// column). A tied-back one is held by its cord, whose hook is part of the swinging mesh: it
+		// only shivers. A loose one billows into the room, the way a gust through the glass pushes it.
+		if (bTied)
+		{
+			CurtainSwing.Add(FVector2D(0.12f, 0.f));
+		}
+		else if (Setup.bDrapeToFloor)
+		{
+			CurtainSwing.Add(FVector2D(0.f, 0.6f));
+		}
+		else
+		{
+			CurtainSwing.Add(FVector2D(1.f, 0.f));
+		}
 	}
 }
 
@@ -1078,7 +1101,9 @@ void AStormWindowActor::TickCurtains(float DeltaTime)
 		// Degrees at the pole, so a little goes a long way down two metres of hanging cloth.
 		const float Swing = FMath::Lerp(0.8f, 5.5f, Gust) * FMath::Lerp(0.6f, 1.f, Lag);
 		const float Sway = FMath::Sin(ElapsedTime * 1.4f + i * 2.1f) * 2.5f;
-		Pivot->SetRelativeRotation(FRotator(0.f, Sway, Swing * (i == 0 ? 1.f : -1.f)));
+		const FVector2D Scale = CurtainSwing.IsValidIndex(i) ? CurtainSwing[i] : FVector2D(1.f, 0.f);
+		// Negative pitch takes the hem to local -X, which is into the room.
+		Pivot->SetRelativeRotation(FRotator(-Swing * Scale.Y, Sway, Swing * Scale.X * (i == 0 ? 1.f : -1.f)));
 	}
 }
 

@@ -645,7 +645,9 @@ void ALibraryActor::BuildFloor(FRoomBuilder& Build)
 		const float X = Random.FRandRange(WestX() + 140.f, EastX() - 140.f);
 		const float Y = Random.FRandRange(NorthY() + 160.f, SouthY() - 160.f);
 		const float Roll = Random.FRandRange(0.f, 360.f);
-		const FVector2D Size(Random.FRandRange(170.f, 260.f), Random.FRandRange(130.f, 220.f));
+		const float SizeV = Random.FRandRange(130.f, 220.f);
+		const float SizeU = Random.FRandRange(170.f, 260.f);
+		const FVector2D Size(SizeU, SizeV);
 		const float Opacity = Random.FRandRange(0.14f, 0.22f);
 		Build.Stain(RoomSurfaces::Damp, FVector(X, Y, 4.f), FRotator(-90.f, 0.f, Roll), Size, LibraryDust, Opacity, 1.4f);
 	}
@@ -1228,7 +1230,9 @@ void ALibraryActor::BuildCeiling(FRoomBuilder& Build)
 		const float X = Random.FRandRange(WestX() + 80.f, EastX() - 80.f);
 		const float Y = (i < 4) ? SouthY() - Random.FRandRange(40.f, 220.f) : Random.FRandRange(NorthY() + 80.f, SouthY() - 80.f);
 		const float Roll = Random.FRandRange(0.f, 360.f);
-		const FVector2D Size(Random.FRandRange(90.f, 200.f), Random.FRandRange(70.f, 160.f));
+		const float SizeV = Random.FRandRange(70.f, 160.f);
+		const float SizeU = Random.FRandRange(90.f, 200.f);
+		const FVector2D Size(SizeU, SizeV);
 		const float Opacity = Random.FRandRange(0.35f, 0.6f);
 		Build.Stain(RoomSurfaces::Damp, FVector(X, Y, C - 2.f), FRotator(90.f, 0.f, Roll), Size, FLinearColor(0.32f, 0.27f, 0.21f), Opacity, 1.2f);
 	}

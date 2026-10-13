@@ -216,6 +216,12 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USceneComponent>> Curtains;
 
+	/**
+	 * How each curtain moves with the gust, parallel to Curtains: X scales the sideways swing (roll
+	 * about the pole), Y the billow into the room (pitch). (1, 0) for every curtain but the long ones.
+	 */
+	TArray<FVector2D> CurtainSwing;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USceneComponent>> Trees;
 
