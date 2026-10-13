@@ -14,6 +14,7 @@ class AHallDoorActor;
 class AClueActor;
 class AGrandStaircaseActor;
 class ANurseryActor;
+class ALibraryActor;
 
 /** The bedroom this corridor runs past, handed over by the room that spawns it. */
 struct FCorridorSetup
@@ -33,8 +34,9 @@ struct FCorridorSetup
  * The upstairs corridor, outside the bedroom the detective wakes in.
  *
  * It runs along the bedroom's door wall, east to west: a window at the east end on the same
- * façade as the bedroom's, five more bedroom doors down both sides, and at the far west end an
- * archway onto the gallery of the stair hall (AGrandStaircaseActor), which it spawns. It is the same floor the story ends on, so it is built as a place the
+ * façade as the bedroom's, two more doors on the north side, the girl's door and the library's
+ * open arch (ANurseryActor, ALibraryActor) on the south, and at the far west end an archway onto
+ * the gallery of the stair hall (AGrandStaircaseActor), which it spawns. It is the same floor the story ends on, so it is built as a place the
  * player is meant to remember rather than a route between rooms — the bedroom door faces a dusty
  * mirror, somebody has laid flowers at its threshold, and the runner is worn through in front of
  * it.
@@ -74,6 +76,12 @@ public:
 	 * (ANurseryActor), the one door upstairs that opens.
 	 */
 	static constexpr float NurseryDoorU = -40.f;
+	/**
+	 * The open arch in the south wall into the library (ALibraryActor), where the small door with the
+	 * child's height chart on its casing was. The chart is on the arch's architrave now. The door
+	 * further along at -470 is gone: the library is behind that stretch of wall as well.
+	 */
+	static constexpr float LibraryArchU = -880.f;
 
 private:
 	enum class ESide : uint8 { North, South, East, West };
@@ -113,6 +121,10 @@ private:
 	void SpawnWindow();
 	void SpawnStairHall();
 	void SpawnNursery();
+	void SpawnLibrary();
+
+	/** Whether an opening is the library's arch, which has no door, casing or back room. */
+	static bool IsLibraryArch(const FOpening& Opening) { return Opening.Side == ESide::South && Opening.CenterU == LibraryArchU; }
 
 	/** Places a thin panel on a wall's corridor face. */
 	void FacePanel(FRoomBuilder& Build, ESide Side, float U, float V, float SizeU, float SizeV, UMaterialInterface* Mat) const;
@@ -151,6 +163,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ANurseryActor> Nursery;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ALibraryActor> Library;
 
 	/** The two shapes at the far end of the corridor that are only there while the sky is lit. */
 	UPROPERTY(Transient)

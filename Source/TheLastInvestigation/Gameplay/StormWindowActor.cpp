@@ -28,8 +28,50 @@ namespace
 	 * slabs: the hem becomes a contour that can wander, double back and thin to a thread, which is
 	 * what rotted cloth does and what no arrangement of rectangles can be made to do.
 	 */
+	/** A drape's cut beyond its size (FStormWindowSetup's Drape* fields): all one for the linen. */
+	struct FDrapeStyle
+	{
+		float Fold = 1.f;
+		float Tie = 0.f;
+		UMaterialInterface* Trim = nullptr;
+	};
+
+	/** A round cord swept along a path, rings of six, both ends open (they are hidden in what it ties). */
+	void AppendDrapeCord(TArray<FVector>& V, TArray<FVector>& N, TArray<int32>& T, const TArray<FVector>& Path, float Radius)
+	{
+		constexpr int32 Sides = 6;
+		FVector Side = FVector::UpVector;
+		for (int32 i = 0; i < Path.Num(); ++i)
+		{
+			const FVector Along = (Path[FMath::Min(i + 1, Path.Num() - 1)] - Path[FMath::Max(i - 1, 0)]).GetSafeNormal();
+			Side = (Side - Along * FVector::DotProduct(Side, Along)).GetSafeNormal();
+			const FVector Other = FVector::CrossProduct(Along, Side);
+			for (int32 k = 0; k < Sides; ++k)
+			{
+				const float A = 2.f * PI * k / Sides;
+				const FVector Out = Side * FMath::Cos(A) + Other * FMath::Sin(A);
+				V.Add(Path[i] + Out * Radius);
+				N.Add(Out);
+			}
+		}
+		const int32 Base = V.Num() - Path.Num() * Sides;
+		for (int32 i = 0; i + 1 < Path.Num(); ++i)
+		{
+			for (int32 k = 0; k < Sides; ++k)
+			{
+				const int32 A = Base + i * Sides + k;
+				const int32 B = Base + i * Sides + (k + 1) % Sides;
+				const int32 C = B + Sides;
+				const int32 D = A + Sides;
+				// Both windings: the normals are the ring's own, so whichever is kept lights right.
+				T.Append({ A, B, C, A, C, D, A, C, B, A, D, C });
+			}
+		}
+	}
+
 	UProceduralMeshComponent* BuildDrapeMesh(AActor* Owner, USceneComponent* Pivot, UMaterialInterface* Cloth,
-		float SignedWidth, float Length, int32 Seed)
+		float SignedWidth, float Length, int32 Seed, const FDrapeStyle& Style = FDrapeStyle(),
+		FVector* OutTieFront = nullptr, float WallX = 16.f)
 	{
 		if (!Owner || !Pivot)
 		{
@@ -74,16 +116,40 @@ namespace
 		const float Drift = Weave.FRandRange(0.f, 2.f * PI);
 		const float Grain = Seed * 0.37f;
 
-		auto Keep = [&](float U) -> float
+		// How much of the hem a column has lost to the bites, apart from the fine fray.
+		auto Bitten = [&](float U) -> float
 		{
-			float Left = 0.99f - 0.05f * FMath::Abs(FMath::PerlinNoise1D(U * 6.1f + Grain));
+			float Lost = 0.f;
 			for (const FBite& Bite : Bites)
 			{
 				const float D = (U - Bite.Where) / Bite.Width;
-				Left -= Bite.Depth * FMath::Exp(-D * D);
+				Lost += Bite.Depth * FMath::Exp(-D * D);
 			}
+			return Lost;
+		};
+
+		auto Keep = [&](float U) -> float
+		{
+			float Left = 0.99f - 0.05f * FMath::Abs(FMath::PerlinNoise1D(U * 6.1f + Grain));
+			Left -= Bitten(U);
 			Left -= 0.035f * FMath::Abs(FMath::PerlinNoise1D(U * 29.f + Grain * 3.1f));
 			return FMath::Clamp(Left, 0.05f, 1.f);
+		};
+
+		// A tied-back drape is gathered in to the cord, a third of its width, and flares out a little
+		// below it: the whole width is drawn towards the outer edge (U = 0, at the pivot), so the
+		// inner edge sweeps out from the middle of the window in a curve. One straight hang without.
+		auto Gather = [&](float T) -> float
+		{
+			if (Style.Tie <= 0.f)
+			{
+				return 1.f;
+			}
+			if (T < Style.Tie)
+			{
+				return 1.f - 0.7f * FMath::SmoothStep(0.f, 1.f, T / Style.Tie);
+			}
+			return 0.3f + 0.2f * FMath::SmoothStep(0.f, 1.f, (T - Style.Tie) / FMath::Max(1.f - Style.Tie, 0.01f));
 		};
 
 		auto Solid = [&](float U, float T) -> bool
@@ -107,20 +173,25 @@ namespace
 
 		auto Surface = [&](float U, float T) -> FVector
 		{
-			const float Across = U * FMath::Abs(SignedWidth);
+			const float G = Gather(T);
+			const float Across = U * FMath::Abs(SignedWidth) * G;
 			const float Open = 0.62f + 0.38f * T;                      // gathered at the pole, loose at the hem
 			const float Wander = 4.2f * FMath::Sin(T * 2.7f + Drift);  // the fold lines are not plumb
 			// Amplitude against period is the whole look of the cloth, and it is easy to get very
 			// wrong: the first pass ran six and a half centimetres of swing over a thirteen
 			// centimetre period, which is a slope of seventy degrees — corrugated iron, not a
 			// drape. Lit by a window it came out as alternating blown-white and black stripes.
-			// Two and a bit over seventeen is about forty degrees, which is cloth.
-			float Depth = 2.3f * Open * FMath::Sin((Across + Wander) * (2.f * PI / 17.f) + Phase);
-			Depth += 1.1f * Open * FMath::Sin((Across - Wander * 0.6f) * (2.f * PI / 41.f) + Phase * 0.7f);
+			// Two and a bit over seventeen is about forty degrees, which is cloth. Fold scales depth
+			// and period together, so heavy velvet keeps the slope and only the folds grow.
+			const float F = Style.Fold;
+			// Where it is gathered in to the cord, the folds are pushed together and stand out further.
+			const float Bunch = Style.Tie > 0.f ? 1.f + 0.6f * FMath::Exp(-FMath::Square((T - Style.Tie) / 0.07f)) : 1.f;
+			float Depth = 2.3f * F * Open * Bunch * FMath::Sin((Across / G + Wander) * (2.f * PI / (17.f * F)) + Phase);
+			Depth += 1.1f * F * Open * FMath::Sin((Across / G - Wander * 0.6f) * (2.f * PI / (41.f * F)) + Phase * 0.7f);
 			// And a little noise on top, because a fold that repeats exactly is a corrugation.
-			Depth += 0.9f * Open * FMath::PerlinNoise2D(FVector2D(Across * 0.085f + Grain, T * 2.3f));
+			Depth += 0.9f * F * Open * FMath::PerlinNoise2D(FVector2D(Across / G * 0.085f / F + Grain, T * 2.3f));
 			Depth -= 2.4f * T;                                         // the hem hangs away from the wall
-			return FVector(Depth, U * SignedWidth, -T * Length);
+			return FVector(Depth, U * SignedWidth * G, -T * Length);
 		};
 
 		const int32 Grid = Cols * Rows;
@@ -230,6 +301,94 @@ namespace
 		Mesh->bUseAsyncCooking = false;
 		Mesh->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, UVs, TArray<FLinearColor>(), Tangents, /*bCreateCollision*/ false);
 		Mesh->SetMaterial(0, Cloth);
+
+		// The trim, as a second section: a braid along the hem and a fringe hanging from it, wherever
+		// the hem has survived. Where a bite took the hem away it took the fringe with it, so the gold
+		// runs in stretches with the rot between them, which is the damage drawn in the trim.
+		if (Style.Trim)
+		{
+			TArray<FVector> TV;
+			TArray<FVector> TN;
+			TArray<int32> TT;
+			auto Quad = [&](const FVector& A, const FVector& B, const FVector& C, const FVector& D)
+			{
+				const int32 Base = TV.Num();
+				TV.Append({ A, B, C, D });
+				const FVector N(-1.f, 0.f, 0.f);
+				TN.Append({ N, N, N, N });
+				// Both windings, the normal forced to the room: a thread is seen from both sides.
+				TT.Append({ Base, Base + 1, Base + 2, Base, Base + 2, Base + 3, Base, Base + 2, Base + 1, Base, Base + 3, Base + 2 });
+			};
+			const float RowStep = 1.f / (Rows - 1);
+			const float Braid = 3.2f / Length;
+			FVector PrevHem, PrevTop;
+			bool bPrevIntact = false;
+			for (int32 Col = 0; Col < Cols; ++Col)
+			{
+				const float U = Col / static_cast<float>(Cols - 1);
+				const bool bIntact = Bitten(U) < 0.02f;
+				// The last row of cloth in this column, which is where the quads stopped.
+				const float THem = FMath::FloorToFloat(Keep(U) / RowStep) * RowStep;
+				const FVector Hem = Surface(U, THem) + FVector(-0.4f, 0.f, 0.f);
+				const FVector Top = Surface(U, FMath::Max(THem - Braid, 0.f)) + FVector(-0.4f, 0.f, 0.f);
+				if (bIntact)
+				{
+					if (bPrevIntact)
+					{
+						Quad(PrevTop, Top, Hem, PrevHem);
+					}
+					// A thread of the fringe at every column, its length wandering, every so often one
+					// gone; a heavier tassel-end every sixth.
+					const uint32 H = (uint32)(Col * 2654435761u + (uint32)Seed * 40503u);
+					if ((H >> 8) % 9 != 0)
+					{
+						const float Drop = (Col % 6 == 0 ? 11.f : 7.5f) + ((H >> 12) % 100) * 0.02f;
+						const float W = Col % 6 == 0 ? 0.9f : 0.45f;
+						const FVector Sway(-0.3f * ((H >> 4) % 3), ((H >> 16) % 5 - 2) * 0.15f, 0.f);
+						Quad(Hem + FVector(0.f, -W * 0.5f, 0.f), Hem + FVector(0.f, W * 0.5f, 0.f),
+							Hem + Sway + FVector(0.f, W * 0.5f, -Drop), Hem + Sway + FVector(0.f, -W * 0.5f, -Drop));
+					}
+				}
+				PrevHem = Hem;
+				PrevTop = Top;
+				bPrevIntact = bIntact;
+			}
+			// The tieback cord: from its hook on the wall beside the drape's outer edge, across the front
+			// of the gathered cloth a finger in front of its folds, round its inner edge, back across
+			// behind it and home to the hook. Swept along the cloth's own surface at the tie, so it
+			// hugs every fold instead of standing round them as a hoop.
+			if (Style.Tie > 0.f)
+			{
+				const float Out = -1.6f;
+				const float Sag = 0.035f;
+				TArray<FVector> Path;
+				const FVector Hook(WallX - 1.f, -FMath::Sign(SignedWidth) * 5.f, -Style.Tie * Length + 3.f);
+				Path.Add(Hook);
+				constexpr int32 Steps = 24;
+				for (int32 k = 0; k <= Steps; ++k)
+				{
+					const float U = k / static_cast<float>(Steps);
+					// A cord drawn round a gather sits a little lower at the front, where it is pulled.
+					Path.Add(Surface(U, Style.Tie + Sag * FMath::Sin(PI * U)) + FVector(Out - 1.2f, 0.f, 0.f));
+				}
+				for (int32 k = Steps; k >= 0; --k)
+				{
+					const float U = k / static_cast<float>(Steps);
+					Path.Add(Surface(U, Style.Tie) + FVector(Thickness + 1.4f, 0.f, 0.f));
+				}
+				Path.Add(Hook);
+				AppendDrapeCord(TV, TN, TT, Path, 0.75f);
+				if (OutTieFront)
+				{
+					*OutTieFront = Surface(0.5f, Style.Tie + Sag) + FVector(Out - 2.f, 0.f, 0.f);
+				}
+			}
+			if (TV.Num() > 0)
+			{
+				Mesh->CreateMeshSection_LinearColor(1, TV, TT, TN, TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), /*bCreateCollision*/ false);
+				Mesh->SetMaterial(1, Style.Trim);
+			}
+		}
 		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Mesh->RegisterComponent();
 		Owner->AddInstanceComponent(Mesh);
@@ -593,7 +752,7 @@ void AStormWindowActor::BuildWindow()
 
 	// Curtain pole and its brackets. Iron, and long out of true.
 	const float PoleZ = Setup.TopHeight + 20.f;
-	const float PoleX = InnerX - 16.f;
+	const float PoleX = InnerX - Setup.PoleProud;
 	Build.Cyl(FVector(PoleX, 0.f, PoleZ), FRotator(0.f, 0.f, 90.f), FVector(3.f, 3.f, Setup.OpeningWidth + 86.f), IronMat, /*bBlockingCollision*/ false);
 	for (int32 Side = 0; Side < 2; ++Side)
 	{
@@ -637,24 +796,58 @@ void AStormWindowActor::BuildWindow()
 		FRoomBuilder CurtainBuild(this, Pivot);
 
 		// One drape is longer than the other; nothing in this house is a matched pair any more.
-		// The width runs towards the middle of the window, which is local -SideSign.
-		const float DrapeLength = (Height + 30.f) * (Side == 0 ? 1.f : 0.88f);
+		// The width runs towards the middle of the window, which is local -SideSign. Floor-length
+		// drapes stop a fringe's length short of the boards.
+		const float DrapeLength = Setup.bDrapeToFloor ? PoleZ - 4.f - 12.f : (Height + 30.f) * (Side == 0 ? 1.f : 0.88f);
+		// Tied back a little higher on one side than the other, unless that side's cord has gone.
+		const bool bTied = Setup.DrapeTie > 0.f && Setup.DrapeTieGone != Side;
+		FDrapeStyle Style;
+		Style.Fold = Setup.DrapeFold;
+		Style.Tie = bTied ? Setup.DrapeTie + (Side == 0 ? 0.f : 0.035f) : 0.f;
+		Style.Trim = Setup.CurtainTrim;
 		// The tears come from the drape's own seed, not from Random, so a window with a seed of its own
 		// has to carry it in here too or its curtains are torn exactly where every other window's are.
-		BuildDrapeMesh(this, Pivot, ClothMat, -SideSign * 64.f, DrapeLength, (Side == 0 ? 1104 : 1955) + Setup.Seed % 100003);
+		FVector TieFront = FVector::ZeroVector;
+		BuildDrapeMesh(this, Pivot, ClothMat, -SideSign * Setup.DrapeWidth, DrapeLength, (Side == 0 ? 1104 : 1955) + Setup.Seed % 100003, Style,
+			&TieFront, Setup.PoleProud);
 
 		// A few threads still hanging where the hem tore away. These are boxes and have every
 		// right to be: a thread is a straight thin thing, which is the one shape a box is honest
-		// about.
+		// about. Not on a tied-back drape, whose cloth is drawn away from where they would hang;
+		// the numbers are drawn all the same.
 		for (int32 i = 0; i < 5; ++i)
 		{
 			const float Hang = Random.FRandRange(7.f, 30.f);
-			CurtainBuild.Box(
-				FVector(Random.FRandRange(-5.f, 2.f), -SideSign * Random.FRandRange(4.f, 58.f), -DrapeLength * Random.FRandRange(0.42f, 0.9f) - Hang * 0.5f),
-				FRotator(0.f, 0.f, Random.FRandRange(-11.f, 11.f)),
-				FVector(Random.FRandRange(0.6f, 1.8f), Random.FRandRange(0.8f, 2.4f), Hang),
-				ClothMat,
-				/*bBlockingCollision*/ false);
+			const FVector At(Random.FRandRange(-5.f, 2.f), -SideSign * Random.FRandRange(4.f, 58.f), -DrapeLength * Random.FRandRange(0.42f, 0.9f) - Hang * 0.5f);
+			const FRotator Turn(0.f, 0.f, Random.FRandRange(-11.f, 11.f));
+			const FVector Size(Random.FRandRange(0.6f, 1.8f), Random.FRandRange(0.8f, 2.4f), Hang);
+			if (Style.Tie <= 0.f && !Setup.bDrapeToFloor)
+			{
+				CurtainBuild.Box(At, Turn, Size, ClothMat, /*bBlockingCollision*/ false);
+			}
+		}
+
+		// The tieback's tassel, hanging off the front of the cord (the cord itself is swept round the
+		// cloth in BuildDrapeMesh). Where a side's cord has given way the drape just hangs loose: the
+		// cord and tassel lying on the boards under it were taken out on the user's notes.
+		if (Setup.CurtainTrim && bTied)
+		{
+			// A skirt of threads, a waist, a ball, a knot: a lathe from the skirt's hem up to the knot.
+			TArray<FVector2D> Tassel;
+			Tassel.Add(FVector2D(0.f, 0.f));
+			Tassel.Add(FVector2D(4.4f, 0.3f));
+			Tassel.Add(FVector2D(3.9f, 5.f));
+			Tassel.Add(FVector2D(3.0f, 12.f));
+			Tassel.Add(FVector2D(1.8f, 14.f));
+			Tassel.Add(FVector2D(1.3f, 15.f));
+			Tassel.Add(FVector2D(2.4f, 16.5f));
+			Tassel.Add(FVector2D(2.1f, 19.f));
+			Tassel.Add(FVector2D(0.8f, 20.5f));
+			Tassel.Add(FVector2D(0.f, 21.f));
+			const float Twist = Random.FRandRange(-4.f, 4.f);
+			// Built on the pivot, so it swings with the cloth it hangs from.
+			CurtainBuild.Cyl(TieFront - FVector(0.f, 0.f, 5.f), FRotator::ZeroRotator, FVector(0.8f, 0.8f, 10.f), Setup.CurtainTrim, false);
+			CurtainBuild.Lathe(TieFront - FVector(0.f, 0.f, 10.f + 21.f), FRotator(0.f, 0.f, Twist), Tassel, 16, Setup.CurtainTrim, 34.f);
 		}
 
 		// Damp, in the cloth rather than on it. Aimed along +X, which is into the front faces of
@@ -984,7 +1177,7 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 		// Same sky, same instant: the flash is read from the lead, not rolled.
 		FlashAlpha = Lead->GetFlashAlpha();
 		StrikeIntensity = Lead->GetStrikeIntensity();
-		const float GlowScale = bViewUnderground ? 0.f : (Setup.bOwnView ? 900.f : 260.f);
+		const float GlowScale = bViewUnderground ? 0.f : (Setup.bOwnView ? 900.f : 260.f) * Setup.GlowScale;
 		LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * GlowScale);
 		SkyPortal->SetIntensity(SkyPortalCandelas * Setup.PortalScale * (1.f + FlashAlpha * 9.f));
 		if (Setup.bOwnView)

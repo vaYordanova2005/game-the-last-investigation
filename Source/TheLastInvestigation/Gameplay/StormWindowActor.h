@@ -11,6 +11,7 @@ class UDirectionalLightComponent;
 class UPointLightComponent;
 class URectLightComponent;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
 struct FRoomSurface;
 
 /** Geometry of the wall opening this storm is seen through, handed over by the room that spawns it. */
@@ -57,6 +58,34 @@ struct FStormWindowSetup
 
 	/** Multiplies the sky portal, for an opening whose glass lets through less than a clear pane. */
 	float PortalScale = 1.f;
+
+	/**
+	 * Multiplies a follower's flash glow. The glow of a window without a view of its own is an
+	 * unshadowed point light 24m across, so it lights every room near it through the walls (the 10-05
+	 * cellar note). Zero leaves the strike to the sky portal in the opening, which floods tenfold with
+	 * the flash and lights only through the glass: for windows built next to rooms that already have
+	 * their own (the library's three, beside the girl's room and over the living room).
+	 */
+	float GlowScale = 1.f;
+
+	// The drapes' cut. The defaults are every window's linen curtains as they have always been; the
+	// library's are theatre velvet: wider, in deep folds, to the floor, tied back on gold cords, gold
+	// fringe along what is left of the hem.
+
+	/** How far each drape reaches from the side of the opening towards its middle. */
+	float DrapeWidth = 64.f;
+	/** Scales the folds' depth and spacing together, so the slope (and so the look of cloth) holds. */
+	float DrapeFold = 1.f;
+	/** How far down the drop each drape is tied back, as a fraction; zero hangs it straight. */
+	float DrapeTie = 0.f;
+	/** The side (0 or 1) whose tieback has given way: that drape hangs loose. */
+	int32 DrapeTieGone = -1;
+	/** Down to the floor, rather than thirty centimetres past the opening. */
+	bool bDrapeToFloor = false;
+	/** How far the pole stands out from the wall: further for heavy folds that must clear the sill. */
+	float PoleProud = 16.f;
+	/** Fringe, braid, cord and tassels; null for none. */
+	UMaterialInterface* CurtainTrim = nullptr;
 
 	/**
 	 * Seed for this window's own layout: which panes are broken, where the curtains are torn, where

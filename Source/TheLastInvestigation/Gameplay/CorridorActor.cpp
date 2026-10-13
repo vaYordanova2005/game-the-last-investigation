@@ -6,6 +6,7 @@
 #include "DustMotesComponent.h"
 #include "GrandStaircaseActor.h"
 #include "NurseryActor.h"
+#include "LibraryActor.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -80,8 +81,8 @@ void ACorridorActor::Configure(const FCorridorSetup& InSetup, AStormWindowActor*
 		{ ESide::North, -690.f, DoorHalf, HallDoorHeight },
 		{ ESide::North, -1060.f, DoorHalf, HallDoorHeight },
 		{ ESide::South, NurseryDoorU, DoorHalf, HallDoorHeight },
-		{ ESide::South, -470.f, DoorHalf, HallDoorHeight },
-		{ ESide::South, -880.f, DoorHalf, HallDoorHeight },
+		// The library's arch: its rectangle, which the arch's spandrels fill above the curve.
+		{ ESide::South, LibraryArchU, ALibraryActor::ArchHalf, ALibraryActor::ArchCrown },
 		{ ESide::East, CenterY(), WindowWidth * 0.5f, WindowTop, WindowSill },
 		{ ESide::West, CenterY(), StairOpeningWidth * 0.5f, StairOpeningHeight },
 	};
@@ -116,6 +117,7 @@ void ACorridorActor::BeginPlay()
 	SpawnWindow();
 	SpawnStairHall();
 	SpawnNursery();
+	SpawnLibrary();
 	BuildClues();
 }
 
@@ -339,7 +341,9 @@ void ACorridorActor::BuildShell(FRoomBuilder& Build)
 		FVector(Setup.StartDoorWidth, T + 4.f, 6.f), MatRoughWood);
 	for (const FOpening& Opening : Openings)
 	{
-		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || Opening.CenterU == Setup.StartDoorCenterX || Opening.BottomV > 0.f)
+		// The library's arch has its own sill, in the arch model.
+		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || Opening.CenterU == Setup.StartDoorCenterX || Opening.BottomV > 0.f
+			|| IsLibraryArch(Opening))
 		{
 			continue;
 		}
@@ -357,9 +361,9 @@ void ACorridorActor::BuildBackRooms(FRoomBuilder& Build)
 	const float H = Setup.Height;
 	for (const FOpening& Opening : Openings)
 	{
-		// The girl's room is a real room (ANurseryActor), not a black box.
+		// The girl's room and the library are real rooms (ANurseryActor, ALibraryActor), not black boxes.
 		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || Opening.CenterU == Setup.StartDoorCenterX
-			|| (Opening.Side == ESide::South && Opening.CenterU == NurseryDoorU))
+			|| (Opening.Side == ESide::South && Opening.CenterU == NurseryDoorU) || IsLibraryArch(Opening))
 		{
 			continue;
 		}
@@ -715,7 +719,8 @@ void ACorridorActor::BuildDoorCasings(FRoomBuilder& Build)
 	// same casing and nothing grander: it is important because of what is in front of it.
 	for (const FOpening& Opening : Openings)
 	{
-		if (Opening.Side != ESide::North && Opening.Side != ESide::South)
+		// The library's arch carries its own architrave, round the curve (library_arch).
+		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || IsLibraryArch(Opening))
 		{
 			continue;
 		}
@@ -945,7 +950,8 @@ void ACorridorActor::BuildPortraits(FRoomBuilder& Build)
 
 	// Where one more hung: the clean rectangle of wall the dirt never reached. The one place a
 	// hard edge is right. Plus the nail.
-	const float GhostU = -1000.f;
+	// Kept clear of the library arch's architrave (out to -974) and of the portrait at -1080.
+	const float GhostU = -1012.f;
 	Build.Mark(FVector(GhostU, SouthFace() - 0.2f, 170.f), FRotator(0.f, 0.f, -90.f), FVector2D(50.f, 66.f), MatWallpaper);
 	Build.Sph(FVector(GhostU, SouthFace() - 1.f, 216.f), 1.6f, MatIron);
 }
@@ -1021,16 +1027,21 @@ void ACorridorActor::BuildDebris(FRoomBuilder& Build)
 	// block the walk, and a lump of plaster a boot catches on is a bug, not atmosphere.
 	for (int32 i = 0; i < 46; ++i)
 	{
+		// Every number drawn before the test, in order, so which lumps are skipped never moves the rest
+		// (09-29); the openings changed when the library's arch replaced two doors.
 		const bool bNorth = Random.FRand() < 0.5f;
-		const FVector2D Spot(Random.FRandRange(WestFace + 20.f, EastFace() - 20.f),
-			bNorth ? NorthFace() + Random.FRandRange(4.f, 30.f) : SouthFace() - Random.FRandRange(4.f, 30.f));
+		const float SpotX = Random.FRandRange(WestFace + 20.f, EastFace() - 20.f);
+		const float SpotIn = Random.FRandRange(4.f, 30.f);
+		const float S = Random.FRandRange(1.5f, 7.f);
+		const FRotator Tumble(Random.FRandRange(-30.f, 30.f), Random.FRandRange(0.f, 360.f), Random.FRandRange(-30.f, 30.f));
+		const float SX = Random.FRandRange(0.8f, 1.8f);
+		const float SY = Random.FRandRange(0.8f, 1.5f);
+		const FVector2D Spot(SpotX, bNorth ? NorthFace() + SpotIn : SouthFace() - SpotIn);
 		if (FloorHole.IsInside(Spot) || IsOnOpening(bNorth ? ESide::North : ESide::South, Spot.X, 1.f, 10.f, 0.f))
 		{
 			continue;
 		}
-		const float S = Random.FRandRange(1.5f, 7.f);
-		Build.Box(FVector(Spot.X, Spot.Y, 3.f + S * 0.35f), FRotator(Random.FRandRange(-30.f, 30.f), Random.FRandRange(0.f, 360.f), Random.FRandRange(-30.f, 30.f)),
-			FVector(S * Random.FRandRange(0.8f, 1.8f), S * Random.FRandRange(0.8f, 1.5f), S * 0.6f), MatRubble, false);
+		Build.Box(FVector(Spot.X, Spot.Y, 3.f + S * 0.35f), Tumble, FVector(S * SX, S * SY, S * 0.6f), MatRubble, false);
 	}
 
 	for (int32 i = 0; i < 22; ++i)
@@ -1181,8 +1192,8 @@ void ACorridorActor::SpawnDoors()
 		{ true,  -690.f,  0.f,  FLinearColor(0.255f, 0.279f, 0.295f), true,  false, 0.f },
 		{ true,  -1060.f, 24.f, FLinearColor(0.215f, 0.232f, 0.245f), false, false, 0.f },
 		{ false, NurseryDoorU, 6.f, FLinearColor(0.300f, 0.300f, 0.290f), false, true, 89.f },
-		{ false, -470.f,  17.f, FLinearColor(0.240f, 0.250f, 0.262f), true,  false, 0.f },
-		{ false, -880.f,  0.f,  FLinearColor(0.330f, 0.330f, 0.320f), false, false, 0.f },
+		// The two south doors past hers are gone: one is the library's open arch, and the other
+		// stretch of wall has the library behind it.
 	};
 
 	int32 Seed = 4101;
@@ -1272,6 +1283,27 @@ void ACorridorActor::SpawnNursery()
 		NurserySetup.CorridorHeight = Setup.Height;
 		Nursery->Configure(NurserySetup, LeadStorm);
 		Nursery->FinishSpawning(Transform);
+	}
+}
+
+void ACorridorActor::SpawnLibrary()
+{
+	// The library, behind the south wall from the girl's room to the end of the corridor, through
+	// the open arch. Same frame as the corridor; its north face is the far side of the corridor's
+	// south wall, its east face the far side of her west wall.
+	const FTransform Transform = GetActorTransform();
+	Library = GetWorld()->SpawnActorDeferred<ALibraryActor>(ALibraryActor::StaticClass(), Transform, this);
+	if (Library)
+	{
+		FLibrarySetup LibrarySetup;
+		LibrarySetup.NorthFace = SouthFace() + Setup.WallThickness;
+		LibrarySetup.WestX = WestFace;
+		LibrarySetup.EastX = EastFace() - ANurseryActor::RoomWidth - Setup.WallThickness;
+		LibrarySetup.WallThickness = Setup.WallThickness;
+		LibrarySetup.ArchX = LibraryArchU;
+		LibrarySetup.CorridorHeight = Setup.Height;
+		Library->Configure(LibrarySetup, LeadStorm);
+		Library->FinishSpawning(Transform);
 	}
 }
 
@@ -1436,9 +1468,10 @@ void ACorridorActor::BuildClues()
 		}
 	}
 
-	// The small door's frame: pencil lines up the hinge-side casing, a child measured year after
-	// year, stopping a little over a metre up.
-	if (AClueActor* Chart = SpawnClue(FVector(-880.f - HallDoorWidth * 0.5f - 5.5f, SouthFace() - 3.f, 0.f), FRotator::ZeroRotator))
+	// Pencil lines up the west jamb of the library's arch, on the flat of its architrave: a child
+	// measured year after year, stopping a little over a metre up. They were on the casing of the
+	// small door that stood here; the arch's architrave face is 1.5 to 1.9 proud of the plaster.
+	if (AClueActor* Chart = SpawnClue(FVector(LibraryArchU - ALibraryActor::ArchHalf - 5.2f, SouthFace() - 1.9f, 0.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Chart, Chart->GetRootScene());
 		const float Heights[] = { 74.f, 83.f, 91.f, 98.f, 104.f, 111.f };
