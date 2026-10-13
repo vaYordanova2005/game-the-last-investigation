@@ -81,5 +81,15 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | `Art/Source/Models/wine_*`, `cellar_*` | `Tools/make_wine_cellar.py` (Blender) | the wine cellar's vault, piers, racks, bottles, glassware and furniture |
 | `Art/Source/Textures/wine_paper_*` | `Tools/make_cellar_art.py` | the wine labels, the cellar book, the tasting notebook, the bin chart, the engraving |
 | `Art/Source/Textures/wine_brands_*` | `Tools/make_cellar_art.py` | the vineyards' brands burned into the crates |
+| `Art/Source/Models/library_*` | `Tools/make_library.py` (Blender) | the library's bookcases, rows of books, arch, window heads, cornice, fireplace, desk and everything on it, globe, gramophone, chess table, furniture, frames, carpet |
+| `Art/Source/Textures/library_*` | `Tools/make_library_art.py` | the spines, the papers on the desk and the walls, the two maps, the globe's gores, the two portraits, the oriental carpet |
 
-The stained-glass inscription, the wine labels and the crate brands are set in Cinzel (SIL Open Font License, `Content/Fonts/OFL.txt`).
+The stained-glass inscription, the wine labels, the crate brands and the library's spines, maps and calendar are set in Cinzel (SIL Open Font License, `Content/Fonts/OFL.txt`).
+
+## Natural Earth (public domain)
+
+https://www.naturalearthdata.com — public domain: no permission needed, commercial use allowed.
+
+| File | Used for |
+|---|---|
+| `ne_50m_land.geojson` (1:50m land polygons, via github.com/nvkelso/natural-earth-vector) | the coastlines on the library's globe and its framed map of the world; kept in `Art/Source/Reference/`, fetched by `Tools/make_library_art.py` if missing |
