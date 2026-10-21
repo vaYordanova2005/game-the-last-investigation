@@ -83,8 +83,10 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | `Art/Source/Textures/wine_brands_*` | `Tools/make_cellar_art.py` | the vineyards' brands burned into the crates |
 | `Art/Source/Models/library_*` | `Tools/make_library.py` (Blender) | the library's bookcases, rows of books, arch, window heads, cornice, fireplace, desk and everything on it, globe, gramophone, chess table, furniture, frames, carpet |
 | `Art/Source/Textures/library_*` | `Tools/make_library_art.py` | the spines, the papers on the desk and the walls, the two maps, the globe's gores, the two portraits, the oriental carpet |
+| `Art/Source/Models/music_*` | `Tools/make_music_room.py` (Blender) | the music room's arch, cello on its stand, violin in its open case, bows, guitar on its stand, music stands, metronome, crystal chandelier, ceiling rose and mouldings, instrument cabinet, shelf of music, sideboard, side table, window bench, frames, photographs, dried flowers, the open score |
+| `Art/Source/Textures/music_*` | `Tools/make_music_art.py` | the emerald velvet, the silk damask, the scores, manuscript, programme and certificates, the photographs, the spines of the music, the three paintings |
 
-The stained-glass inscription, the wine labels, the crate brands and the library's spines, maps and calendar are set in Cinzel (SIL Open Font License, `Content/Fonts/OFL.txt`).
+The stained-glass inscription, the wine labels, the crate brands, the library's spines, maps and calendar and the music room's scores, programme, certificates and spines are set in Cinzel (SIL Open Font License, `Content/Fonts/OFL.txt`).
 
 ## Natural Earth (public domain)
 
