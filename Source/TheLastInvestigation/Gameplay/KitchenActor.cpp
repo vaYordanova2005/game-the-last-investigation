@@ -528,7 +528,7 @@ void AKitchenActor::BuildWallFinish(FRoomBuilder& Build)
 					break;
 				}
 				const float Bottom = Dado + 6.f + Random.FRandRange(0.f, 30.f);
-				const float Top = Z1 - 40.f - Random.FRandRange(0.f, 70.f) - (Strip == 3 ? 90.f : 0.f);
+				const float Top = Z1 - 40.f - Random.FRandRange(0.f, 40.f) - (Strip == 3 ? 40.f : 0.f);
 				WallFill(Build, R.Wall, A, A + StripWidth - 0.3f, Bottom, Top, MatWallpaper, 0.5f);
 			}
 		}
@@ -1455,7 +1455,10 @@ void AKitchenActor::BuildPanRack(FRoomBuilder& Build)
 	const FVector C = TableCentre();
 	RackPivot = KitchenPivot(this, RoomRoot, FVector(MidX(), C.Y, CeilingZ() - 22.f), FRotator::ZeroRotator, TEXT("PanRack"));
 	FRoomBuilder R(this, RackPivot);
-	const float Drop = 120.f;
+	// Short under the lower ceiling: the rack hangs from beams 288 up, and its longest pan reaches 61
+	// under the bars (hook 7, handle 22, frying pan 32), so this keeps every pan over 200, clear of
+	// head height. On chains of 120 they hung at eye level.
+	const float Drop = 26.f;
 	const float HalfL = 95.f;
 	const float HalfW = 24.f;
 	const float ChainX = 60.f;
@@ -1571,7 +1574,7 @@ void AKitchenActor::BuildDamage(FRoomBuilder& Build)
 		for (int32 i = 0; i < 2; ++i)
 		{
 			const float U = Random.FRandRange(U0 + 60.f, U1 - 60.f);
-			const float Z = Random.FRandRange(F + 290.f, C - 50.f);
+			const float Z = Random.FRandRange(F + 200.f, C - 50.f);
 			if (!IsOnOpening(Wall, U, Z, 60.f, 60.f))
 			{
 				Stain(Wall, U, Z, Random.FRandRange(60.f, 120.f), Random.FRandRange(50.f, 110.f), RoomSurfaces::Substrate, SubstrateTint, Random.FRandRange(0.85f, 1.f), Random.FRandRange(0.f, 360.f), 0.9f);

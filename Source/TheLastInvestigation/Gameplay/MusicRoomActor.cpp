@@ -46,11 +46,10 @@ namespace
 		const TCHAR* DriedHydrangea = TEXT("music_dried_hydrangea");
 		const TCHAR* Petals = TEXT("music_petals");
 		const TCHAR* OpenScore = TEXT("music_open_score");
-		// Shared with the library across the corridor: one joiner and one cabinetmaker did the house.
+		// Shared with the library across the stairwell: one joiner and one cabinetmaker did the house.
 		const TCHAR* WindowArch = TEXT("library_window_arch");
 		const TCHAR* Cornice = TEXT("library_cornice");
 		const TCHAR* SideChair = TEXT("library_side_chair");
-		const TCHAR* Pedestal = TEXT("library_pedestal");
 	}
 
 	/**
@@ -191,7 +190,7 @@ void AMusicRoomActor::Configure(const FMusicRoomSetup& InSetup, AStormWindowActo
 		FVector((EastX() - WestX()) * 0.47f, (SouthY() - NorthY()) * 0.47f, RoomHeight * 0.46f),
 		FVector(MidX(), MidY(), RoomHeight * 0.5f));
 
-	Openings = { { EWall::South, Setup.ArchX, ArchHalf, 0.f, ArchCrown } };
+	Openings = { { EWall::South, ArchX, ArchHalf, 0.f, ArchCrown } };
 	for (const float X : WindowXs)
 	{
 		Openings.Add({ EWall::North, X, WindowHalf, WindowSill, WindowTop });
@@ -202,7 +201,7 @@ void AMusicRoomActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Its own stream, so tuning this room never relays the corridor's or the library's.
+	// Its own stream, so tuning this room never relays the hall's or the library's.
 	Random.Initialize(19750621);
 
 	FRoomBuilder Build(this, RoomRoot);
@@ -265,7 +264,7 @@ void AMusicRoomActor::CacheMaterials(FRoomBuilder& Build)
 	// the library, and kept warm (the house's rule: the only fill is the cold windows, and a neutral
 	// wall comes back blue in front of them).
 	MatSilk = Atlas(TEXT("music_damask"), FLinearColor(0.56f, 0.60f, 0.72f), 1.2f);
-	// The corridor's own plaster, on the corridor face of the arch.
+	// The plaster at the corridor's values, which the stair hall shares, on the hall's face of the arch.
 	MatCorridorPlaster = Sheet(RoomSurfaces::Plaster, FLinearColor(0.150f, 0.142f, 0.130f));
 	// A tall plaster ceiling a long way from three windows, as the library's; its rose, its beads and
 	// its cornice in the same plaster, on the models' own UVs.
@@ -287,8 +286,6 @@ void AMusicRoomActor::CacheMaterials(FRoomBuilder& Build)
 	MatLeather = Sheet(RoomSurfaces::Leather, FLinearColor(0.16f, 0.20f, 0.30f), 1.6f);
 	MatLeatherGreen = Sheet(RoomSurfaces::Leather, FLinearColor(0.26f, 1.35f, 3.6f), 1.4f);
 	MatVelvet = Sheet(MusicVelvet, MusicVelvetTint, 1.15f);
-	// The pedestal's grey veined stone, as the library's.
-	MatMarble = Sheet(RoomSurfaces::Marble, FLinearColor(0.21f, 0.20f, 0.19f), 0.9f);
 	MatBrass = Sheet(RoomSurfaces::RustedIron, FLinearColor(1.0f, 0.36f, 0.24f), 0.7f);
 	MatIron = Build.Surface(RoomSurfaces::RustedIron, FLinearColor(0.847f, 0.448f, 0.703f));
 	MatWax = Build.Flat(FLinearColor(0.34f, 0.30f, 0.22f), 0.55f);
@@ -725,20 +722,16 @@ void AMusicRoomActor::BuildShell(FRoomBuilder& Build)
 	const float Z0 = -20.f;
 	const float Z1 = RoomHeight + 10.f;
 
-	// Solid, colliding and never seen. Below what it stands on, every wall here is somebody else's:
-	// the west wall is the kitchen's east wall from the façade to the hall and the stair hall's from
-	// there to the corridor, the east wall the bedroom's west wall, the south wall the corridor's
-	// north wall. Only what is over those is this room's; north of the bedroom the east wall is the
-	// house's outside wall and goes from the floor.
+	// Solid, colliding and never seen. The south wall up to the top of the stair hall's north wall is
+	// the hall's (it cuts the arch): only what is over it is this room's. The west and east walls go
+	// from the floor: below it they stand on the kitchen's, and nothing is beside them up here.
 	auto Wall = [&](const FVector& Min, const FVector& Max)
 	{
 		Build.Box((Min + Max) * 0.5f, FRotator::ZeroRotator, Max - Min, MatShell);
 	};
-	Wall(FVector(WestX() - T, NorthY() - T, Setup.KitchenWallTop - 5.f), FVector(WestX(), Setup.KitchenSouthY, Z1));
-	Wall(FVector(WestX() - T, Setup.KitchenSouthY, Setup.HallWallTop - 5.f), FVector(WestX(), SouthY() + T, Z1));
-	Wall(FVector(EastX(), NorthY() - T, Z0), FVector(EastX() + T, -Setup.BedroomHalfDepth, Z1));
-	Wall(FVector(EastX(), -Setup.BedroomHalfDepth, Setup.BedroomHeight - 5.f), FVector(EastX() + T, SouthY() + T, Z1));
-	Wall(FVector(WestX() - T, SouthY(), Setup.CorridorHeight - 5.f), FVector(EastX() + T, SouthY() + T, Z1));
+	Wall(FVector(WestX() - T, NorthY() - T, Z0), FVector(WestX(), SouthY() + T, Z1));
+	Wall(FVector(EastX(), NorthY() - T, Z0), FVector(EastX() + T, SouthY() + T, Z1));
+	Wall(FVector(WestX() - T, SouthY(), Setup.HallWallTop - 5.f), FVector(EastX() + T, SouthY() + T, Z1));
 	// The façade, cut round its windows.
 	TArray<FBox2D> WindowHoles;
 	for (const FOpening& Opening : Openings)
@@ -968,8 +961,6 @@ void AMusicRoomActor::BuildEnsemble(FRoomBuilder& Build)
 		{ { TEXT("Varnish"), MatVarnish }, { TEXT("Shadow"), F(TEXT("Shadow")) }, { TEXT("Ebony"), F(TEXT("Ebony")) }, { TEXT("Maple"), F(TEXT("Maple")) },
 		  { TEXT("String"), F(TEXT("String")) }, { TEXT("Mahogany"), MatMahogany }, { TEXT("Felt"), F(TEXT("Felt")) } });
 	Blocker(Build, CelloSeat() + FVector(0.f, 0.f, 68.f), FVector(52.f, 52.f, 136.f), 24.f);
-	// A web from the cello's scroll to the chair's back, years undisturbed.
-	Build.Add(FRoomShapes::Plane(), (CelloSeat() + CellistChairSeat()) * 0.5f + FVector(0.f, 0.f, 96.f), FRotator(0.f, -78.f, 90.f), FVector(52.f, 30.f, 1.f), MatWeb, false);
 
 	// The violinist's iron stand, an orchestral score open on its desk; her chair beside it with the
 	// bow laid across the seat where she put it down.
@@ -996,21 +987,8 @@ void AMusicRoomActor::BuildEnsemble(FRoomBuilder& Build)
 		  { TEXT("Iron"), MatIron }, { TEXT("Felt"), F(TEXT("Felt")) } });
 	Blocker(Build, GuitarSeat() + FVector(0.f, 0.f, 52.f), FVector(40.f, 40.f, 104.f), 58.f);
 	Build.Add(FRoomShapes::Plane(), GuitarSeat() + FVector(0.f, 0.f, 8.f), FRotator(0.f, 58.f, 90.f), FVector(28.f, 14.f, 1.f), MatWeb, false);
-
-	// The bust of a composer on its column in the corner past the bench, turned to the room.
-	const FVector Bust = BustSeat();
-	UStaticMeshComponent* Pedestal = Place(Build, MusicProps::Pedestal, Bust, FRotator(0.f, 20.f, 0.f), { { TEXT("Marble"), MatMarble }, { TEXT("Shadow"), F(TEXT("Shadow")) } });
-	KeepWallDecalsOff(Pedestal);
-	KeepFloorDustOff(Pedestal);
-	if (UStaticMeshComponent* Head = Build.PropSeated(RoomProps::Bust, Bust + FVector(0.f, 0.f, 112.f), FRotator(0.f, 24.f, 0.f), 52.f, false))
-	{
-		// marble_bust_01 is white marble, and white takes a tint: an old marble gone grey with the dust
-		// in its curls, held under a fifth.
-		FRoomShapes::TintSlots(Head, FLinearColor(0.22f, 0.21f, 0.19f));
-		KeepWallDecalsOff(Head);
-	}
-	Dust(Build, Bust + FVector(0.f, 0.f, 112.f), FVector2D(36.f, 36.f), 0.4f);
-	Blocker(Build, Bust + FVector(0.f, 0.f, 80.f), FVector(42.f, 42.f, 160.f));
+	// No bust in the corner past the bench: the same marble_bust_01 already stands in the hall and in
+	// the library (the user's call).
 }
 
 void AMusicRoomActor::BuildListening(FRoomBuilder& Build)
@@ -1121,21 +1099,6 @@ void AMusicRoomActor::BuildWestWall(FRoomBuilder& Build)
 
 	// A pile of scores on the boards between the cupboard and the shelf, left where they were put.
 	KeepFloorDustOff(Place(Build, MusicProps::BooksPile, FVector(WestX() + 22.f, -306.f, 0.f), FRotator(0.f, 98.f, 0.f), { { TEXT("Books"), MatBooks }, { TEXT("Paper"), MatPaperSheet } }));
-
-	// The long-case clock at the south end, stopped. vintage_grandfather_clock_01 faces its local +Y and
-	// its back is 18.8 behind its origin: a yaw of -90 turns its face to the room and its back to the wall.
-	if (UStaticMeshComponent* Clock = Build.Prop(RoomProps::LongcaseClock, ClockSeat() + FVector(19.8f, 0.f, 0.f), FRotator(0.f, Facing, 0.f), 0.f, false))
-	{
-		FRoomShapes::TintSlots(Clock, FLinearColor(0.42f, 0.38f, 0.34f), 0);
-		if (Clock->GetNumMaterials() > 1)
-		{
-			Clock->SetMaterial(1, Build.Glass(RoomPalette::GlassShard, 0.035f, 0.06f));
-		}
-		KeepWallDecalsOff(Clock);
-		KeepFloorDustOff(Clock);
-	}
-	Blocker(Build, ClockSeat() + FVector(22.f, 0.f, 110.f), FVector(44.f, 64.f, 220.f));
-	Dust(Build, ClockSeat() + FVector(22.f, 0.f, 219.f), FVector2D(64.f, 44.f), 0.45f);
 }
 
 void AMusicRoomActor::BuildEastWall(FRoomBuilder& Build)
@@ -1195,42 +1158,65 @@ void AMusicRoomActor::BuildEastWall(FRoomBuilder& Build)
 		Build.Sconce(WallPoint(EWall::East, U, 196.f, 0.f), 180.f, U < -300.f ? 9.f : 5.f, MatBrass, MatWax, F(TEXT("Shadow")));
 		KeepSconce(EWall::East, U, 196.f);
 	}
+
+	// North of the sideboard, over the guitar, the violin and the score on a table, in oils.
+	{
+		const FVector At = WallPoint(EWall::East, -566.f, 214.f, 0.f);
+		MusicNoDecals(Place(Build, MusicProps::FrameLandscape, At, FRotator(0.f, Facing, 0.f), { { TEXT("Gilt"), F(TEXT("Gilt")) }, { TEXT("Shadow"), F(TEXT("Shadow")) } }));
+		Picture(Build, TEXT("music_paintings"), MusicStillLife, 1024.f, At + In * 1.4f, In, LandscapeArtW, LandscapeArtH, FLinearColor(0.42f, 0.40f, 0.38f));
+		MusicNoDecals(Build.Sph(At + In * 1.f + FVector(0.f, 0.f, LandscapeArtH * 0.5f + 20.f), 1.6f, MatIron));
+	}
 }
 
 void AMusicRoomActor::BuildSouthWall(FRoomBuilder& Build)
 {
 	const float Facing = FacingYaw(EWall::South);
+	const FVector In = WallNormal(EWall::South);
 
-	// The arch from the corridor: one model through the wall, its corridor face painted like the
-	// corridor's casings and its room face a carved oak surround. It is drawn with the corridor at -Y;
-	// here the corridor is at +Y, so it is turned round. The corridor's trim is RoughWood at
-	// (0.370, 0.370, 0.360); this is its own instance, a hair off, with the tiling at one.
-	UMaterialInstanceDynamic* CorridorTrim = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.3707f, 0.370f, 0.360f));
-	MusicSheet(CorridorTrim);
-	if (UStaticMeshComponent* Arch = Place(Build, MusicProps::Arch, FVector(Setup.ArchX, SouthY() + Setup.WallThickness * 0.5f, 0.f), FRotator(0.f, 180.f, 0.f),
+	// The arch from the stair hall's north gallery: one model through the wall, its hall face cased
+	// like the hall's archway and its room face a carved oak surround. It is drawn with its outer face
+	// at -Y; here the hall is at +Y, so it is turned round. The hall's plaster is at the corridor's
+	// values, and its joinery the staircase oak, RoughWood at (0.290, 0.272, 0.250), here on its own
+	// instance a hair off with the tiling at one. No decals on it: the hall's damp is laid without a test.
+	UMaterialInstanceDynamic* HallTrim = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.2907f, 0.272f, 0.250f));
+	MusicSheet(HallTrim);
+	if (UStaticMeshComponent* Arch = Place(Build, MusicProps::Arch, FVector(ArchX, SouthY() + Setup.WallThickness * 0.5f, 0.f), FRotator(0.f, 180.f, 0.f),
 		{ { TEXT("Shadow"), F(TEXT("Shadow")) }, { TEXT("CorridorWall"), MatCorridorPlaster }, { TEXT("RoomWall"), MatPanelSheet },
-		  { TEXT("Oak"), MatOak }, { TEXT("Trim"), CorridorTrim } }))
+		  { TEXT("Oak"), MatOak }, { TEXT("Trim"), HallTrim } }))
 	{
 		Arch->SetReceivesDecals(false);
 	}
 	// The sill through the arch is the model's; the dust keeps off it and the surround's plinths.
-	FloorKeepOuts.Add(FBox2D(FVector2D(Setup.ArchX - ArchSurroundHalf, SouthY() - 60.f), FVector2D(Setup.ArchX + ArchSurroundHalf, SouthY() + 1.f)));
+	FloorKeepOuts.Add(FBox2D(FVector2D(ArchX - ArchSurroundHalf, SouthY() - 60.f), FVector2D(ArchX + ArchSurroundHalf, SouthY() + 1.f)));
 
-	// The two landscapes either side of the arch, a sconce between each and the arch.
-	struct FPainting { float U; FVector4f Rect; };
-	const FPainting Paintings[] = { { -1112.f, MusicStillLife }, { -598.f, MusicRiver } };
-	const FVector In = WallNormal(EWall::South);
-	for (const FPainting& P : Paintings)
+	// West of the arch, the long-case clock, stopped. vintage_grandfather_clock_01 faces its local +Y
+	// and its back is 18.8 behind its origin: turned to face out of this wall, its origin goes 19.8
+	// into the room so its back is on the plaster.
+	if (UStaticMeshComponent* Clock = Build.Prop(RoomProps::LongcaseClock, ClockSeat() + In * 19.8f, FRotator(0.f, Facing, 0.f), 0.f, false))
 	{
-		const FVector At = WallPoint(EWall::South, P.U, 214.f, 0.f);
+		FRoomShapes::TintSlots(Clock, FLinearColor(0.42f, 0.38f, 0.34f), 0);
+		if (Clock->GetNumMaterials() > 1)
+		{
+			Clock->SetMaterial(1, Build.Glass(RoomPalette::GlassShard, 0.035f, 0.06f));
+		}
+		KeepWallDecalsOff(Clock);
+		KeepFloorDustOff(Clock);
+	}
+	Blocker(Build, ClockSeat() + In * 22.f + FVector(0.f, 0.f, 110.f), FVector(64.f, 44.f, 220.f));
+	// Aimed down, the first size runs along world Y: 44 out from the wall, 64 along it (the 09-27 note).
+	Dust(Build, ClockSeat() + In * 22.f + FVector(0.f, 0.f, 219.f), FVector2D(44.f, 64.f), 0.45f);
+
+	// Between the clock and the arch, the river at dusk, and a sconce between it and the arch. The
+	// arch is close to the east wall: there is no wall beside it on that side.
+	{
+		const FVector At = WallPoint(EWall::South, -1760.f, 214.f, 0.f);
 		MusicNoDecals(Place(Build, MusicProps::FrameLandscape, At, FRotator(0.f, Facing, 0.f), { { TEXT("Gilt"), F(TEXT("Gilt")) }, { TEXT("Shadow"), F(TEXT("Shadow")) } }));
-		Picture(Build, TEXT("music_paintings"), P.Rect, 1024.f, At + In * 1.4f, In, LandscapeArtW, LandscapeArtH, FLinearColor(0.42f, 0.40f, 0.38f));
+		Picture(Build, TEXT("music_paintings"), MusicRiver, 1024.f, At + In * 1.4f, In, LandscapeArtW, LandscapeArtH, FLinearColor(0.42f, 0.40f, 0.38f));
 		MusicNoDecals(Build.Sph(At + In * 1.f + FVector(0.f, 0.f, LandscapeArtH * 0.5f + 20.f), 1.6f, MatIron));
 	}
-	for (const float Side : { -1.f, 1.f })
 	{
-		const float U = Setup.ArchX + Side * (ArchSurroundHalf + 44.f);
-		Build.Sconce(WallPoint(EWall::South, U, 200.f, 0.f), -90.f, Side < 0.f ? 6.f : 10.f, MatBrass, MatWax, F(TEXT("Shadow")));
+		const float U = ArchX - ArchSurroundHalf - 44.f;
+		Build.Sconce(WallPoint(EWall::South, U, 200.f, 0.f), -90.f, 6.f, MatBrass, MatWax, F(TEXT("Shadow")));
 		KeepSconce(EWall::South, U, 200.f);
 	}
 }
@@ -1241,7 +1227,7 @@ void AMusicRoomActor::BuildScatteredMusic(FRoomBuilder& Build)
 	// arch: the music stopped one day and nobody picked it up. Its own stream, every number drawn.
 	FRandomStream Sheets(6201);
 	const TCHAR* Rects[] = { TEXT("score_a"), TEXT("score_b"), TEXT("manuscript_a"), TEXT("score_b"), TEXT("score_a"), TEXT("cover"), TEXT("manuscript_a") };
-	const FVector2D Spots[] = { { -905.f, -360.f }, { -872.f, -318.f }, { -758.f, -372.f }, { -1012.f, -352.f }, { -690.f, -430.f }, { -940.f, -300.f }, { -862.f, 96.f } };
+	const FVector2D Spots[] = { { -1699.f, -360.f }, { -1668.f, -318.f }, { -1564.f, -372.f }, { -1797.f, -352.f }, { -1502.f, -430.f }, { -1731.f, -300.f }, { -1650.f, -180.f } };
 	for (int32 i = 0; i < UE_ARRAY_COUNT(Spots); ++i)
 	{
 		const float Turn = Sheets.FRandRange(0.f, 360.f);
@@ -1300,7 +1286,7 @@ void AMusicRoomActor::BuildFloorDust(FRoomBuilder& Build)
 		Build.Stain(RoomSurfaces::Damp, FVector(X, Y, MusicFloorDecalZ), FRotator(-90.f, 0.f, Roll), FVector2D(SizeU, SizeV), MusicDust, Opacity, 1.4f);
 	}
 	// Where the dust never settled: from the arch to the players' chairs, and to the armchairs.
-	const FVector2D Path[] = { { Setup.ArchX, 190.f }, { -870.f, 10.f }, { -860.f, -190.f }, { -720.f, -40.f } };
+	const FVector2D Path[] = { { ArchX, SouthY() - 70.f }, { -1500.f, -250.f }, { -1620.f, -390.f }, { -1720.f, -260.f } };
 	for (const FVector2D& P : Path)
 	{
 		Build.Stain(RoomSurfaces::Damp, FVector(P.X, P.Y, MusicFloorDecalZ), FRotator(-90.f, 0.f, 0.f), FVector2D(150.f, 80.f),
@@ -1415,12 +1401,11 @@ void AMusicRoomActor::BuildDamage(FRoomBuilder& Build)
 
 void AMusicRoomActor::SpawnWindows()
 {
-	// Three followers of the bedroom's storm in the north wall, on the façade the kitchen's windows are
-	// in a storey below and to the west. The kitchen's west window has a view of its own out there
-	// (sky, ground, trees), and from up here its ground three and a half metres down is right for an
-	// upper floor; this room's middle window adds its own trees and rain in front of it (bOwnTrees).
-	// No own view: a second sky and ground on one side of the house stand two worlds through each
-	// other (the 10-02 note), and its ground would run through the kitchen.
+	// Three followers of the bedroom's storm in the north wall, over the kitchen's windows. The
+	// kitchen's west window has a view of its own out there (sky, ground, trees), right in front of
+	// these, and from up here its ground three and a half metres down is right for an upper floor. No
+	// own view and no own trees: a second sky, ground or treeline on one stretch of the house stands
+	// two worlds through each other (the 10-02 note).
 	for (int32 i = 0; i < 3; ++i)
 	{
 		const FTransform Transform(FRotator(0.f, -90.f, 0.f),
@@ -1435,11 +1420,10 @@ void AMusicRoomActor::SpawnWindows()
 		WindowSetup.SillHeight = WindowSill;
 		WindowSetup.TopHeight = WindowTop;
 		WindowSetup.WallThickness = Setup.WallThickness;
-		WindowSetup.bOwnTrees = (i == 1);
 		// Three tall windows are a lot of sky, and this room is meant to be mostly dark (the library's).
 		WindowSetup.PortalScale = 0.38f;
-		// No through-the-walls glow: the bedroom is next door and the kitchen below, and both have
-		// windows of their own. The strike comes in through the glass, on the sky portals.
+		// No through-the-walls glow: the kitchen is below and the hall beside, and both have windows of
+		// their own. The strike comes in through the glass, on the sky portals.
 		WindowSetup.GlowScale = 0.f;
 		// Emerald velvet, heavy, to the floor, tied back on dark bronze cords; the middle window's
 		// left-hand cord has given way and that drape hangs loose, moving in what comes in round the

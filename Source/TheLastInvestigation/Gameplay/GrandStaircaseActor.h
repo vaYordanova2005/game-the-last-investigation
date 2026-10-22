@@ -14,6 +14,8 @@ class AHallDoorActor;
 class AClueActor;
 class ALivingRoomActor;
 class AKitchenActor;
+class ALibraryActor;
+class AMusicRoomActor;
 class ACellarActor;
 
 /** Where the stair hall meets the corridor, handed over by the corridor that spawns it. */
@@ -114,6 +116,22 @@ private:
 		float TopZ;
 	};
 
+	/**
+	 * An open arch off a side gallery, into the library over the living room (ALibraryActor, the south
+	 * wall) or the music room over the kitchen (AMusicRoomActor, the north wall): the room builds the
+	 * arch model, the hall cuts its rectangle and keeps its mouldings off the architrave. Its head is
+	 * a semi-ellipse, Half across and Rise up from the springing (a semicircle when the two are equal).
+	 */
+	struct FGalleryArch
+	{
+		EWall Wall;
+		float CenterU;
+		float Half;
+		float Spring;
+		float Rise;
+		float Architrave;
+	};
+
 	// Plan helpers, all in the room frame.
 	float EastX() const { return Setup.EastFace; }
 	float WestX() const { return Setup.EastFace - HallLength; }
@@ -186,6 +204,10 @@ private:
 	void SpawnKitchen();
 	/** The cellar under the hall, down the stair behind the door under the north flight (ACellarActor). */
 	void SpawnCellar();
+	/** The library over the living room, through the arch off the south gallery (ALibraryActor). */
+	void SpawnLibrary();
+	/** The music room over the kitchen, through the arch off the north gallery (AMusicRoomActor). */
+	void SpawnMusicRoom();
 
 	/** One flight: treads, risers, runner, stringers, and the invisible ramp that is walked on. */
 	void BuildFlight(FRoomBuilder& Build, const FVector& FootNosing, const FVector& Up, float Width, int32 Seed, bool bRunner);
@@ -206,6 +228,14 @@ private:
 	bool IsOnOpening(EWall Wall, float U, float Z, float HalfU, float HalfZ) const;
 	/** The rectangle [U0,U1] x [Z0,Z1] of one wall with every opening on it cut out. */
 	TArray<FBox2D> CutAround(EWall Wall, float U0, float U1, float Z0, float Z1) const;
+	/**
+	 * CutAround for a moulding (a rail, a band): a gallery arch is cut to the width of its architrave
+	 * at the moulding's foot rather than to its rectangle, so a rail stops at the architrave's edge
+	 * instead of running into it, and runs on over the spandrel where the head curves away from it.
+	 */
+	TArray<FBox2D> CutAroundTrim(EWall Wall, float U0, float U1, float Z0, float Z1) const;
+	/** How far either side of its middle a gallery arch's architrave reaches at height Z: 0 over its top. */
+	static float GalleryArchOuterHalf(const FGalleryArch& Arch, float Z);
 	float WallFace(EWall Wall) const;
 	FVector WallNormal(EWall Wall) const;
 	FVector WallPoint(EWall Wall, float U, float Z, float Proud) const;
@@ -239,6 +269,12 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<ACellarActor> Cellar;
 
+	UPROPERTY(Transient)
+	TObjectPtr<ALibraryActor> Library;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AMusicRoomActor> MusicRoom;
+
 	/** The chandelier hangs from this, and this is what the wind moves. */
 	UPROPERTY(Transient)
 	TObjectPtr<USceneComponent> ChandelierPivot;
@@ -252,6 +288,8 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> StainedGlass;
 
 	TArray<FOpening> Openings;
+	/** The library's and the music room's arches off the side galleries; each is in Openings as well, as its rectangle. */
+	TArray<FGalleryArch> GalleryArches;
 	FStairHallSetup Setup;
 	FRandomStream Random;
 	float ElapsedTime = 0.f;

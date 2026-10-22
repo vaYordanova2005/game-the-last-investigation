@@ -14,7 +14,7 @@ namespace
 {
 	/** The dado and the picture rail, above the floor. */
 	constexpr float LivingDado = 95.f;
-	constexpr float LivingPictureRail = 330.f;
+	constexpr float LivingPictureRail = 272.f;
 
 	/** Collision that only a walking man meets: the interaction trace and the camera pass through. */
 	void LivingPawnOnly(UStaticMeshComponent* Part)
@@ -831,7 +831,7 @@ void ALivingRoomActor::BuildTelevision(FRoomBuilder& Build)
 	// and the lantern finds itself in the screen before it finds anything else on this wall.
 	const float Face = BreastX();
 	const float H = HearthY();
-	const float CentreZ = FloorZ() + 235.f;
+	const float CentreZ = FloorZ() + 222.f;
 	const float Width = 168.f;
 	const float Height = 96.f;
 
@@ -1183,16 +1183,17 @@ void ALivingRoomActor::BuildWallFurniture(FRoomBuilder& Build)
 void ALivingRoomActor::BuildChandelier(FRoomBuilder& Build)
 {
 	// Chandelier_03 again, smaller than the hall's: the same maker, the same dust. It hangs from the
-	// rose over the carpet on a short chain, and the draught through the broken panes turns it.
+	// rose over the carpet on a short chain, and the draught through the broken panes turns it. Under
+	// the lower ceiling the chain is short and the body smaller, so its drops hang over head height.
 	const FVector Hook(LoungeX(), HearthY(), CeilingZ() - 9.f);
 	ChandelierPivot = LivingPivot(this, RoomRoot, Hook, FRotator::ZeroRotator, TEXT("ChandelierPivot"));
 	FRoomBuilder Hang(this, ChandelierPivot);
-	const float Chain = 50.f;
+	const float Chain = 18.f;
 	for (int32 Link = 0; Link * 6.f < Chain; ++Link)
 	{
 		Hang.Box(FVector(0.f, 0.f, -3.f - Link * 6.f), FRotator(0.f, (Link % 2) * 90.f, 0.f), FVector(1.f, 3.2f, 7.f), MatIron, false);
 	}
-	if (UStaticMeshComponent* Body = Hang.Prop(RoomProps::Chandelier, FVector(0.f, 0.f, -Chain), FRotator(0.f, 40.f, 0.f), 120.f, false))
+	if (UStaticMeshComponent* Body = Hang.Prop(RoomProps::Chandelier, FVector(0.f, 0.f, -Chain), FRotator(0.f, 40.f, 0.f), 92.f, false))
 	{
 		FRoomShapes::TintSlots(Body, FLinearColor(0.24f, 0.21f, 0.17f), 0);
 		FRoomShapes::TintSlots(Body, FLinearColor(0.55f, 0.55f, 0.56f), 1);
@@ -1203,11 +1204,11 @@ void ALivingRoomActor::BuildChandelier(FRoomBuilder& Build)
 		const float A = Drops.FRandRange(0.f, 2.f * PI);
 		const float R = Drops.FRandRange(28.f, 42.f);
 		const float Hangs = Drops.FRandRange(6.f, 22.f);
-		const FVector Arm(FMath::Cos(A) * R, FMath::Sin(A) * R, -Chain - 80.f);
+		const FVector Arm(FMath::Cos(A) * R * 0.77f, FMath::Sin(A) * R * 0.77f, -Chain - 61.f);
 		Hang.Box(Arm - FVector(0.f, 0.f, Hangs * 0.5f), FRotator::ZeroRotator, FVector(0.25f, 0.25f, Hangs), MatIron, false);
 		Hang.Add(FRoomShapes::Cone(), Arm - FVector(0.f, 0.f, Hangs + 3.f), FRotator(180.f, 0.f, 0.f), FVector(2.8f, 2.8f, 7.f), MatGlass, false);
 	}
-	Hang.Add(FRoomShapes::Plane(), FVector(0.f, 0.f, -Chain - 40.f), FRotator(0.f, 30.f, 90.f), FVector(50.f, 40.f, 1.f), MatWeb, false);
+	Hang.Add(FRoomShapes::Plane(), FVector(0.f, 0.f, -Chain - 31.f), FRotator(0.f, 30.f, 90.f), FVector(40.f, 32.f, 1.f), MatWeb, false);
 }
 
 void ALivingRoomActor::BuildDamage(FRoomBuilder& Build)
@@ -1496,7 +1497,7 @@ void ALivingRoomActor::BuildClues()
 
 	// The television. The finale is when it speaks; until then, the one thing it says is that
 	// somebody has been keeping it clean.
-	if (AClueActor* Set = SpawnClue(FVector(BreastX() + 9.f, H, F + 235.f), FRotator::ZeroRotator))
+	if (AClueActor* Set = SpawnClue(FVector(BreastX() + 9.f, H, F + 222.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Set, Set->GetRootScene());
 	}

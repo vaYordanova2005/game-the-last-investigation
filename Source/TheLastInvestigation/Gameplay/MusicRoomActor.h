@@ -14,52 +14,38 @@ class UDustMotesComponent;
 class AStormWindowActor;
 class AClueActor;
 
-/** Where the music room meets the upstairs corridor and the rooms round it, handed over by the corridor. */
+/** Where the music room meets the stair hall, handed over by the hall that spawns it. */
 struct FMusicRoomSetup
 {
-	/** Y of the room's south face: the corridor's north wall, seen from the other side. */
-	float SouthFace = 315.f;
-	/** The north face, the façade: in line with the kitchen's north wall, a storey below and to the west. */
+	/** Y of the room's south face: the stair hall's north wall, seen from the other side. */
+	float SouthFace = -80.f;
+	/** The north face, the façade: the kitchen's north wall carried up. */
 	float NorthFace = -700.f;
-	/** The west face, in line with the corridor's end wall (the stair hall and the kitchen are behind it). */
-	float WestX = -1250.f;
-	/** The east face: the far side of the bedroom's west wall, and the house's outside wall north of it. */
-	float EastX = -410.f;
+	/** The west and east faces: over the kitchen's, a storey down. */
+	float WestX = -1990.f;
+	float EastX = -1270.f;
 	float WallThickness = 20.f;
-	/** The arch from the corridor, in this room's south wall. The corridor cuts the hole. */
-	float ArchX = -880.f;
-	/** The corridor's ceiling: the strip of south wall above it is this room's to build. */
-	float CorridorHeight = 305.f;
-	/** The bedroom behind the east wall: how far its west wall runs either side of y = 0, and how tall it is. */
-	float BedroomHalfDepth = 325.f;
-	float BedroomHeight = 305.f;
-	/**
-	 * Behind the west wall: the kitchen's east wall from the façade to KitchenSouthY, standing to
-	 * KitchenWallTop, and the stair hall's east wall from there on to the corridor, to HallWallTop.
-	 * Only what is over those is this room's to build.
-	 */
-	float KitchenSouthY = -80.f;
-	float KitchenWallTop = 90.f;
+	/** The top of the stair hall's north wall: the strip of south wall above it is this room's to build. */
 	float HallWallTop = 440.f;
 };
 
 /**
- * The music room, on the north side of the upstairs corridor, directly across it from the library:
- * the family's room for music, where they played in the evenings. Entered through a wide open arch,
- * no door, so it is seen whole from the corridor. There is no piano (the user's call).
+ * The music room, over the kitchen: the family's room for music, where they played in the evenings.
+ * Entered through a wide open arch, no door, off the stair hall's north gallery: stepping out of the
+ * corridor onto the gallery and facing the stained glass, it is on the right (the library is on the
+ * left). There is no piano (the user's call).
  *
  *                      north (the storm, the trees: the kitchen's outside, a storey down)
- *      +----[window]--------[window]--------[window]----+
- *      | bust  bench            cello                guitar|
- *      |       (violin case)  stand  chair             |
- *      |  cabinet     iron stand                    sideboard (east)
- *      | (west)   chair                              awards |
- *      |  shelf of        (chandelier)                  |
- *      |  music                            armchairs    |
- *      |  cellist                            + table    |
- *      |  clock                                         |
- *      +---------------------[ arch ]-------------------+
- *                      south (the corridor, the library across it)
+ *      +--[window]------[window]------[window]--+
+ *      |   bench         cello            guitar |
+ *      |  (violin case) stand chair        still life
+ *      |  cabinet   iron stand            sideboard (east)
+ *      | (west)    chair                    awards |
+ *      |  shelf of    (chandelier)               |
+ *      |  music   armchairs + table              |
+ *      |  cellist                                |
+ *      +--clock------river----------[ arch ]-----+
+ *                      south (the stair hall's north gallery)
  *
  * Panelled to the dado in dark oak, an old-gold silk damask over it to a plaster cornice, three tall
  * round-headed windows hung with emerald velvet, a crystal chandelier from a plaster rose. In front
@@ -86,13 +72,14 @@ public:
 
 	virtual void BeginPlay() override;
 
-	/** A tall room, as the library across the corridor. */
+	/** A tall room, as the library across the stairwell. */
 	static constexpr float RoomHeight = 520.f;
 
-	// The arch from the corridor (Tools/make_music_room.py: ARCH_*): a semi-ellipse on its springing.
-	// The corridor cuts its wall to the rectangle under ArchCrown, and its cornice (from 281) stays clear
-	// of the corridor face's architrave (14 over the crown). The room face's carved surround stands out
-	// to ArchSurroundHalf either side and up to ArchSurroundTop, and the room's walls are cut to it.
+	// The arch from the stair hall's north gallery (Tools/make_music_room.py: ARCH_*): a semi-ellipse on
+	// its springing. The hall cuts its north wall to the rectangle under ArchCrown and keeps its
+	// mouldings off the hall face's architrave (14 round the curve: AGrandStaircaseActor::GalleryArches).
+	// The room face's carved surround stands out to ArchSurroundHalf either side and up to
+	// ArchSurroundTop, and the room's walls are cut to it.
 	static constexpr float ArchHalf = 110.f;
 	static constexpr float ArchSpring = 192.f;
 	static constexpr float ArchRise = 72.f;
@@ -100,7 +87,15 @@ public:
 	static constexpr float ArchArchitrave = 14.f;
 	static constexpr float ArchSurroundHalf = 136.f;
 	static constexpr float ArchSurroundTop = 300.f;
-	static_assert(ArchCrown + ArchArchitrave < 281.f, "the corridor's cornice comes down to 281");
+	/**
+	 * Where along the south wall the arch stands: at the corridor's end of the hall's north gallery,
+	 * across the stairwell from the library's (ALibraryActor::ArchX; the user's call: by the corridor,
+	 * not by the stairhead). The hall face's architrave keeps a hand's width off the hall's east wall,
+	 * and the room face's surround off this room's.
+	 */
+	static constexpr float ArchX = -1420.f;
+	static_assert(ArchX + ArchHalf + ArchArchitrave < -1270.f - 15.f, "the hall face stays off the hall's east wall");
+	static_assert(ArchX + ArchSurroundHalf < -1270.f - 10.f, "the surround stays off the east wall");
 
 	// The panelling: oak to the dado, a rail on it, the silk over it to the cornice.
 	static constexpr float DadoTop = 118.f;
@@ -109,7 +104,7 @@ public:
 	static constexpr float WindowHalf = 75.f;
 	static constexpr float WindowSill = 40.f;
 	static constexpr float WindowTop = 430.f;
-	static constexpr float WindowXs[3] = { -1070.f, -830.f, -590.f };
+	static constexpr float WindowXs[3] = { -1850.f, -1630.f, -1410.f };
 
 	// The music stands' desks (IRON_DESK_Z, WOOD_DESK_Z, DESK_LEAN, DESK_W, DESK_H): the middle of each
 	// board, how far it leans back from upright, its size. A desk faces its stand's local +Y.
@@ -175,21 +170,22 @@ private:
 
 	// Where things stand, shared between a piece and what is put on or round it.
 	FVector BenchSeat() const { return FVector(WindowXs[0], NorthY() + 56.f, 0.f); }
-	FVector WoodStandSeat() const { return FVector(-812.f, -420.f, 0.f); }
+	FVector WoodStandSeat() const { return FVector(-1613.f, -420.f, 0.f); }
 	float WoodStandYaw() const { return 184.f; }
-	FVector CellistChairSeat() const { return FVector(-800.f, -520.f, 0.f); }
-	FVector CelloSeat() const { return FVector(-706.f, -500.f, 0.f); }
-	FVector IronStandSeat() const { return FVector(-966.f, -408.f, 0.f); }
+	FVector CellistChairSeat() const { return FVector(-1602.f, -520.f, 0.f); }
+	FVector CelloSeat() const { return FVector(-1516.f, -500.f, 0.f); }
+	FVector IronStandSeat() const { return FVector(-1755.f, -408.f, 0.f); }
 	float IronStandYaw() const { return 172.f; }
-	FVector ViolinChairSeat() const { return FVector(-985.f, -520.f, 0.f); }
-	FVector GuitarSeat() const { return FVector(-478.f, -598.f, 0.f); }
-	FVector ArmchairSeat(int32 Index) const { return Index == 0 ? FVector(-560.f, -95.f, 0.f) : FVector(-652.f, 34.f, 0.f); }
-	FVector SideTableSeat() const { return FVector(-566.f, 16.f, 0.f); }
+	FVector ViolinChairSeat() const { return FVector(-1772.f, -520.f, 0.f); }
+	FVector GuitarSeat() const { return FVector(EastX() - 37.f, -598.f, 0.f); }
+	/** West of the way in from the arch, turned to the players. */
+	FVector ArmchairSeat(int32 Index) const { return Index == 0 ? FVector(-1755.f, -205.f, 0.f) : FVector(-1880.f, -265.f, 0.f); }
+	FVector SideTableSeat() const { return FVector(-1830.f, -160.f, 0.f); }
 	FVector SideboardSeat() const { return FVector(EastX() - SideboardD * 0.5f, -330.f, 0.f); }
 	FVector CabinetSeat() const { return FVector(WestX() + CabinetD * 0.5f, -440.f, 0.f); }
 	FVector ShelfSeat() const { return FVector(WestX() + ShelfD * 0.5f, -168.f, 0.f); }
-	FVector BustSeat() const { return FVector(-1198.f, NorthY() + 48.f, 0.f); }
-	FVector ClockSeat() const { return FVector(WestX(), 226.f, 0.f); }
+	/** The long-case clock against the south wall west of the arch: the point under its back, on the wall. */
+	FVector ClockSeat() const { return FVector(WestX() + 90.f, SouthY(), 0.f); }
 	FVector ChandelierHook() const { return FVector(MidX(), MidY(), RoomHeight); }
 
 	void CacheMaterials(FRoomBuilder& Build);
@@ -291,7 +287,6 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatLeather;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatLeatherGreen;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatVelvet;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatMarble;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatCorridorPlaster;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBooks;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPaperSheet;

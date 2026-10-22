@@ -15,28 +15,26 @@ class UDustMotesComponent;
 class AStormWindowActor;
 class AClueActor;
 
-/** Where the library meets the upstairs corridor, handed over by the corridor that spawns it. */
+/** Where the library meets the stair hall, handed over by the hall that spawns it. */
 struct FLibrarySetup
 {
-	/** Y of the room's north face: the corridor's south wall, seen from the other side. */
-	float NorthFace = 565.f;
-	/** The west face, in line with the corridor's end wall (the stair hall is behind it). */
-	float WestX = -1250.f;
-	/** The east face: the far side of the girl's room's west wall. */
-	float EastX = -320.f;
+	/** Y of the room's north face: the stair hall's south wall, seen from the other side. */
+	float NorthFace = 960.f;
+	/** The west and east faces: over the living room's, a storey down. */
+	float WestX = -2270.f;
+	float EastX = -1270.f;
 	float WallThickness = 20.f;
-	/** The arch from the corridor, in this room's north wall. The corridor cuts the hole. */
-	float ArchX = -880.f;
-	/** The corridor's ceiling: the strip of north wall above it is this room's to build. */
-	float CorridorHeight = 305.f;
+	/** The top of the stair hall's south wall: the strip of north wall above it is this room's to build. */
+	float HallWallTop = 440.f;
 };
 
 /**
- * The library and study, on the south side of the upstairs corridor between the girl's room and
- * the stairs: the owner's room, the most finished in the house, and the one he spent his evenings
- * in. Entered through an open arch, no door.
+ * The library and study, over the living room: the owner's room, the most finished in the house,
+ * and the one he spent his evenings in. Entered through an open arch, no door, off the stair hall's
+ * south gallery: stepping out of the corridor onto the gallery and facing the stained glass, it is
+ * on the left (the music room is on the right).
  *
- *                      north (the corridor, the arch)
+ *                      north (the stair hall's south gallery, the arch)
  *      +-- shelves --[arch]-- shelves ------------------+
  *      |  s          vitrine            chess table     |
  *      |  h ladder                        armchair  fireplace
@@ -52,7 +50,7 @@ struct FLibrarySetup
  * in the middle on the oriental carpet with the windows behind it, and everything where he left it
  * when he stood up from the desk.
  *
- * Shares the room's frame, like the corridor and the girl's room, so every number in here reads
+ * Shares the room's frame, like the hall and the living room, so every number in here reads
  * straight off -RoomShotX/Y/Z. The bookcases, the books, the furniture and the things on the desk
  * are generated in Blender by Tools/make_library.py; the spines, the papers, the maps, the globe,
  * the paintings and the carpet are baked by Tools/make_library_art.py.
@@ -72,22 +70,30 @@ public:
 
 	/** A tall room: the shelves go to 470 and the ceiling is over them. */
 	static constexpr float RoomHeight = 520.f;
-	/** The south wall, in line with the living room's south façade below and to the west. */
+	/** The south wall, the living room's south façade carried up. */
 	static constexpr float SouthFace = 1860.f;
 
-	// The arch from the corridor (Tools/make_library.py: ARCH_*). The corridor cuts its wall to the
-	// rectangle the arch stands in, and keeps its cornice (from 281) clear of the architrave.
+	// The arch from the stair hall's south gallery (Tools/make_library.py: ARCH_*). The hall cuts its
+	// south wall to the rectangle the arch stands in and keeps its mouldings off the architrave
+	// (AGrandStaircaseActor::GalleryArches).
 	static constexpr float ArchHalf = 80.f;
 	static constexpr float ArchSpring = 185.f;
 	static constexpr float ArchCrown = ArchSpring + ArchHalf;
 	/** How far the architrave stands out round the opening. */
 	static constexpr float ArchArchitrave = 14.2f;
+	/**
+	 * Where along the north wall the arch stands: at the corridor's end of the hall's south gallery,
+	 * just round the corner from the corridor's archway (the user's call: by the corridor, not by the
+	 * stairhead at -1800). The hall's east wall is at -1270; the architrave keeps a hand's width off it.
+	 */
+	static constexpr float ArchX = -1420.f;
+	static_assert(ArchX + ArchHalf + ArchArchitrave < -1270.f - 15.f, "the arch's architrave stays off the hall's east wall");
 
-	// The three tall windows in the south wall, round-headed (WINDOW_HALF).
+	// The three tall windows in the south wall, round-headed (WINDOW_HALF), over the living room's.
 	static constexpr float WindowHalf = 75.f;
 	static constexpr float WindowSill = 70.f;
 	static constexpr float WindowTop = 400.f;
-	static constexpr float WindowXs[3] = { -1060.f, -785.f, -510.f };
+	static constexpr float WindowXs[3] = { -2030.f, -1770.f, -1510.f };
 
 	// A bookcase bay (BAY_WIDTH, LOWER_DEPTH, UPPER_DEPTH, COUNTER_Z, SHELF_PITCH, SHELF_LEVELS,
 	// SHELF_BOARD, CASE_TOP, UPRIGHT).
@@ -112,7 +118,7 @@ public:
 	static constexpr float DeskTop = 78.f;
 
 	// The chimney breast in the east wall, and the chimneypiece on it.
-	static constexpr float BreastY = 1010.f;
+	static constexpr float BreastY = 1250.f;
 	static constexpr float BreastHalf = 120.f;
 	static constexpr float BreastProud = 55.f;
 	static constexpr float MantelTop = 138.f;
@@ -165,14 +171,17 @@ private:
 	float BreastFaceX() const { return EastX() - BreastProud; }
 
 	// Where things stand, shared between a piece and what is put on or round it.
-	FVector DeskSeat() const { return FVector(-785.f, 1450.f, 0.f); }
-	FVector ArmchairSeat() const { return FVector(-545.f, 1195.f, 0.f); }
-	FVector ChessSeat() const { return FVector(-525.f, 760.f, 0.f); }
-	FVector GlobeSeat() const { return FVector(-1052.f, 1525.f, 0.f); }
-	FVector VitrineSeat() const { return FVector(-985.f, 985.f, 0.f); }
+	FVector DeskSeat() const { return FVector(WindowXs[1], 1450.f, 0.f); }
+	FVector ArmchairSeat() const { return FVector(EastX() - 225.f, BreastY + 185.f, 0.f); }
+	/** West of the way in from the arch, north of the fire. */
+	FVector ChessSeat() const { return FVector(ArchX - 200.f, 1115.f, 0.f); }
+	FVector GlobeSeat() const { return FVector(WestX() + 198.f, 1525.f, 0.f); }
+	FVector VitrineSeat() const { return FVector(WestX() + 265.f, 1150.f, 0.f); }
 	FVector FilingSeat() const { return FVector(EastX() - 34.f, 1665.f, 0.f); }
 	/** The ladder hangs on the west wall's rail, this far along it. */
-	float LadderY() const { return 1110.f; }
+	float LadderY() const { return 1300.f; }
+	/** A stretch of wall too short for a bookcase bay is left panelled. */
+	static constexpr float MinShelfRun = 60.f;
 
 	void CacheMaterials(FRoomBuilder& Build);
 	void BuildShell(FRoomBuilder& Build);

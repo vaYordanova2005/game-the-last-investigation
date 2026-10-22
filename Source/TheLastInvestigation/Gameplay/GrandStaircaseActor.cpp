@@ -4,6 +4,8 @@
 #include "LivingRoomActor.h"
 #include "KitchenActor.h"
 #include "CellarActor.h"
+#include "LibraryActor.h"
+#include "MusicRoomActor.h"
 #include "ClueActor.h"
 #include "StormWindowActor.h"
 #include "DustMotesComponent.h"
@@ -220,6 +222,13 @@ void AGrandStaircaseActor::Configure(const FStairHallSetup& InSetup, AStormWindo
 		FVector(HallLength * 0.48f, HallWidth * 0.48f, (CeilingZ - GroundZ) * 0.48f),
 		FVector(EastX() - HallLength * 0.5f, Setup.CenterY, (CeilingZ + GroundZ) * 0.5f));
 
+	// Off the side galleries, the open arches into the library over the living room (the south wall:
+	// on the left, stepping out of the corridor and facing the window) and the music room over the
+	// kitchen (the north wall, on the right). The rooms build the arch models.
+	GalleryArches = {
+		{ EWall::South, ALibraryActor::ArchX, ALibraryActor::ArchHalf, ALibraryActor::ArchSpring, ALibraryActor::ArchHalf, ALibraryActor::ArchArchitrave },
+		{ EWall::North, AMusicRoomActor::ArchX, AMusicRoomActor::ArchHalf, AMusicRoomActor::ArchSpring, AMusicRoomActor::ArchRise, AMusicRoomActor::ArchArchitrave },
+	};
 	Openings = {
 		// Onto the gallery from the corridor.
 		{ EWall::East, Setup.CenterY, Setup.OpeningWidth * 0.5f, 0.f, Setup.OpeningHeight },
@@ -231,6 +240,10 @@ void AGrandStaircaseActor::Configure(const FStairHallSetup& InSetup, AStormWindo
 		// The window over the landing.
 		{ EWall::West, Setup.CenterY, WindowWidth * 0.5f, LandingZ + WindowSill, LandingZ + WindowSill + WindowHeight },
 	};
+	for (const FGalleryArch& Arch : GalleryArches)
+	{
+		Openings.Add({ Arch.Wall, Arch.CenterU, Arch.Half, 0.f, Arch.Spring + Arch.Rise });
+	}
 }
 
 void AGrandStaircaseActor::BeginPlay()
@@ -261,6 +274,8 @@ void AGrandStaircaseActor::BeginPlay()
 	SpawnLivingRoom();
 	SpawnKitchen();
 	SpawnCellar();
+	SpawnLibrary();
+	SpawnMusicRoom();
 	BuildClues();
 }
 
@@ -382,6 +397,50 @@ TArray<FBox2D> AGrandStaircaseActor::CutAround(EWall Wall, float U0, float U1, f
 		if (Opening.Wall == Wall)
 		{
 			Holes.Add(FBox2D(FVector2D(Opening.CenterU - Opening.HalfU, Opening.BottomZ), FVector2D(Opening.CenterU + Opening.HalfU, Opening.TopZ)));
+		}
+	}
+	return RoomWalls::CutAround(Holes, U0, U1, Z0, Z1);
+}
+
+float AGrandStaircaseActor::GalleryArchOuterHalf(const FGalleryArch& Arch, float Z)
+{
+	// Below the springing the jambs' architraves, and their plinth blocks a centimetre wider; over
+	// it the architrave follows the head, Architrave outside it all the way round.
+	const float A = Arch.Half + Arch.Architrave;
+	if (Z <= Arch.Spring)
+	{
+		return A + 1.5f;
+	}
+	const float B = Arch.Rise + Arch.Architrave;
+	const float Up = (Z - Arch.Spring) / B;
+	return Up >= 1.f ? 0.f : A * FMath::Sqrt(1.f - Up * Up);
+}
+
+TArray<FBox2D> AGrandStaircaseActor::CutAroundTrim(EWall Wall, float U0, float U1, float Z0, float Z1) const
+{
+	TArray<FBox2D> Holes;
+	for (const FOpening& Opening : Openings)
+	{
+		if (Opening.Wall != Wall)
+		{
+			continue;
+		}
+		const FGalleryArch* Arch = GalleryArches.FindByPredicate([&](const FGalleryArch& Each)
+		{
+			return Each.Wall == Wall && Each.CenterU == Opening.CenterU && Opening.BottomZ == 0.f;
+		});
+		if (!Arch)
+		{
+			Holes.Add(FBox2D(FVector2D(Opening.CenterU - Opening.HalfU, Opening.BottomZ), FVector2D(Opening.CenterU + Opening.HalfU, Opening.TopZ)));
+			continue;
+		}
+		const float ZA = FMath::Max(Z0, Opening.BottomZ);
+		const float ZB = FMath::Min(Z1, Opening.TopZ + Arch->Architrave);
+		// The architrave is widest over the band at the band's foot.
+		const float Half = GalleryArchOuterHalf(*Arch, ZA);
+		if (ZB > ZA && Half > 0.f)
+		{
+			Holes.Add(FBox2D(FVector2D(Opening.CenterU - Half, ZA), FVector2D(Opening.CenterU + Half, ZB)));
 		}
 	}
 	return RoomWalls::CutAround(Holes, U0, U1, Z0, Z1);
@@ -1112,7 +1171,7 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 		const float U1 = bAlongX ? EastX() : SouthY();
 		auto Band = [&](float ZA, float ZB, float Depth)
 		{
-			for (const FBox2D& Piece : CutAround(Wall, U0, U1, ZA, ZB))
+			for (const FBox2D& Piece : CutAroundTrim(Wall, U0, U1, ZA, ZB))
 			{
 				const FVector2D C = Piece.GetCenter();
 				const FVector2D S = Piece.GetSize();
@@ -1145,9 +1204,27 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 	for (const EWall Wall : { EWall::North, EWall::South })
 	{
 		const bool bNorth = Wall == EWall::North;
-		// Over the gallery and the return flight.
-		Panel(Wall, GalleryEdgeX() - 150.f, GalleryEdgeX() + 20.f, 40.f, GalleryPictureRail - 20.f, bNorth);
-		Panel(Wall, FlightEastX() + 10.f, GalleryEdgeX() - 170.f, 40.f, GalleryPictureRail - 20.f, !bNorth);
+		// Over the gallery and the return flight, where the arch into the room behind leaves room: on
+		// these two walls one panel from the stairhead to the arch, and one past it if there is a
+		// stretch of wall wide enough.
+		const FGalleryArch* Arch = GalleryArches.FindByPredicate([&](const FGalleryArch& Each) { return Each.Wall == Wall; });
+		if (!Arch)
+		{
+			Panel(Wall, GalleryEdgeX() - 150.f, GalleryEdgeX() + 20.f, 40.f, GalleryPictureRail - 20.f, bNorth);
+			Panel(Wall, FlightEastX() + 10.f, GalleryEdgeX() - 170.f, 40.f, GalleryPictureRail - 20.f, !bNorth);
+		}
+		else
+		{
+			const float Outer = GalleryArchOuterHalf(*Arch, 0.f) + 20.f;
+			const float Spans[2][2] = { { FlightEastX() + 10.f, Arch->CenterU - Outer }, { Arch->CenterU + Outer, EastX() - 20.f } };
+			for (const auto& Span : Spans)
+			{
+				if (Span[1] - Span[0] > 60.f)
+				{
+					Panel(Wall, Span[0], Span[1], 40.f, GalleryPictureRail - 20.f, bNorth);
+				}
+			}
+		}
 		Panel(Wall, LandingEdgeX() + 20.f, FlightEastX() - 20.f, 20.f, GalleryPictureRail - 20.f, bNorth);
 		// Over the landing, running down to it.
 		Panel(Wall, WestX() + 20.f, LandingEdgeX() - 10.f, LandingZ + 110.f, GalleryPictureRail - 20.f, false);
@@ -1159,7 +1236,7 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 	// The gallery walls get the wainscot's dado, and paper from it to the picture rail in runs.
 	for (const FRun& R : { FRun{ EWall::East, NorthY(), SouthY() } })
 	{
-		for (const FBox2D& Piece : CutAround(R.Wall, R.U0, R.U1, 88.f, 96.f))
+		for (const FBox2D& Piece : CutAroundTrim(R.Wall, R.U0, R.U1, 88.f, 96.f))
 		{
 			WallBox(Build, R.Wall, Piece.GetCenter().X, 92.f, Piece.GetSize().X, 7.f, 3.2f, 0.f, MatOak);
 		}
@@ -1653,6 +1730,11 @@ void AGrandStaircaseActor::BuildDebris(FRoomBuilder& Build)
 			{
 				continue; // nor across the kitchen door or the way into the living room
 			}
+			if (S.Z == 3.f && GalleryArches.ContainsByPredicate([&](const FGalleryArch& Arch)
+				{ return (Arch.Wall == EWall::North) == (Spot.Y < Setup.CenterY) && FMath::Abs(Spot.X - Arch.CenterU) < Arch.Half + 10.f; }))
+			{
+				continue; // nor in the arches off the side galleries
+			}
 			Build.Box(FVector(Spot.X, Spot.Y, S.Z + Size * 0.35f), Rot, Scale, MatRubble, false);
 		}
 	}
@@ -1947,6 +2029,46 @@ void AGrandStaircaseActor::SpawnCellar()
 		CellarSetup.LandingSoffitZ = LandingZ - FloorDepth;
 		Cellar->Configure(CellarSetup);
 		Cellar->FinishSpawning(Transform);
+	}
+}
+
+void AGrandStaircaseActor::SpawnLibrary()
+{
+	// Through the arch off the south gallery: the library, over the living room, the hall's length and
+	// the living room's depth. Same frame as the hall. Its north face is the far side of the hall's
+	// south wall, which stands to the hall's ceiling slab (BuildShell: CeilingZ + 10).
+	const FTransform Transform = GetActorTransform();
+	Library = GetWorld()->SpawnActorDeferred<ALibraryActor>(ALibraryActor::StaticClass(), Transform, this);
+	if (Library)
+	{
+		FLibrarySetup LibrarySetup;
+		LibrarySetup.NorthFace = SouthY() + Setup.WallThickness;
+		LibrarySetup.WestX = WestX();
+		LibrarySetup.EastX = EastX();
+		LibrarySetup.WallThickness = Setup.WallThickness;
+		LibrarySetup.HallWallTop = CeilingZ + 10.f;
+		Library->Configure(LibrarySetup, LeadStorm);
+		Library->FinishSpawning(Transform);
+	}
+}
+
+void AGrandStaircaseActor::SpawnMusicRoom()
+{
+	// Through the arch off the north gallery: the music room, over the kitchen and the kitchen's size.
+	// Same frame as the hall. Its south face is the far side of the hall's north wall.
+	const FTransform Transform = GetActorTransform();
+	MusicRoom = GetWorld()->SpawnActorDeferred<AMusicRoomActor>(AMusicRoomActor::StaticClass(), Transform, this);
+	if (MusicRoom)
+	{
+		FMusicRoomSetup MusicSetup;
+		MusicSetup.SouthFace = NorthY() - Setup.WallThickness;
+		MusicSetup.NorthFace = MusicSetup.SouthFace - AKitchenActor::RoomDepth;
+		MusicSetup.EastX = EastX();
+		MusicSetup.WestX = EastX() - AKitchenActor::RoomWidth;
+		MusicSetup.WallThickness = Setup.WallThickness;
+		MusicSetup.HallWallTop = CeilingZ + 10.f;
+		MusicRoom->Configure(MusicSetup, LeadStorm);
+		MusicRoom->FinishSpawning(Transform);
 	}
 }
 

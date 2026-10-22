@@ -178,9 +178,12 @@ def uv_quad(part, corners, rect, sheet=ATLAS, thickness=0.05):
     bm = part.bm
     uv = bm.loops.layers.uv.verify()
     bl, br, tr, tl = (Vector(c) for c in corners)
+    # The game frame is left-handed, so (right x up) points away from whoever reads the face: the
+    # back goes that way. With it the other way, the back stood in front of the print and every
+    # photograph on the sideboard showed a blank sheet of the rectangle's corner colour.
     n = (br - bl).cross(tl - bl).normalized() * thickness
     front = [bm.verts.new(v) for v in (bl, br, tr, tl)]
-    back = [bm.verts.new(v - n) for v in (bl, br, tr, tl)]
+    back = [bm.verts.new(v + n) for v in (bl, br, tr, tl)]
     face = bm.faces.new(front)
     for loop, (s, t) in zip(face.loops, ((0, 1), (1, 1), (1, 0), (0, 0))):
         loop[uv].uv = atlas_uv(rect, s, t, sheet)
@@ -1379,23 +1382,27 @@ def photo_frame(key, art_w, art_h, slot="Gilt"):
 
 
 def dried_roses():
-    """Roses left in their vase until they dried on the stem: nine stems from the mouth, bowed and
-    leaning out, the heads shrunk to dark crumpled knots, a few curled leaves. Origin at the vase's
-    mouth; the stems go down 24 into it."""
+    """Roses left in their vase until they dried on the stem: nine stems gathered in the mouth, bowed
+    and leaning out above it, the heads shrunk to dark crumpled knots, a few curled leaves. Origin at
+    the vase's mouth; the stems go down 24 into it. Every stem passes the mouth within MOUTH of the
+    middle and only leans out above it: fanned out from the bottom of the vase, they came out through
+    its sides and the heads hung round its shoulder."""
     rng = random.Random(2104)
     stem = Part("Stem")
     petal = Part("Petal", smooth=True)
     leaf = Part("Stem")
+    mouth = 1.8
     for k in range(9):
         a = rng.uniform(0, 2 * math.pi)
-        lean = rng.uniform(0.15, 0.55)
-        length = rng.uniform(26.0, 40.0)
-        droop = rng.uniform(4.0, 12.0)
-        pts = []
-        for i in range(9):
+        lean = rng.uniform(0.25, 0.6)
+        length = rng.uniform(19.0, 30.0)
+        droop = rng.uniform(2.0, 7.0)
+        r0 = mouth * rng.uniform(0.3, 1.0)
+        pts = [(math.cos(a) * r0 * 0.4, math.sin(a) * r0 * 0.4, -24.0), (math.cos(a) * r0, math.sin(a) * r0, 0.0)]
+        for i in range(1, 9):
             t = i / 8
-            r = math.sin(lean) * length * t + droop * t ** 3 * 0.3
-            pts.append((math.cos(a) * r, math.sin(a) * r, -24.0 + 24.0 * t * 0.3 + length * t * math.cos(lean) - droop * t ** 2.5))
+            r = r0 + math.sin(lean) * length * t + droop * t ** 3 * 0.3
+            pts.append((math.cos(a) * r, math.sin(a) * r, length * t * math.cos(lean) - droop * t ** 2.5))
         tube(stem, pts, 0.28, sides=5)
         head = Vector(pts[-1])
         bow = Vector((math.cos(a), math.sin(a), -0.6)).normalized()
@@ -1418,8 +1425,8 @@ def dried_roses():
 
 
 def dried_hydrangea():
-    """Hydrangea heads dried papery in the brass vase: four domes of florets on stiff stems. Origin at
-    the vase's mouth."""
+    """Hydrangea heads dried papery in the brass vase: four domes of florets on stiff stems, gathered
+    in the narrow neck and leaning out only above it (see dried_roses). Origin at the vase's mouth."""
     rng = random.Random(3104)
     stem = Part("Stem")
     bloom = Part("Bloom", smooth=True)
@@ -1428,7 +1435,8 @@ def dried_hydrangea():
         lean = rng.uniform(0.2, 0.45)
         length = rng.uniform(16.0, 26.0)
         tip = Vector((math.cos(a) * math.sin(lean) * length, math.sin(a) * math.sin(lean) * length, length * math.cos(lean)))
-        tube(stem, [(0.0, 0.0, -20.0), (tip.x * 0.4, tip.y * 0.4, tip.z * 0.4), tuple(tip)], 0.45, sides=5)
+        neck = Vector((math.cos(a) * 1.0, math.sin(a) * 1.0, 0.0))
+        tube(stem, [(0.0, 0.0, -20.0), tuple(neck), tuple(neck + (tip - neck) * 0.4), tuple(tip)], 0.45, sides=5)
         # A head is a dome of small florets: sixteen big lumps read, up close, as a fist of fingers.
         elements = []
         for f in range(34):

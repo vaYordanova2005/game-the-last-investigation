@@ -6,8 +6,6 @@
 #include "DustMotesComponent.h"
 #include "GrandStaircaseActor.h"
 #include "NurseryActor.h"
-#include "LibraryActor.h"
-#include "MusicRoomActor.h"
 #include "KitchenActor.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -80,11 +78,7 @@ void ACorridorActor::Configure(const FCorridorSetup& InSetup, AStormWindowActor*
 	const float DoorHalf = HallDoorWidth * 0.5f;
 	Openings = {
 		{ ESide::North, Setup.StartDoorCenterX, Setup.StartDoorWidth * 0.5f, Setup.StartDoorHeight },
-		// The music room's arch: its rectangle, which the arch's spandrels fill above the curve.
-		{ ESide::North, MusicArchU, AMusicRoomActor::ArchHalf, AMusicRoomActor::ArchCrown },
 		{ ESide::South, NurseryDoorU, DoorHalf, HallDoorHeight },
-		// The library's arch: its rectangle, which the arch's spandrels fill above the curve.
-		{ ESide::South, LibraryArchU, ALibraryActor::ArchHalf, ALibraryActor::ArchCrown },
 		{ ESide::East, CenterY(), WindowWidth * 0.5f, WindowTop, WindowSill },
 		{ ESide::West, CenterY(), StairOpeningWidth * 0.5f, StairOpeningHeight },
 	};
@@ -119,8 +113,6 @@ void ACorridorActor::BeginPlay()
 	SpawnWindow();
 	SpawnStairHall();
 	SpawnNursery();
-	SpawnLibrary();
-	SpawnMusicRoom();
 	BuildClues();
 }
 
@@ -344,9 +336,7 @@ void ACorridorActor::BuildShell(FRoomBuilder& Build)
 		FVector(Setup.StartDoorWidth, T + 4.f, 6.f), MatRoughWood);
 	for (const FOpening& Opening : Openings)
 	{
-		// The two arches have their own sills, in the arch models.
-		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || Opening.CenterU == Setup.StartDoorCenterX || Opening.BottomV > 0.f
-			|| IsArch(Opening))
+		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || Opening.CenterU == Setup.StartDoorCenterX || Opening.BottomV > 0.f)
 		{
 			continue;
 		}
@@ -364,10 +354,9 @@ void ACorridorActor::BuildBackRooms(FRoomBuilder& Build)
 	const float H = Setup.Height;
 	for (const FOpening& Opening : Openings)
 	{
-		// The girl's room, the library and the music room are real rooms (ANurseryActor, ALibraryActor,
-		// AMusicRoomActor), not black boxes.
+		// The girl's room is a real room (ANurseryActor), not a black box.
 		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || Opening.CenterU == Setup.StartDoorCenterX
-			|| (Opening.Side == ESide::South && Opening.CenterU == NurseryDoorU) || IsArch(Opening))
+			|| (Opening.Side == ESide::South && Opening.CenterU == NurseryDoorU))
 		{
 			continue;
 		}
@@ -628,7 +617,7 @@ void ACorridorActor::BuildWallFinish(FRoomBuilder& Build)
 			}
 			// Every number drawn before the test, in the order MSVC drew them from the call's arguments
 			// (right to left), so which peels are skipped never moves the rest (09-29): the openings
-			// changed when the music room's arch replaced the two north doors.
+			// have changed more than once (the doors that went, the arches that came and went).
 			const float PeelV = Random.FRandRange(150.f, 190.f);
 			const float PeelDrop = Random.FRandRange(55.f, 90.f);
 			const float PeelTurn = Random.FRandRange(-9.f, 9.f);
@@ -730,8 +719,7 @@ void ACorridorActor::BuildDoorCasings(FRoomBuilder& Build)
 	// same casing and nothing grander: it is important because of what is in front of it.
 	for (const FOpening& Opening : Openings)
 	{
-		// The arches carry their own architraves, round the curve (library_arch, music_arch).
-		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || IsArch(Opening))
+		if (Opening.Side != ESide::North && Opening.Side != ESide::South)
 		{
 			continue;
 		}
@@ -926,10 +914,11 @@ void ACorridorActor::BuildDamage(FRoomBuilder& Build)
 			RoomSurfaces::Damp, MouldTint, 0.75f, 0.f, 1.1f);
 	}
 
-	// Scratches beside the music room's arch, outside its architrave, at the height of a hand. Cracks
-	// drawn very fine are what a gouge in plaster is (the bedroom's door-wall note): the surface taken
-	// away along a line. They were beside the far ajar door at -1060, which the arch replaced.
-	const float ScratchU = MusicArchU - AMusicRoomActor::ArchHalf - AMusicRoomActor::ArchArchitrave - 10.f;
+	// Scratches on the north wall towards the stair end, at the height of a hand. Cracks drawn very fine
+	// are what a gouge in plaster is (the bedroom's door-wall note): the surface taken away along a
+	// line. They were beside the far ajar door at -1060, then beside the music room's arch there; both
+	// are gone and the wall is blank.
+	const float ScratchU = -1014.f;
 	for (int32 i = 0; i < 6; ++i)
 	{
 		const float Sharpness = Random.FRandRange(38.f, 52.f);
@@ -974,7 +963,7 @@ void ACorridorActor::BuildPortraits(FRoomBuilder& Build)
 
 	// Where one more hung: the clean rectangle of wall the dirt never reached. The one place a
 	// hard edge is right. Plus the nail.
-	// Kept clear of the library arch's architrave (out to -974) and of the portrait at -1080.
+	// Kept clear of the portrait at -1080 (and once of the library arch's architrave, out to -974).
 	const float GhostU = -1012.f;
 	Build.Mark(FVector(GhostU, SouthFace() - 0.2f, 170.f), FRotator(0.f, 0.f, -90.f), FVector2D(50.f, 66.f), MatWallpaper);
 	Build.Sph(FVector(GhostU, SouthFace() - 1.f, 216.f), 1.6f, MatIron);
@@ -1009,7 +998,7 @@ void ACorridorActor::BuildFurniture(FRoomBuilder& Build)
 	// ArmChair_01 faces its local +Y; yaw 180 faces it north, and a few degrees towards the door.
 	Build.PropSeated(RoomProps::Armchair, FVector(318.f, SouthFace() - 44.f, 0.f), FRotator(0.f, 168.f, 0.f), 0.f);
 
-	// A crate against the north wall past the music room's arch, with a pile of ledgers on it and one
+	// A crate against the north wall towards the stair end, with a pile of ledgers on it and one
 	// slid off onto the floor.
 	const FVector CrateSeat(-1124.f, NorthFace() + 27.f, 0.f);
 	Build.PropSeated(RoomProps::Crate, CrateSeat, FRotator(0.f, 4.f, 0.f), 46.f);
@@ -1052,7 +1041,7 @@ void ACorridorActor::BuildDebris(FRoomBuilder& Build)
 	for (int32 i = 0; i < 46; ++i)
 	{
 		// Every number drawn before the test, in order, so which lumps are skipped never moves the rest
-		// (09-29); the openings changed when the library's arch replaced two doors.
+		// (09-29); the openings have changed more than once.
 		const bool bNorth = Random.FRand() < 0.5f;
 		const float SpotX = Random.FRandRange(WestFace + 20.f, EastFace() - 20.f);
 		const float SpotIn = Random.FRandRange(4.f, 30.f);
@@ -1214,9 +1203,9 @@ void ACorridorActor::SpawnDoors()
 	struct FDoorSpec { bool bNorth; float U; float Ajar; FLinearColor Tint; bool bSix; bool bHole; float OpenYaw; };
 	const FDoorSpec Specs[] = {
 		{ false, NurseryDoorU, 6.f, FLinearColor(0.300f, 0.300f, 0.290f), false, true, 89.f },
-		// The two south doors past hers are gone: one is the library's open arch, and the other
-		// stretch of wall has the library behind it. The two north doors (-690, -1060) are gone too:
-		// the music room is behind them, through its arch.
+		// The two south doors past hers are gone: the library is behind that stretch of wall. The two
+		// north doors (-690, -1060) are gone too: the music room is behind them. Both rooms are
+		// entered off the stair hall's gallery.
 	};
 
 	// Her door's seed, as it was when it was the third door built here.
@@ -1307,59 +1296,6 @@ void ACorridorActor::SpawnNursery()
 		NurserySetup.CorridorHeight = Setup.Height;
 		Nursery->Configure(NurserySetup, LeadStorm);
 		Nursery->FinishSpawning(Transform);
-	}
-}
-
-void ACorridorActor::SpawnLibrary()
-{
-	// The library, behind the south wall from the girl's room to the end of the corridor, through
-	// the open arch. Same frame as the corridor; its north face is the far side of the corridor's
-	// south wall, its east face the far side of her west wall.
-	const FTransform Transform = GetActorTransform();
-	Library = GetWorld()->SpawnActorDeferred<ALibraryActor>(ALibraryActor::StaticClass(), Transform, this);
-	if (Library)
-	{
-		FLibrarySetup LibrarySetup;
-		LibrarySetup.NorthFace = SouthFace() + Setup.WallThickness;
-		LibrarySetup.WestX = WestFace;
-		LibrarySetup.EastX = EastFace() - ANurseryActor::RoomWidth - Setup.WallThickness;
-		LibrarySetup.WallThickness = Setup.WallThickness;
-		LibrarySetup.ArchX = LibraryArchU;
-		LibrarySetup.CorridorHeight = Setup.Height;
-		Library->Configure(LibrarySetup, LeadStorm);
-		Library->FinishSpawning(Transform);
-	}
-}
-
-void ACorridorActor::SpawnMusicRoom()
-{
-	// The music room, behind the north wall from the end of the corridor to the bedroom, through the
-	// open arch across from the library's. Same frame as the corridor; its south face is the far side
-	// of the corridor's north wall, its east face the far side of the bedroom's west wall, and its
-	// north face, the façade, is in line with the kitchen's north wall a storey below and to the west.
-	const FTransform Transform = GetActorTransform();
-	MusicRoom = GetWorld()->SpawnActorDeferred<AMusicRoomActor>(AMusicRoomActor::StaticClass(), Transform, this);
-	if (MusicRoom)
-	{
-		const float T = Setup.WallThickness;
-		const float HallNorthY = CenterY() - AGrandStaircaseActor::HallWidth * 0.5f;
-		FMusicRoomSetup MusicSetup;
-		MusicSetup.SouthFace = NorthFace() - T;
-		MusicSetup.KitchenSouthY = HallNorthY - T;
-		MusicSetup.NorthFace = MusicSetup.KitchenSouthY - AKitchenActor::RoomDepth;
-		MusicSetup.WestX = WestFace;
-		MusicSetup.EastX = -(Setup.RoomHalfWidth + T * 0.5f);
-		MusicSetup.WallThickness = T;
-		MusicSetup.ArchX = MusicArchU;
-		MusicSetup.CorridorHeight = Setup.Height;
-		MusicSetup.BedroomHalfDepth = Setup.RoomHalfDepth;
-		MusicSetup.BedroomHeight = Setup.Height;
-		// The kitchen's walls stand to its ceiling slab's middle, the hall's to its own (KitchenActor and
-		// GrandStaircaseActor BuildShell: CeilingZ + 10).
-		MusicSetup.KitchenWallTop = AGrandStaircaseActor::GroundZ + AKitchenActor::RoomHeight + 10.f;
-		MusicSetup.HallWallTop = AGrandStaircaseActor::CeilingZ + 10.f;
-		MusicRoom->Configure(MusicSetup, LeadStorm);
-		MusicRoom->FinishSpawning(Transform);
 	}
 }
 
@@ -1524,10 +1460,11 @@ void ACorridorActor::BuildClues()
 		}
 	}
 
-	// Pencil lines up the west jamb of the library's arch, on the flat of its architrave: a child
-	// measured year after year, stopping a little over a metre up. They were on the casing of the
-	// small door that stood here; the arch's architrave face is 1.5 to 1.9 proud of the plaster.
-	if (AClueActor* Chart = SpawnClue(FVector(LibraryArchU - ALibraryActor::ArchHalf - 5.2f, SouthFace() - 1.9f, 0.f), FRotator::ZeroRotator))
+	// Pencil lines up the west casing of the girl's door, on the flat of it: a child measured year after
+	// year, stopping a little over a metre up. They were on the casing of the small door at -880, then
+	// on the library's arch there; both are gone and that wall is blank. The casing is 11 wide and
+	// its face 2.8 proud of the plaster (BuildDoorCasings).
+	if (AClueActor* Chart = SpawnClue(FVector(NurseryDoorU - HallDoorWidth * 0.5f - 5.5f, SouthFace() - 2.8f, 0.f), FRotator::ZeroRotator))
 	{
 		FRoomBuilder B(Chart, Chart->GetRootScene());
 		const float Heights[] = { 74.f, 83.f, 91.f, 98.f, 104.f, 111.f };
