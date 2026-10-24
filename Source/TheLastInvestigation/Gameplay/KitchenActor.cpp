@@ -528,7 +528,7 @@ void AKitchenActor::BuildWallFinish(FRoomBuilder& Build)
 					break;
 				}
 				const float Bottom = Dado + 6.f + Random.FRandRange(0.f, 30.f);
-				const float Top = Z1 - 40.f - Random.FRandRange(0.f, 70.f) - (Strip == 3 ? 90.f : 0.f);
+				const float Top = Z1 - 40.f - Random.FRandRange(0.f, 40.f) - (Strip == 3 ? 40.f : 0.f);
 				WallFill(Build, R.Wall, A, A + StripWidth - 0.3f, Bottom, Top, MatWallpaper, 0.5f);
 			}
 		}
@@ -1455,7 +1455,10 @@ void AKitchenActor::BuildPanRack(FRoomBuilder& Build)
 	const FVector C = TableCentre();
 	RackPivot = KitchenPivot(this, RoomRoot, FVector(MidX(), C.Y, CeilingZ() - 22.f), FRotator::ZeroRotator, TEXT("PanRack"));
 	FRoomBuilder R(this, RackPivot);
-	const float Drop = 120.f;
+	// Short under the lower ceiling: the rack hangs from beams 288 up, and its longest pan reaches 61
+	// under the bars (hook 7, handle 22, frying pan 32), so this keeps every pan over 200, clear of
+	// head height. On chains of 120 they hung at eye level.
+	const float Drop = 26.f;
 	const float HalfL = 95.f;
 	const float HalfW = 24.f;
 	const float ChainX = 60.f;
@@ -1571,7 +1574,7 @@ void AKitchenActor::BuildDamage(FRoomBuilder& Build)
 		for (int32 i = 0; i < 2; ++i)
 		{
 			const float U = Random.FRandRange(U0 + 60.f, U1 - 60.f);
-			const float Z = Random.FRandRange(F + 290.f, C - 50.f);
+			const float Z = Random.FRandRange(F + 200.f, C - 50.f);
 			if (!IsOnOpening(Wall, U, Z, 60.f, 60.f))
 			{
 				Stain(Wall, U, Z, Random.FRandRange(60.f, 120.f), Random.FRandRange(50.f, 110.f), RoomSurfaces::Substrate, SubstrateTint, Random.FRandRange(0.85f, 1.f), Random.FRandRange(0.f, 360.f), 0.9f);
@@ -1587,13 +1590,15 @@ void AKitchenActor::BuildDamage(FRoomBuilder& Build)
 	}
 
 	// Mould round both windows, blooming up the reveals and spreading behind the sink, where the
-	// wall has been wet longest.
+	// wall has been wet longest. Up the reveals from a little over the sill to under the head: drawn
+	// for the 420 room with its windows to 350, the blooms ran on past the head into the ceiling once
+	// it came down to 310 (10-22), so the range is the window's own, the same four numbers each.
 	for (int32 i = 0; i < 2; ++i)
 	{
 		const float U = WindowX(i);
 		for (const float S : { -1.f, 1.f })
 		{
-			Stain(EWall::North, U + S * (WindowWidth * 0.5f + 22.f), F + Random.FRandRange(150.f, 280.f), Random.FRandRange(34.f, 56.f), Random.FRandRange(110.f, 200.f),
+			Stain(EWall::North, U + S * (WindowWidth * 0.5f + 22.f), F + Random.FRandRange(WindowSill + 30.f, WindowTop - 45.f), Random.FRandRange(34.f, 56.f), Random.FRandRange(70.f, 120.f),
 				RoomSurfaces::Damp, MouldTint, Random.FRandRange(0.6f, 0.8f), 0.f, 1.15f);
 		}
 	}
@@ -1765,6 +1770,12 @@ void AKitchenActor::SpawnWindows()
 		WindowSetup.InnerSillProud = 0.f;
 		WindowSetup.bOwnView = (i == 0);
 		WindowSetup.PortalScale = 0.45f;
+		// No through-the-walls glow on the east window since the music room stands over this room
+		// (10-22): a follower's glow is an unshadowed point light two metres out and a metre under the
+		// music room's floor, and under -StormFlash it lit the music room's ceiling and its south wall
+		// white through the floor (the 10-05 note). The west window's own-view glow casts shadows and
+		// stays; the strike comes in here on that and on both sky portals.
+		WindowSetup.GlowScale = (i == 0) ? 1.f : 0.f;
 		// Every window its own seed, and none shared with another room's.
 		WindowSetup.Seed = 19861104 + i * 101;
 		Window->Configure(WindowSetup);

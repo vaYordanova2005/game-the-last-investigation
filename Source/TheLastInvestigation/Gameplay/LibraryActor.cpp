@@ -2,7 +2,6 @@
 #include "RoomBuildLibrary.h"
 #include "ClueActor.h"
 #include "StormWindowActor.h"
-#include "NurseryActor.h"
 #include "DustMotesComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -110,6 +109,8 @@ namespace
 	// foot of anything standing on the boards.
 	constexpr float LibraryDecalReach = 9.f;
 	constexpr float LibraryFloorDecalZ = 4.f;
+	/** The sizes a patch of the floor's film is tried at, largest first, to lay it between the furniture. */
+	constexpr float LibraryFilmScales[] = { 1.f, 0.7f, 0.5f };
 
 	/** A floor decal's half extent on the plan, X and Y: aimed down, its first size runs along world Y and its second along X before the roll (09-27). */
 	FVector2D LibraryFloorDecalHalfExtent(const FVector2D& Size, float Roll)
@@ -151,7 +152,7 @@ void ALibraryActor::Configure(const FLibrarySetup& InSetup, AStormWindowActor* I
 		FVector((EastX() - WestX()) * 0.47f, (SouthY() - NorthY()) * 0.47f, RoomHeight * 0.46f),
 		FVector(MidX(), MidY(), RoomHeight * 0.5f));
 
-	Openings = { { EWall::North, Setup.ArchX, ArchHalf, 0.f, ArchCrown } };
+	Openings = { { EWall::North, ArchX, ArchHalf, 0.f, ArchCrown } };
 	for (const float X : WindowXs)
 	{
 		Openings.Add({ EWall::South, X, WindowHalf, WindowSill, WindowTop });
@@ -162,19 +163,21 @@ void ALibraryActor::Configure(const FLibrarySetup& InSetup, AStormWindowActor* I
 	// last stretch of the east wall, by the filing cabinet and the calendar, is left panelled.
 	const float ArchClear = ArchHalf + ArchArchitrave + 4.f;
 	ShelfRuns = {
-		{ EWall::North, WestX(), Setup.ArchX - ArchClear },
-		{ EWall::North, Setup.ArchX + ArchClear, EastX() },
+		{ EWall::North, WestX(), ArchX - ArchClear },
+		{ EWall::North, ArchX + ArchClear, EastX() },
 		{ EWall::West, NorthY() + LowerDepth, SouthY() },
 		{ EWall::East, NorthY() + LowerDepth, BreastY - BreastHalf - 4.f },
 		{ EWall::East, BreastY + BreastHalf + 4.f, 1565.f },
 	};
+	// The arch stands close to the east wall: what is left of the north wall east of it is panelled.
+	ShelfRuns.RemoveAll([](const FShelfRun& Run) { return Run.U1 - Run.U0 < MinShelfRun; });
 }
 
 void ALibraryActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Its own stream, so tuning this room never relays the corridor's or the girl's room's.
+	// Its own stream, so tuning this room never relays the hall's or the living room's.
 	Random.Initialize(19590311);
 
 	FRoomBuilder Build(this, RoomRoot);
@@ -233,13 +236,11 @@ void ALibraryActor::CacheMaterials(FRoomBuilder& Build)
 	MatPanel = Build.Surface(RoomSurfaces::Wainscot, FLinearColor(2.1f, 3.3f, 3.5f));
 	MatPanelSheet = Sheet(RoomSurfaces::Wainscot, FLinearColor(2.1f, 3.3f, 3.5f));
 	MatPlaster = Build.Surface(RoomSurfaces::Plaster, FLinearColor(0.150f, 0.142f, 0.130f));
-	// The corridor's own plaster and trim, on the corridor face of the arch.
+	// The plaster at the corridor's values, which the stair hall shares, on the hall's face of the arch.
 	MatCorridorPlaster = Sheet(RoomSurfaces::Plaster, FLinearColor(0.150f, 0.142f, 0.130f));
 	// A tall ceiling a long way from three windows: darker than the living room's.
 	MatCeiling = Build.Surface(RoomSurfaces::Ceiling, FLinearColor(0.17f, 0.16f, 0.15f));
-	// herringbone_parquet (0.294, 0.163, 0.075) brought down past the living room's to a dark oak
-	// floor, and rough with sixty years of dust: it was shot freshly lacquered (the 09-27 note).
-	MatParquet = Build.Surface(RoomSurfaces::Parquet, FLinearColor(0.13f, 0.135f, 0.16f), 6.4f);
+	// The parquet is made in BuildFloor, from its own asset (the room is wider than deep).
 	// black_oak_veneer is polished pale veneer (the wine cellar's racks): taken down to a warm dark oak
 	// and roughened, or every upright of every bookcase mirrors the lantern.
 	MatOak = Sheet(RoomSurfaces::DarkOak, FLinearColor(0.16f, 0.12f, 0.095f), 2.2f);
@@ -709,23 +710,15 @@ void ALibraryActor::BuildShell(FRoomBuilder& Build)
 	const float Z0 = -20.f;
 	const float Z1 = RoomHeight + 10.f;
 
-	// Solid, colliding and never seen. The north wall up to the corridor's ceiling is the corridor's
-	// south wall, and the east wall up to the girl's ceiling is her west wall: only what is over
-	// those is ours. The west wall is built full height all the same: below the hall's ceiling it
-	// stands inside the hall's own east wall, and two black boxes in one place draw nothing new.
+	// Solid, colliding and never seen. The north wall up to the top of the stair hall's south wall is
+	// the hall's (it cuts the arch): only what is over it is ours. The west and east walls go from
+	// the floor: below it they stand on the living room's, and nothing is beside them up here.
 	Build.Box(FVector(WestX() - T * 0.5f, (NorthY() + SouthY() + T) * 0.5f, (Z0 + Z1) * 0.5f), FRotator::ZeroRotator,
 		FVector(T, SouthY() + T - NorthY(), Z1 - Z0), MatShell);
-	// Her room shares this one's north face (both are the corridor's south wall seen from behind), so
-	// her south wall's far side is her depth and a wall on from it. Her wall stands to her ceiling
-	// slab's top; ours starts from the middle of that slab.
-	const float NurserySouthOuter = NorthY() + ANurseryActor::RoomDepth + T;
-	const float NurseryWallTop = ANurseryActor::RoomHeight + 5.f;
-	Build.Box(FVector(EastX() + T * 0.5f, (NorthY() + NurserySouthOuter) * 0.5f, (NurseryWallTop + Z1) * 0.5f), FRotator::ZeroRotator,
-		FVector(T, NurserySouthOuter - NorthY(), Z1 - NurseryWallTop), MatShell);
-	Build.Box(FVector(EastX() + T * 0.5f, (NurserySouthOuter + SouthY() + T) * 0.5f, (Z0 + Z1) * 0.5f), FRotator::ZeroRotator,
-		FVector(T, SouthY() + T - NurserySouthOuter, Z1 - Z0), MatShell);
-	Build.Box(FVector(MidX(), NorthY() - T * 0.5f, (Setup.CorridorHeight - 5.f + Z1) * 0.5f), FRotator::ZeroRotator,
-		FVector(EastX() - WestX() + T * 2.f, T, Z1 - (Setup.CorridorHeight - 5.f)), MatShell);
+	Build.Box(FVector(EastX() + T * 0.5f, (NorthY() + SouthY() + T) * 0.5f, (Z0 + Z1) * 0.5f), FRotator::ZeroRotator,
+		FVector(T, SouthY() + T - NorthY(), Z1 - Z0), MatShell);
+	Build.Box(FVector(MidX(), NorthY() - T * 0.5f, (Setup.HallWallTop - 5.f + Z1) * 0.5f), FRotator::ZeroRotator,
+		FVector(EastX() - WestX() + T * 2.f, T, Z1 - (Setup.HallWallTop - 5.f)), MatShell);
 	for (const FBox2D& Piece : CutAround(EWall::South, WestX() - T, EastX() + T, Z0, Z1))
 	{
 		const FVector2D C = Piece.GetCenter();
@@ -742,8 +735,36 @@ void ALibraryActor::BuildShell(FRoomBuilder& Build)
 void ALibraryActor::BuildFloor(FRoomBuilder& Build)
 {
 	// Herringbone, wall to wall, as the living room's below: the floor that was laid to be shown. One
-	// box, turned so its long side is its local X (the builder's tiling rule); it collides.
-	Build.Box(FVector(MidX(), MidY(), -2.f), FRotator(0.f, 90.f, 0.f), FVector(SouthY() - NorthY(), EastX() - WestX(), 4.f), MatParquet);
+	// box, turned so its local X runs along world Y, towards the windows; it collides.
+	//
+	// The builder's tiling gives the larger repeat count to a part's local X, and over the living room
+	// this room is wider (1000) than it is deep (900): local X is the short side, and through the
+	// builder the blocks came out squeezed one way and stretched the other. So the floor has an
+	// instance of its own, made straight from the asset and never registered with a builder (which
+	// would re-tile it), its repeats written out for each side (the wine cellar's door strip, 10-09).
+	const float AlongY = SouthY() - NorthY();
+	const float AlongX = EastX() - WestX();
+	// herringbone_parquet (0.294, 0.163, 0.075) brought down past the living room's to a dark oak
+	// floor, and rough with sixty years of dust: it was shot freshly lacquered (the 09-27 note).
+	const FLinearColor Tint(0.13f, 0.135f, 0.16f);
+	const float RoughnessScale = 6.4f;
+	UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr,
+		*FString::Printf(TEXT("/Game/Materials/MI_%s.MI_%s"), RoomSurfaces::Parquet.Set, RoomSurfaces::Parquet.Set));
+	MatParquet = Parent ? UMaterialInstanceDynamic::Create(Parent, this) : nullptr;
+	if (MatParquet)
+	{
+		const float Texel = RoomSurfaces::Parquet.TexelSizeCm;
+		MatParquet->SetVectorParameterValue(TEXT("Tint"), Tint);
+		MatParquet->SetScalarParameterValue(TEXT("RoughnessScale"), RoughnessScale);
+		MatParquet->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(AlongY / Texel, AlongX / Texel, 0.f, 1.f));
+		MatParquet->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(0.f, 0.f, 0.f, 1.f));
+	}
+	else
+	{
+		// The art pipeline has not been run: the builder's flat fallback.
+		MatParquet = Build.Surface(RoomSurfaces::Parquet, Tint, RoughnessScale);
+	}
+	Build.Box(FVector(MidX(), MidY(), -2.f), FRotator(0.f, 90.f, 0.f), FVector(AlongY, AlongX, 4.f), MatParquet);
 }
 
 void ALibraryActor::BuildFloorDust(FRoomBuilder& Build)
@@ -755,7 +776,7 @@ void ALibraryActor::BuildFloorDust(FRoomBuilder& Build)
 
 	// Dust along the feet of the bookcases and the walls, where nobody's feet went. Aimed down, the
 	// first size runs along world Y: roll 90 along the north and south walls, none along the east
-	// and west (the 09-27 note). Kept off the arch's sill (Y over 610), and off whatever stands on
+	// and west (the 09-27 note). Kept off the arch's sill, and off whatever stands on
 	// the floor: along the east wall a strip ran into the hearth and under the filing cabinet, along
 	// the south wall under the record cabinet and the bust's column, and at the corners on into the
 	// next wall's bookcases. A skipped strip has drawn all its numbers (09-29).
@@ -778,7 +799,7 @@ void ALibraryActor::BuildFloorDust(FRoomBuilder& Build)
 		case 2: Spot = FVector2D(EastX() - LowerDepth - Out, FMath::Lerp(NorthY() + 80.f, SouthY() - 60.f, Along)); Wall = EWall::East; break;
 		default: Spot = FVector2D(WestX() + LowerDepth + Out, FMath::Lerp(NorthY() + 80.f, SouthY() - 60.f, Along)); break;
 		}
-		if (Side == 0 && FMath::Abs(Spot.X - Setup.ArchX) < ArchHalf + 60.f)
+		if (Side == 0 && FMath::Abs(Spot.X - ArchX) < ArchHalf + 60.f)
 		{
 			continue;
 		}
@@ -789,7 +810,11 @@ void ALibraryActor::BuildFloorDust(FRoomBuilder& Build)
 		Build.Stain(RoomSurfaces::Damp, FVector(Spot.X, Spot.Y, LibraryFloorDecalZ), FRotator(-90.f, 0.f, Roll + Turn), FVector2D(Length, Width), LibraryDust, Opacity, 1.35f);
 	}
 	// A thin film over the whole floor, and the way he walked every evening from the arch to the desk
-	// and from the desk to the fire: darker, where the dust never settled.
+	// and from the desk to the fire: darker, where the dust never settled. Both kept off what stands
+	// out in the room (the desk, the chairs, the chess table, the globe, the vitrine): a floor decal
+	// projects onto everything in its box, and at its drawn size every one of the seven film patches
+	// reached the foot of something. One that would is laid smaller, and left out only when even half
+	// its size reaches something. Every number is drawn before the test (09-29).
 	for (int32 i = 0; i < 7; ++i)
 	{
 		const float X = Random.FRandRange(WestX() + 140.f, EastX() - 140.f);
@@ -799,12 +824,28 @@ void ALibraryActor::BuildFloorDust(FRoomBuilder& Build)
 		const float SizeU = Random.FRandRange(170.f, 260.f);
 		const FVector2D Size(SizeU, SizeV);
 		const float Opacity = Random.FRandRange(0.14f, 0.22f);
-		Build.Stain(RoomSurfaces::Damp, FVector(X, Y, 4.f), FRotator(-90.f, 0.f, Roll), Size, LibraryDust, Opacity, 1.4f);
+		const float* Fit = Algo::FindByPredicate(LibraryFilmScales, [&](float Scale)
+		{
+			return !FloorDustHitsSomething(FVector2D(X, Y), LibraryFloorDecalHalfExtent(Size * Scale, Roll));
+		});
+		if (!Fit)
+		{
+			continue;
+		}
+		Build.Stain(RoomSurfaces::Damp, FVector(X, Y, LibraryFloorDecalZ), FRotator(-90.f, 0.f, Roll), Size * *Fit, LibraryDust, Opacity, 1.4f);
 	}
-	const FVector2D Path[] = { { Setup.ArchX, 690.f }, { -840.f, 900.f }, { -800.f, 1120.f }, { -640.f, 1140.f } };
+	// Each patch of the path is 150 along world Y and 80 across (aimed down, no roll), laid between
+	// what stands there rather than under it: the one between the desk and the fire was under the
+	// armchair.
+	const FVector2D PathHalf = LibraryFloorDecalHalfExtent(FVector2D(150.f, 80.f), 0.f);
+	const FVector2D Path[] = { { ArchX, NorthY() + 100.f }, { -1520.f, 1220.f }, { -1640.f, 1310.f }, { -1470.f, 1290.f } };
 	for (const FVector2D& P : Path)
 	{
-		Build.Stain(RoomSurfaces::Damp, FVector(P.X, P.Y, 4.f), FRotator(-90.f, 0.f, 0.f), FVector2D(150.f, 80.f),
+		if (FloorDustHitsSomething(P, PathHalf))
+		{
+			continue;
+		}
+		Build.Stain(RoomSurfaces::Damp, FVector(P.X, P.Y, LibraryFloorDecalZ), FRotator(-90.f, 0.f, 0.f), FVector2D(150.f, 80.f),
 			FLinearColor(0.10f, 0.085f, 0.07f), 0.28f, 1.3f, 0.8f);
 	}
 	// Under the windows the rain has been in at the sills for years: 70 out from the wall and 140
@@ -873,16 +914,20 @@ void ALibraryActor::BuildWalls(FRoomBuilder& Build)
 		}
 	}
 
-	// The arch from the corridor: one model through the wall, its corridor face painted and its
-	// library face oak, both architraves and the lining in it. The corridor has cut its wall to the
-	// arch's rectangle; this room's panelling is cut to it above.
-	// The corridor's trim is RoughWood at (0.370, 0.370, 0.360); this is its own instance, a hair off,
-	// with the tiling at one for the model's UVs.
-	UMaterialInstanceDynamic* CorridorTrim = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.3707f, 0.370f, 0.360f));
-	LibrarySheet(CorridorTrim);
-	Place(Build, LibraryProps::Arch, FVector(Setup.ArchX, NorthY() - Setup.WallThickness * 0.5f, 0.f), FRotator::ZeroRotator,
+	// The arch from the stair hall's south gallery: one model through the wall, both architraves and
+	// the lining in it. It is drawn with its outer face at -Y, which is the hall's side here. The hall
+	// has cut its wall to the arch's rectangle; this room's panelling is cut to it above. The hall's
+	// face is the hall's: its plaster at the corridor's values, and its joinery the staircase oak,
+	// RoughWood at (0.290, 0.272, 0.250), here on its own instance a hair off with the tiling at one
+	// for the model's UVs. No decals on it: the hall's damp is laid without a test.
+	UMaterialInstanceDynamic* HallTrim = Build.Surface(RoomSurfaces::RoughWood, FLinearColor(0.2907f, 0.272f, 0.250f));
+	LibrarySheet(HallTrim);
+	if (UStaticMeshComponent* Arch = Place(Build, LibraryProps::Arch, FVector(ArchX, NorthY() - Setup.WallThickness * 0.5f, 0.f), FRotator::ZeroRotator,
 		{ { TEXT("Shadow"), F(TEXT("Shadow")) }, { TEXT("CorridorWall"), MatCorridorPlaster }, { TEXT("LibraryWall"), MatPanelSheet },
-		  { TEXT("Oak"), MatOak }, { TEXT("Trim"), CorridorTrim } });
+		  { TEXT("Oak"), MatOak }, { TEXT("Trim"), HallTrim } }))
+	{
+		Arch->SetReceivesDecals(false);
+	}
 
 	// The chimney breast in the east wall: a shell round the firebox (it has to stay hollow, or its
 	// front face covers the fire), and the panelling laid on its three faces with the opening cut.
@@ -1107,7 +1152,9 @@ void ALibraryActor::BuildShelves(FRoomBuilder& Build)
 
 	// The ladder's rail along the west wall's bookcases, on brackets off the uprights, and the ladder
 	// hung on it a little way down the room, its foot out on the boards.
-	const FShelfRun& West = ShelfRuns[2];
+	const FShelfRun* WestRun = ShelfRuns.FindByPredicate([](const FShelfRun& Run) { return Run.Wall == EWall::West; });
+	check(WestRun);
+	const FShelfRun& West = *WestRun;
 	const float RailX = WestX() + RailProud;
 	Build.Cyl(FVector(RailX, (West.U0 + West.U1) * 0.5f, RailZ), FRotator(90.f, 90.f, 0.f), FVector(2.4f, 2.4f, West.U1 - West.U0 - 6.f), MatBrass, false);
 	for (float Y = West.U0 + 30.f; Y < West.U1 - 20.f; Y += 104.f)
@@ -1187,9 +1234,11 @@ void ALibraryActor::BuildDesk(FRoomBuilder& Build)
 	USceneComponent* DeskFrame = Pivot(Seat, FRotator(0.f, 180.f, 0.f), TEXT("DeskFrame"));
 	FRoomBuilder D(this, DeskFrame);
 	const float Top = DeskTop;
-	Place(D, LibraryProps::Desk, FVector::ZeroVector, FRotator::ZeroRotator,
+	// The desk, its chair and everything else standing out in the room keep the floor's dust off their
+	// feet, read off their bounds like what stands against the walls (KeepFloorDustOff).
+	KeepFloorDustOff(Place(D, LibraryProps::Desk, FVector::ZeroVector, FRotator::ZeroRotator,
 		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("LeatherGreen"), MatLeatherGreen }, { TEXT("Gilt"), F(TEXT("Gilt")) },
-		  { TEXT("Brass"), MatBrass }, { TEXT("Shadow"), F(TEXT("Shadow")) } });
+		  { TEXT("Brass"), MatBrass }, { TEXT("Shadow"), F(TEXT("Shadow")) } }));
 	Blocker(D, FVector(0.f, 0.f, 40.f), FVector(DeskWidth + 4.f, DeskDepth + 4.f, 80.f));
 
 	// The drawer he had open, pulled out and left: the top one of the left-hand pedestal, the family's
@@ -1198,10 +1247,12 @@ void ALibraryActor::BuildDesk(FRoomBuilder& Build)
 	Place(D, LibraryProps::DeskDrawer, DrawerFront, FRotator(0.f, 180.f, 0.f),
 		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Oak"), MatOak }, { TEXT("Brass"), MatBrass } });
 
-	// His chair, pushed back from the desk and turned, as it is when somebody gets up in a hurry.
-	Place(D, LibraryProps::DeskChair, FVector(-14.f, -DeskDepth * 0.5f - 62.f, 0.f), FRotator(0.f, 28.f, 0.f),
-		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Leather"), MatLeather }, { TEXT("Iron"), MatIron } });
-	Blocker(D, FVector(-14.f, -DeskDepth * 0.5f - 62.f, 40.f), FVector(54.f, 54.f, 80.f), 28.f);
+	// His chair, pushed back from the desk and turned, as it is when somebody gets up in a hurry: a
+	// tall buttoned leather tub on a swivel, 68 over the arms by 67 deep and 121 to the top of its back
+	// (worked out from Tools/make_library.py desk_chair), made for the desk it stands at.
+	KeepFloorDustOff(Place(D, LibraryProps::DeskChair, FVector(-14.f, -DeskDepth * 0.5f - 66.f, 0.f), FRotator(0.f, 28.f, 0.f),
+		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Leather"), MatLeather }, { TEXT("Iron"), MatIron } }));
+	Blocker(D, FVector(-14.f, -DeskDepth * 0.5f - 66.f, 60.5f), FVector(68.f, 67.f, 121.f), 28.f);
 
 	// The top. Centre: the blotter, the notebook open on it (a clue, BuildClues). His right hand (-X):
 	// the ink, the pen laid down across a sheet of notes. His left: the lamp at the back, the big
@@ -1248,12 +1299,12 @@ void ALibraryActor::BuildReadingCorner(FRoomBuilder& Build)
 	const FVector ToFire = (FVector(BreastFaceX(), BreastY, 0.f) - Chair).GetSafeNormal2D();
 	const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(-ToFire.X, ToFire.Y));
 	Build.Cloth(Chair + FVector(25.f, -30.f, 0.6f), FRotator(0.f, Yaw + 8.f, 0.f), FVector2D(210.f, 150.f), 0.5f, 0.f, 8101, MatGreenRug, 90.f, /*bWorn*/ false);
-	Place(Build, RoomProps::CellarArmchair, Chair, FRotator(0.f, Yaw, 0.f),
-		{ { TEXT("Leather"), MatLeather }, { TEXT("Brass"), MatBrass }, { TEXT("Wood"), MatMahogany } });
+	KeepFloorDustOff(Place(Build, RoomProps::CellarArmchair, Chair, FRotator(0.f, Yaw, 0.f),
+		{ { TEXT("Leather"), MatLeather }, { TEXT("Brass"), MatBrass }, { TEXT("Wood"), MatMahogany } }));
 	Blocker(Build, Chair + FVector(0.f, 0.f, 45.f), FVector(88.f, 86.f, 90.f), Yaw);
 
 	const FVector Table = Chair + FRotator(0.f, Yaw, 0.f).RotateVector(FVector(-68.f, 8.f, 0.f));
-	Place(Build, LibraryProps::SideTable, Table, FRotator(0.f, 15.f, 0.f), { { TEXT("Mahogany"), MatMahogany } });
+	KeepFloorDustOff(Place(Build, LibraryProps::SideTable, Table, FRotator(0.f, 15.f, 0.f), { { TEXT("Mahogany"), MatMahogany } }));
 	Blocker(Build, Table + FVector(0.f, 0.f, 34.f), FVector(48.f, 48.f, 68.f));
 	Place(Build, LibraryProps::Mug, Table + FVector(9.f, -6.f, 67.4f), FRotator(0.f, -120.f, 0.f), { { TEXT("Ceramic"), F(TEXT("Ceramic")) }, { TEXT("Charcoal"), F(TEXT("Charcoal")) } });
 	Place(Build, LibraryProps::BookPiles[1], Table + FVector(-6.f, 6.f, 67.4f), FRotator(0.f, 40.f, 0.f), { { TEXT("Books"), MatBooks } });
@@ -1261,7 +1312,7 @@ void ALibraryActor::BuildReadingCorner(FRoomBuilder& Build)
 	Dust(Build, Table + FVector(0.f, 0.f, 67.4f), FVector2D(46.f, 46.f), 0.4f);
 
 	const FVector Lamp = Chair + FRotator(0.f, Yaw, 0.f).RotateVector(FVector(-46.f, -58.f, 0.f));
-	Place(Build, LibraryProps::FloorLamp, Lamp, FRotator(0.f, 0.f, 0.f), { { TEXT("Brass"), MatBrass }, { TEXT("Fabric"), MatFabric } });
+	KeepFloorDustOff(Place(Build, LibraryProps::FloorLamp, Lamp, FRotator(0.f, 0.f, 0.f), { { TEXT("Brass"), MatBrass }, { TEXT("Fabric"), MatFabric } }));
 	Blocker(Build, Lamp + FVector(0.f, 0.f, 60.f), FVector(30.f, 30.f, 120.f));
 	Build.Add(FRoomShapes::Plane(), Lamp + FVector(0.f, 0.f, 150.f), FRotator(0.f, 40.f, 90.f), FVector(30.f, 24.f, 1.f), MatWeb, false);
 }
@@ -1269,8 +1320,8 @@ void ALibraryActor::BuildReadingCorner(FRoomBuilder& Build)
 void ALibraryActor::BuildDecor(FRoomBuilder& Build)
 {
 	// The globe beside the desk, turned to the Atlantic and left.
-	Place(Build, LibraryProps::Globe, GlobeSeat(), FRotator(0.f, 32.f, 0.f),
-		{ { TEXT("Globe"), MatGlobe }, { TEXT("Brass"), MatBrass }, { TEXT("Oak"), MatOak }, { TEXT("Card"), F(TEXT("Card")) } });
+	KeepFloorDustOff(Place(Build, LibraryProps::Globe, GlobeSeat(), FRotator(0.f, 32.f, 0.f),
+		{ { TEXT("Globe"), MatGlobe }, { TEXT("Brass"), MatBrass }, { TEXT("Oak"), MatOak }, { TEXT("Card"), F(TEXT("Card")) } }));
 	Blocker(Build, GlobeSeat() + FVector(0.f, 0.f, 50.f), FVector(70.f, 70.f, 100.f));
 
 	// Between the windows: the gramophone on its record cabinet, the bronze bust on its column, and a
@@ -1316,7 +1367,7 @@ void ALibraryActor::BuildDecor(FRoomBuilder& Build)
 	}
 
 	// Over the arch, on the library side, the old man in black who built the house.
-	const FVector Old = WallPoint(EWall::North, Setup.ArchX, 352.f, 0.f);
+	const FVector Old = WallPoint(EWall::North, ArchX, 352.f, 0.f);
 	if (UStaticMeshComponent* Frame = Place(Build, LibraryProps::FrameSmall, Old, FRotator(0.f, 0.f, 0.f),
 		{ { TEXT("Gilt"), F(TEXT("Gilt")) }, { TEXT("Shadow"), F(TEXT("Shadow")) } }))
 	{
@@ -1327,13 +1378,13 @@ void ALibraryActor::BuildDecor(FRoomBuilder& Build)
 
 	// The chess table north of the fire, a game left in the middle, the two chairs pushed back from it.
 	const FVector Chess = ChessSeat();
-	Place(Build, LibraryProps::ChessTable, Chess, FRotator(0.f, 0.f, 0.f),
-		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Bone"), F(TEXT("Bone")) }, { TEXT("Ebony"), F(TEXT("Ebony")) }, { TEXT("Gilt"), F(TEXT("Gilt")) } });
+	KeepFloorDustOff(Place(Build, LibraryProps::ChessTable, Chess, FRotator(0.f, 0.f, 0.f),
+		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Bone"), F(TEXT("Bone")) }, { TEXT("Ebony"), F(TEXT("Ebony")) }, { TEXT("Gilt"), F(TEXT("Gilt")) } }));
 	Blocker(Build, Chess + FVector(0.f, 0.f, 38.f), FVector(62.f, 62.f, 76.f));
 	const TPair<FVector, float> ChessChairs[] = { { Chess + FVector(-4.f, -64.f, 0.f), 6.f }, { Chess + FVector(10.f, 70.f, 0.f), 196.f } };
 	for (const TPair<FVector, float>& C : ChessChairs)
 	{
-		Place(Build, LibraryProps::SideChair, C.Key, FRotator(0.f, C.Value, 0.f), { { TEXT("Mahogany"), MatMahogany }, { TEXT("LeatherGreen"), MatLeatherGreen } });
+		KeepFloorDustOff(Place(Build, LibraryProps::SideChair, C.Key, FRotator(0.f, C.Value, 0.f), { { TEXT("Mahogany"), MatMahogany }, { TEXT("LeatherGreen"), MatLeatherGreen } }));
 		Blocker(Build, C.Key + FVector(0.f, 0.f, 45.f), FVector(44.f, 44.f, 90.f), C.Value);
 	}
 	Dust(Build, Chess + FVector(0.f, 0.f, 72.f), FVector2D(60.f, 60.f), 0.35f);
@@ -1342,8 +1393,8 @@ void ALibraryActor::BuildDecor(FRoomBuilder& Build)
 	// the glass, one open on its velvet.
 	USceneComponent* VitrineFrame = Pivot(VitrineSeat(), FRotator(0.f, -90.f, 0.f), TEXT("VitrineFrame"));
 	FRoomBuilder V(this, VitrineFrame);
-	Place(V, LibraryProps::Vitrine, FVector::ZeroVector, FRotator::ZeroRotator,
-		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Velvet"), F(TEXT("Velvet")) }, { TEXT("Glass"), MatGlass }, { TEXT("Brass"), MatBrass } });
+	KeepFloorDustOff(Place(V, LibraryProps::Vitrine, FVector::ZeroVector, FRotator::ZeroRotator,
+		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Velvet"), F(TEXT("Velvet")) }, { TEXT("Glass"), MatGlass }, { TEXT("Brass"), MatBrass } }));
 	Place(V, LibraryProps::OpenBook, FVector(-22.f, 2.f, 82.6f), FRotator(0.f, 180.f, 0.f),
 		{ { TEXT("Leather"), MatLeather }, { TEXT("Card"), F(TEXT("Card")) }, { TEXT("Paper"), MatPaperSheet }, { TEXT("Velvet"), F(TEXT("Velvet")) } });
 	Place(V, LibraryProps::BookPiles[1], FVector(34.f, -2.f, 82.6f), FRotator(0.f, 14.f, 0.f), { { TEXT("Books"), MatBooks } });
@@ -1364,7 +1415,7 @@ void ALibraryActor::BuildDecor(FRoomBuilder& Build)
 	Dust(Fi, FVector(0.f, 0.f, 135.f), FVector2D(66.f, 50.f), 0.45f);
 
 	// The chandelier, dead, over the middle of the room between the arch and the desk.
-	const FVector Hook(-785.f, 1105.f, RoomHeight - 8.f);
+	const FVector Hook(DeskSeat().X, 1200.f, RoomHeight - 8.f);
 	Build.Cyl(Hook + FVector(0.f, 0.f, 5.f), FRotator::ZeroRotator, FVector(54.f, 54.f, 4.f), MatOakBox, false);
 	const float Chain = 96.f;
 	for (int32 Link = 0; Link * 6.f < Chain; ++Link)
@@ -1533,12 +1584,10 @@ void ALibraryActor::BuildDamage(FRoomBuilder& Build)
 
 void ALibraryActor::SpawnWindows()
 {
-	// Three followers of the bedroom's storm in the south wall, the living room's three below and to
-	// the west looking the same way. The living room's middle window has a view of its own (sky,
-	// ground, trees) out there already; this room's middle one adds its own trees and rain in front
-	// of that (bOwnTrees), because from up here the living room's treeline stands well off to the
-	// west. No own view: a second sky and ground on the same side of the house stand two worlds
-	// through each other (the 10-02 note).
+	// Three followers of the bedroom's storm in the south wall, over the living room's three. The
+	// living room's middle window has a view of its own (sky, ground, trees) out there already, right
+	// in front of these: no own view and no own trees here, since a second sky, ground or treeline on
+	// the same stretch of the house stands two worlds through each other (the 10-02 note).
 	for (int32 i = 0; i < 3; ++i)
 	{
 		const FTransform Transform(FRotator(0.f, 90.f, 0.f),
@@ -1553,11 +1602,10 @@ void ALibraryActor::SpawnWindows()
 		WindowSetup.SillHeight = WindowSill;
 		WindowSetup.TopHeight = WindowTop;
 		WindowSetup.WallThickness = Setup.WallThickness;
-		WindowSetup.bOwnTrees = (i == 1);
 		// Three tall windows are a lot of sky, and this room is meant to be mostly dark.
 		WindowSetup.PortalScale = 0.38f;
-		// No through-the-walls glow: the girl's room is next door and the living room below, and both
-		// have windows of their own. The strike comes in through the glass, on the sky portals.
+		// No through-the-walls glow: the living room is below and the hall beside, and both have
+		// windows of their own. The strike comes in through the glass, on the sky portals.
 		WindowSetup.GlowScale = 0.f;
 		// Theatre drapes, after the user's reference: crimson velvet, wide, in deep folds, to the
 		// floor, tied back on gold cords with tassels, gold fringe on what is left of the hem. The

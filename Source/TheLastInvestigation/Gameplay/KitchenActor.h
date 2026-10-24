@@ -78,12 +78,13 @@ public:
 	 */
 	static constexpr float RoomWidth = 720.f;
 	static constexpr float RoomDepth = 620.f;
-	static constexpr float RoomHeight = 420.f;
+	/** Under the floor of the music room over it, level with the stair hall's galleries (the user's call, 10-22: it was 420). */
+	static constexpr float RoomHeight = 310.f;
 
 	// The two windows in the north wall, sill just over the worktop.
 	static constexpr float WindowWidth = 150.f;
 	static constexpr float WindowSill = 100.f;
-	static constexpr float WindowTop = 350.f;
+	static constexpr float WindowTop = 255.f;
 	static constexpr float WindowSpacing = 360.f;
 
 	// The brick chimney breast in the middle of the west wall, and the alcove the range stands in.

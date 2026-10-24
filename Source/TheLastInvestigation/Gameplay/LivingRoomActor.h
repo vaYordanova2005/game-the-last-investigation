@@ -71,14 +71,17 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
-	/** North to south, and floor to ceiling: one tall storey, well over the corridor's 305. */
+	/**
+	 * North to south, and floor to ceiling. The ceiling is under the floor of the library over it,
+	 * level with the stair hall's galleries (the user's call, 10-22: it was one tall storey of 450).
+	 */
 	static constexpr float RoomDepth = 900.f;
-	static constexpr float RoomHeight = 450.f;
+	static constexpr float RoomHeight = 310.f;
 
-	// The three windows in the south wall, floor to nearly the ceiling.
+	// The three windows in the south wall, tall, their architraves under the picture rail.
 	static constexpr float WindowWidth = 140.f;
 	static constexpr float WindowSill = 45.f;
-	static constexpr float WindowTop = 395.f;
+	static constexpr float WindowTop = 245.f;
 	static constexpr float WindowSpacing = 260.f;
 
 	// The chimney breast in the middle of the west wall, and the firebox in it.

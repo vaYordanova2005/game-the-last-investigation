@@ -123,8 +123,9 @@ DESK_W = 180.0
 DESK_D = 90.0
 DESK_TOP = 78.0
 ARCH_HALF = 80.0
-# The corridor's cornice comes down to 281: the architrave over the crown (14) and the keystone
-# have to stop short of it.
+# The arch is off the stair hall's south gallery: its hall face's architrave over the crown (14) and
+# the keystone stand above the hall's picture rail (262), which the hall cuts round them
+# (AGrandStaircaseActor::CutAroundTrim), and under the hall's ceiling.
 ARCH_SPRING = 185.0
 ARCH_CROWN = ARCH_SPRING + ARCH_HALF
 ARCH_WALL = 20.0
@@ -452,9 +453,11 @@ def architrave_profile(width, depth, flip=1.0):
 
 
 def corridor_arch():
-    """The way into the library from the corridor: a round-headed arch through the corridor's south
-    wall, lined in oak, with an architrave on each face. Origin at the opening's middle on the floor,
-    in the middle of the wall; the corridor is at -Y, the library at +Y."""
+    """The way into the library from the stair hall's south gallery (the name is from when it opened
+    off the corridor): a round-headed arch through the hall's south wall, lined in oak, with an
+    architrave on each face. The CorridorWall and Trim slots are the hall face's plaster and staircase
+    oak. Origin at the opening's middle on the floor, in the middle of the wall; the hall is at -Y, the
+    library at +Y."""
     half, spring, crown = ARCH_HALF, ARCH_SPRING, ARCH_CROWN
     hy = ARCH_WALL * 0.5
     # The masonry over the curve, in each room's wall finish: a thin skin on each face, a core.
@@ -483,8 +486,8 @@ def corridor_arch():
         c, d = count - 1 - (k + 1), count - 1 - k
         bm.faces.new((near[a], near[b], near[c], near[d]))
         bm.faces.new((far[d], far[c], far[b], far[a]))
-    # The architraves: up each jamb, round the head, on both faces. The corridor's is painted like
-    # its door casings; the library's is oak. The path runs up the left jamb, over the head left to
+    # The architraves: up each jamb, round the head, on both faces. The hall face's takes the hall's
+    # staircase oak (the Trim slot); the library's is the library's oak. The path runs up the left jamb, over the head left to
     # right and down the right jamb, so the moulding's positive "across" is always away from the
     # opening.
     path = ([(-half - 0.2, 0.0), (-half - 0.2, spring)] + semicircle(0.0, spring, half + 0.2, 48, math.pi, 0.0)[1:-1]
@@ -735,33 +738,112 @@ def desk_drawer():
     return [wood, inner, brass]
 
 
+def chair_shell(part, front_fn, back_fn, nu, nv):
+    """A closed upholstered shell between two surfaces over the unit square: front_fn(s, t) the face
+    the sitter leans on (tufted), back_fn(s, t) the plain leather behind it. The edges are closed
+    round, so the bake's normals have an inside to point away from."""
+    bm = part.bm
+    front = [[bm.verts.new(front_fn(i / nu, j / nv)) for j in range(nv + 1)] for i in range(nu + 1)]
+    back = [[bm.verts.new(back_fn(i / nu, j / nv)) for j in range(nv + 1)] for i in range(nu + 1)]
+    for i in range(nu):
+        for j in range(nv):
+            bm.faces.new((front[i][j], front[i + 1][j], front[i + 1][j + 1], front[i][j + 1]))
+            bm.faces.new((back[i][j + 1], back[i + 1][j + 1], back[i + 1][j], back[i][j]))
+    for i in range(nu):
+        for j in (0, nv):
+            bm.faces.new((front[i][j], back[i][j], back[i + 1][j], front[i + 1][j]))
+    for j in range(nv):
+        for i in (0, nu):
+            bm.faces.new((front[i][j], front[i][j + 1], back[i][j + 1], back[i][j]))
+
+
 def desk_chair():
-    """A banker's chair: a buttoned leather seat on a swivel over four splayed feet with castors, a
-    low curved back rail on turned spindles that runs round into the arms. Faces +Y."""
-    wood = Part("Mahogany", bevel=0.3)
-    leather = Part("Leather", bevel=2.0, segments=3)
-    lathe(leather, [(0.0, 44.0), (22.0, 44.0), (24.0, 45.5), (24.0, 48.0), (22.0, 50.0), (0.0, 51.0)], Matrix.Diagonal((1.0, 0.92, 1.0, 1.0)), sides=32)
-    lathe(wood, [(0.0, 40.0), (23.0, 40.0), (24.4, 42.0), (24.4, 44.4), (0.0, 44.4)], Matrix.Diagonal((1.0, 0.92, 1.0, 1.0)), sides=32)
-    # The rail: an arc round the back from arm to arm, on spindles.
-    rail = []
-    for k in range(25):
-        a = math.radians(-20.0 - 140.0 * k / 24.0)
-        rail.append((math.cos(a) * 25.0, math.sin(a) * 23.0, 76.0 - 10.0 * abs(k - 12) / 12.0))
-    tube(wood, rail, 2.2, sides=12)
-    for k in range(1, 24, 2):
-        x, y, z = rail[k]
-        tube(wood, [(x * 0.92, y * 0.92, 50.0), (x, y, z - 1.0)], [0.9, 0.7], sides=8)
-    for k in (0, 24):
-        x, y, z = rail[k]
-        tube(wood, [(x, y, z), (x * 0.95, y * 0.95 + 4.0, z - 4.0), (x * 0.9, y * 0.9 + 6.0, 50.0)], [2.0, 1.6, 1.4], sides=10)
+    """His desk chair, made for the desk: a tall button-tufted leather tub on a swivel, the back
+    curving round into rolled arms that end in carved mahogany knuckles, a deep buttoned seat, and
+    four splayed mahogany legs on iron castors. About 68 wide (over the arms' knuckles), 67 deep, 121
+    to the top of the back's roll. Faces +Y (the sitter's back to -Y)."""
+    wood = Part("Mahogany", bevel=0.4)
     iron = Part("Iron")
-    lathe(iron, [(0.0, 12.0), (3.0, 12.0), (2.6, 16.0), (2.0, 38.0), (5.0, 40.0), (0.0, 40.0)], Matrix.Identity(4), sides=16)
+    seat = Part("Leather", bevel=3.5, segments=4, angle=30.0)
+    shell = Part("Leather", smooth=True)
+    rolls = Part("Leather", smooth=True)
+    buttons = Part("Leather")
+
+    seat_z = 49.0
+    r_in, r_out = 23.0, 30.0
+    spread = 72.0
+
+    def top(phi):
+        # Highest behind the sitter's head, coming down round the sides into the arms.
+        return 117.0 - 47.0 * (phi / spread) ** 2
+
+    def lean(z):
+        # The back leans back about seven degrees.
+        return -(z - seat_z) * 0.12
+
+    def point(phi, z, r):
+        a = math.radians(-90.0 + phi)
+        return Vector((math.cos(a) * r, math.sin(a) * r * 0.95 + 2.0 + lean(z), z))
+
+    # The buttons on a diamond grid; the leather between them is stuffed out towards the sitter and
+    # pulled back in at every button, which is what makes a back read as buttoned rather than quilted.
+    tufts = []
+    for row, z in enumerate((62.0, 74.0, 86.0, 98.0, 109.0)):
+        offset = 0.0 if row % 2 == 0 else 10.0
+        for k in range(-4, 5):
+            phi = k * 20.0 + offset
+            if abs(phi) <= 62.0 and z < top(phi) - 7.0:
+                tufts.append((phi, z))
+    per_degree = r_in * math.pi / 180.0
+
+    def stuffing(phi, z):
+        d2 = min(((phi - bp) * per_degree) ** 2 + (z - bz) ** 2 for bp, bz in tufts)
+        # Faded to nothing at the piped edges.
+        s = (phi + spread) / (2.0 * spread)
+        t = (z - seat_z) / max(top(phi) - seat_z, 1.0)
+        edge = min(1.0, min(s, 1.0 - s) * 9.0, min(t, 1.0 - t) * 7.0)
+        return 2.6 * (1.0 - math.exp(-d2 / 16.0)) * max(edge, 0.0)
+
+    def surface(s, t, front):
+        phi = -spread + 2.0 * spread * s
+        z = seat_z + t * (top(phi) - seat_z)
+        r = r_in - stuffing(phi, z) if front else r_out
+        return point(phi, z, r)
+
+    chair_shell(shell, lambda s, t: surface(s, t, True), lambda s, t: surface(s, t, False), 48, 30)
+    for phi, z in tufts:
+        p = point(phi, z, r_in - 0.2)
+        ellipsoid(buttons, tuple(p), (0.95, 0.95, 0.95), rings=6, sides=10)
+
+    # The roll along the top of the back, running on round into the arms.
+    r_mid = (r_in + r_out) * 0.5
+    roll = [tuple(point(-spread + 2.0 * spread * k / 36, top(-spread + 2.0 * spread * k / 36), r_mid)) for k in range(37)]
+    tube(rolls, roll, 4.4, sides=16)
+    for sx in (-1, 1):
+        end = point(sx * spread, top(spread), r_mid)
+        arm = [tuple(end), (sx * 27.5, 2.0, 68.5), (sx * 28.5, 16.0, 67.5), (sx * 28.5, 25.0, 66.5)]
+        tube(rolls, K.catmull(arm, 6), 5.0, sides=16)
+        # Under the roll, the arm's side panel down to the seat rail.
+        cbox(seat, sx * 28.5, 4.0, 54.0, 6.5, 40.0, 24.0)
+        # The carved knuckle at the arm's end and the post under it.
+        ellipsoid(wood, (sx * 28.5, 28.0, 64.5), (5.4, 3.4, 6.4), rings=10, sides=16)
+        tube(wood, [(sx * 28.5, 26.5, 41.0), (sx * 28.5, 27.5, 52.0), (sx * 28.5, 27.0, 60.0)], [2.6, 2.2, 2.6], sides=12)
+    # The seat: a deep cushion, buttoned, on a moulded mahogany rail.
+    cbox(seat, 0.0, 3.0, 46.5, 52.0, 50.0, 8.0)
+    for bx in (-12.0, 0.0, 12.0):
+        for by in (-6.0, 12.0):
+            ellipsoid(buttons, (bx + (6.0 if by > 0 else 0.0), by, 50.4), (0.9, 0.9, 0.6), rings=6, sides=10)
+    cbox(wood, 0.0, 3.0, 40.5, 58.0, 54.0, 5.0)
+    cbox(wood, 0.0, 27.6, 38.0, 54.0, 2.0, 3.0)
+
+    # The swivel and the four splayed legs on castors.
+    lathe(iron, [(0.0, 12.0), (3.4, 12.0), (3.0, 16.0), (2.4, 36.0), (7.0, 38.0), (0.0, 38.0)], Matrix.Identity(4), sides=16)
     for k in range(4):
         a = math.radians(45.0 + 90.0 * k)
         c, s = math.cos(a), math.sin(a)
-        tube(wood, [(c * 2.0, s * 2.0, 16.0), (c * 14.0, s * 14.0, 10.0), (c * 28.0, s * 28.0, 6.0)], [2.4, 2.0, 1.6], sides=10)
-        lathe(iron, [(0.0, 0.0), (2.4, 0.4), (2.6, 2.4), (1.0, 4.4), (0.0, 6.0)], at(c * 28.0, s * 28.0, 0.0), sides=10)
-    return [wood, leather, iron]
+        tube(wood, [(c * 2.0, s * 2.0, 17.0), (c * 15.0, s * 15.0, 11.0), (c * 31.0, s * 31.0, 6.5)], [3.0, 2.4, 1.8], sides=12)
+        lathe(iron, [(0.0, 0.0), (2.6, 0.4), (2.8, 2.6), (1.2, 4.6), (0.0, 6.5)], at(c * 31.0, s * 31.0, 0.0), sides=10)
+    return [wood, iron, seat, shell, rolls, buttons]
 
 
 def bankers_lamp():
