@@ -1285,14 +1285,17 @@ void ALivingRoomActor::BuildDamage(FRoomBuilder& Build)
 	}
 
 	// Mould round every window, worst under the sills where the rain runs down the inside of the
-	// wall, and blooming up both sides of the reveal.
+	// wall, and blooming up both sides of the reveal: from a little over the sill to under the head.
+	// Drawn for the 450 room with its windows to 395, the blooms ran on past the head and the picture
+	// rail into the cornice once it came down to 310 (10-22); the range is the window's own now, the
+	// same four numbers each.
 	for (int32 i = 0; i < 3; ++i)
 	{
 		const float U = WindowX(i);
 		Stain(EWall::South, U, F + 24.f, WindowWidth + 30.f, 46.f, RoomSurfaces::Damp, MouldTint, 0.8f, 0.f, 1.2f);
 		for (const float S : { -1.f, 1.f })
 		{
-			Stain(EWall::South, U + S * (WindowWidth * 0.5f + 24.f), F + Random.FRandRange(120.f, 300.f), Random.FRandRange(34.f, 56.f), Random.FRandRange(120.f, 240.f),
+			Stain(EWall::South, U + S * (WindowWidth * 0.5f + 24.f), F + Random.FRandRange(WindowSill + 45.f, WindowTop - 55.f), Random.FRandRange(34.f, 56.f), Random.FRandRange(70.f, 140.f),
 				RoomSurfaces::Damp, MouldTint, Random.FRandRange(0.6f, 0.8f), 0.f, 1.15f);
 		}
 		// And on the parquet under each, standing water gone to a dark stain, wettest under the
@@ -1467,6 +1470,13 @@ void ALivingRoomActor::SpawnWindows()
 		// Three tall windows are a great deal more sky than the bedroom's one, and this room is
 		// meant to be mostly dark.
 		WindowSetup.PortalScale = 0.42f;
+		// No through-the-walls glow on the two followers since the library stands over this room
+		// (10-22): a follower's glow is an unshadowed point light two metres out and a metre and a
+		// third under the library's floor, and under -StormFlash it lit the library's ceiling and its
+		// north bookcases white through the floor (the 10-05 note: an unshadowed light is a light
+		// through walls). The middle window's own-view glow casts shadows and stays; the strike
+		// comes in here on that and on the three sky portals.
+		WindowSetup.GlowScale = (i == 1) ? 1.f : 0.f;
 		// Every window its own seed, or its curtains are torn and its panes broken where the next
 		// one's are.
 		WindowSetup.Seed = 19640927 + i * 101;

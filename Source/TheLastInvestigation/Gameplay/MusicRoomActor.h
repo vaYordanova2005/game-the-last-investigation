@@ -54,10 +54,10 @@ struct FMusicRoomSetup
  * her chair, the violin open in its case on the window bench; two green velvet armchairs turned to
  * listen, the metronome on the table between them.
  *
- * Shares the room's frame, like the corridor and the library, so every number in here reads straight
- * off -RoomShotX/Y/Z. The instruments, the furniture, the chandelier and the arch are generated in
- * Blender by Tools/make_music_room.py; the velvet, the damask, the music, the spines, the photographs
- * and the paintings are baked by Tools/make_music_art.py.
+ * Shares the room's frame, like the hall that spawns it and the kitchen under it, so every number in
+ * here reads straight off -RoomShotX/Y/Z. The instruments, the furniture, the chandelier and the arch
+ * are generated in Blender by Tools/make_music_room.py; the velvet, the damask, the music, the spines,
+ * the photographs and the paintings are baked by Tools/make_music_art.py.
  */
 UCLASS()
 class AMusicRoomActor : public AActor
@@ -91,7 +91,8 @@ public:
 	 * Where along the south wall the arch stands: at the corridor's end of the hall's north gallery,
 	 * across the stairwell from the library's (ALibraryActor::ArchX; the user's call: by the corridor,
 	 * not by the stairhead). The hall face's architrave keeps a hand's width off the hall's east wall,
-	 * and the room face's surround off this room's.
+	 * and the room face's surround off this room's (the asserts are on the hall's east wall written out;
+	 * AGrandStaircaseActor::SpawnMusicRoom checks them against the hall's own).
 	 */
 	static constexpr float ArchX = -1420.f;
 	static_assert(ArchX + ArchHalf + ArchArchitrave < -1270.f - 15.f, "the hall face stays off the hall's east wall");

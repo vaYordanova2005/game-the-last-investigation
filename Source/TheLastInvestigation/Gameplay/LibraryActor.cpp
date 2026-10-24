@@ -109,6 +109,8 @@ namespace
 	// foot of anything standing on the boards.
 	constexpr float LibraryDecalReach = 9.f;
 	constexpr float LibraryFloorDecalZ = 4.f;
+	/** The sizes a patch of the floor's film is tried at, largest first, to lay it between the furniture. */
+	constexpr float LibraryFilmScales[] = { 1.f, 0.7f, 0.5f };
 
 	/** A floor decal's half extent on the plan, X and Y: aimed down, its first size runs along world Y and its second along X before the roll (09-27). */
 	FVector2D LibraryFloorDecalHalfExtent(const FVector2D& Size, float Roll)
@@ -238,9 +240,7 @@ void ALibraryActor::CacheMaterials(FRoomBuilder& Build)
 	MatCorridorPlaster = Sheet(RoomSurfaces::Plaster, FLinearColor(0.150f, 0.142f, 0.130f));
 	// A tall ceiling a long way from three windows: darker than the living room's.
 	MatCeiling = Build.Surface(RoomSurfaces::Ceiling, FLinearColor(0.17f, 0.16f, 0.15f));
-	// herringbone_parquet (0.294, 0.163, 0.075) brought down past the living room's to a dark oak
-	// floor, and rough with sixty years of dust: it was shot freshly lacquered (the 09-27 note).
-	MatParquet = Build.Surface(RoomSurfaces::Parquet, FLinearColor(0.13f, 0.135f, 0.16f), 6.4f);
+	// The parquet is made in BuildFloor, from its own asset (the room is wider than deep).
 	// black_oak_veneer is polished pale veneer (the wine cellar's racks): taken down to a warm dark oak
 	// and roughened, or every upright of every bookcase mirrors the lantern.
 	MatOak = Sheet(RoomSurfaces::DarkOak, FLinearColor(0.16f, 0.12f, 0.095f), 2.2f);
@@ -735,8 +735,36 @@ void ALibraryActor::BuildShell(FRoomBuilder& Build)
 void ALibraryActor::BuildFloor(FRoomBuilder& Build)
 {
 	// Herringbone, wall to wall, as the living room's below: the floor that was laid to be shown. One
-	// box, turned so its long side is its local X (the builder's tiling rule); it collides.
-	Build.Box(FVector(MidX(), MidY(), -2.f), FRotator(0.f, 90.f, 0.f), FVector(SouthY() - NorthY(), EastX() - WestX(), 4.f), MatParquet);
+	// box, turned so its local X runs along world Y, towards the windows; it collides.
+	//
+	// The builder's tiling gives the larger repeat count to a part's local X, and over the living room
+	// this room is wider (1000) than it is deep (900): local X is the short side, and through the
+	// builder the blocks came out squeezed one way and stretched the other. So the floor has an
+	// instance of its own, made straight from the asset and never registered with a builder (which
+	// would re-tile it), its repeats written out for each side (the wine cellar's door strip, 10-09).
+	const float AlongY = SouthY() - NorthY();
+	const float AlongX = EastX() - WestX();
+	// herringbone_parquet (0.294, 0.163, 0.075) brought down past the living room's to a dark oak
+	// floor, and rough with sixty years of dust: it was shot freshly lacquered (the 09-27 note).
+	const FLinearColor Tint(0.13f, 0.135f, 0.16f);
+	const float RoughnessScale = 6.4f;
+	UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr,
+		*FString::Printf(TEXT("/Game/Materials/MI_%s.MI_%s"), RoomSurfaces::Parquet.Set, RoomSurfaces::Parquet.Set));
+	MatParquet = Parent ? UMaterialInstanceDynamic::Create(Parent, this) : nullptr;
+	if (MatParquet)
+	{
+		const float Texel = RoomSurfaces::Parquet.TexelSizeCm;
+		MatParquet->SetVectorParameterValue(TEXT("Tint"), Tint);
+		MatParquet->SetScalarParameterValue(TEXT("RoughnessScale"), RoughnessScale);
+		MatParquet->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(AlongY / Texel, AlongX / Texel, 0.f, 1.f));
+		MatParquet->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(0.f, 0.f, 0.f, 1.f));
+	}
+	else
+	{
+		// The art pipeline has not been run: the builder's flat fallback.
+		MatParquet = Build.Surface(RoomSurfaces::Parquet, Tint, RoughnessScale);
+	}
+	Build.Box(FVector(MidX(), MidY(), -2.f), FRotator(0.f, 90.f, 0.f), FVector(AlongY, AlongX, 4.f), MatParquet);
 }
 
 void ALibraryActor::BuildFloorDust(FRoomBuilder& Build)
@@ -782,7 +810,11 @@ void ALibraryActor::BuildFloorDust(FRoomBuilder& Build)
 		Build.Stain(RoomSurfaces::Damp, FVector(Spot.X, Spot.Y, LibraryFloorDecalZ), FRotator(-90.f, 0.f, Roll + Turn), FVector2D(Length, Width), LibraryDust, Opacity, 1.35f);
 	}
 	// A thin film over the whole floor, and the way he walked every evening from the arch to the desk
-	// and from the desk to the fire: darker, where the dust never settled.
+	// and from the desk to the fire: darker, where the dust never settled. Both kept off what stands
+	// out in the room (the desk, the chairs, the chess table, the globe, the vitrine): a floor decal
+	// projects onto everything in its box, and at its drawn size every one of the seven film patches
+	// reached the foot of something. One that would is laid smaller, and left out only when even half
+	// its size reaches something. Every number is drawn before the test (09-29).
 	for (int32 i = 0; i < 7; ++i)
 	{
 		const float X = Random.FRandRange(WestX() + 140.f, EastX() - 140.f);
@@ -792,12 +824,28 @@ void ALibraryActor::BuildFloorDust(FRoomBuilder& Build)
 		const float SizeU = Random.FRandRange(170.f, 260.f);
 		const FVector2D Size(SizeU, SizeV);
 		const float Opacity = Random.FRandRange(0.14f, 0.22f);
-		Build.Stain(RoomSurfaces::Damp, FVector(X, Y, 4.f), FRotator(-90.f, 0.f, Roll), Size, LibraryDust, Opacity, 1.4f);
+		const float* Fit = Algo::FindByPredicate(LibraryFilmScales, [&](float Scale)
+		{
+			return !FloorDustHitsSomething(FVector2D(X, Y), LibraryFloorDecalHalfExtent(Size * Scale, Roll));
+		});
+		if (!Fit)
+		{
+			continue;
+		}
+		Build.Stain(RoomSurfaces::Damp, FVector(X, Y, LibraryFloorDecalZ), FRotator(-90.f, 0.f, Roll), Size * *Fit, LibraryDust, Opacity, 1.4f);
 	}
-	const FVector2D Path[] = { { ArchX, NorthY() + 100.f }, { -1520.f, 1220.f }, { -1660.f, 1330.f }, { -1540.f, 1340.f } };
+	// Each patch of the path is 150 along world Y and 80 across (aimed down, no roll), laid between
+	// what stands there rather than under it: the one between the desk and the fire was under the
+	// armchair.
+	const FVector2D PathHalf = LibraryFloorDecalHalfExtent(FVector2D(150.f, 80.f), 0.f);
+	const FVector2D Path[] = { { ArchX, NorthY() + 100.f }, { -1520.f, 1220.f }, { -1640.f, 1310.f }, { -1470.f, 1290.f } };
 	for (const FVector2D& P : Path)
 	{
-		Build.Stain(RoomSurfaces::Damp, FVector(P.X, P.Y, 4.f), FRotator(-90.f, 0.f, 0.f), FVector2D(150.f, 80.f),
+		if (FloorDustHitsSomething(P, PathHalf))
+		{
+			continue;
+		}
+		Build.Stain(RoomSurfaces::Damp, FVector(P.X, P.Y, LibraryFloorDecalZ), FRotator(-90.f, 0.f, 0.f), FVector2D(150.f, 80.f),
 			FLinearColor(0.10f, 0.085f, 0.07f), 0.28f, 1.3f, 0.8f);
 	}
 	// Under the windows the rain has been in at the sills for years: 70 out from the wall and 140
@@ -1186,9 +1234,11 @@ void ALibraryActor::BuildDesk(FRoomBuilder& Build)
 	USceneComponent* DeskFrame = Pivot(Seat, FRotator(0.f, 180.f, 0.f), TEXT("DeskFrame"));
 	FRoomBuilder D(this, DeskFrame);
 	const float Top = DeskTop;
-	Place(D, LibraryProps::Desk, FVector::ZeroVector, FRotator::ZeroRotator,
+	// The desk, its chair and everything else standing out in the room keep the floor's dust off their
+	// feet, read off their bounds like what stands against the walls (KeepFloorDustOff).
+	KeepFloorDustOff(Place(D, LibraryProps::Desk, FVector::ZeroVector, FRotator::ZeroRotator,
 		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("LeatherGreen"), MatLeatherGreen }, { TEXT("Gilt"), F(TEXT("Gilt")) },
-		  { TEXT("Brass"), MatBrass }, { TEXT("Shadow"), F(TEXT("Shadow")) } });
+		  { TEXT("Brass"), MatBrass }, { TEXT("Shadow"), F(TEXT("Shadow")) } }));
 	Blocker(D, FVector(0.f, 0.f, 40.f), FVector(DeskWidth + 4.f, DeskDepth + 4.f, 80.f));
 
 	// The drawer he had open, pulled out and left: the top one of the left-hand pedestal, the family's
@@ -1198,11 +1248,11 @@ void ALibraryActor::BuildDesk(FRoomBuilder& Build)
 		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Oak"), MatOak }, { TEXT("Brass"), MatBrass } });
 
 	// His chair, pushed back from the desk and turned, as it is when somebody gets up in a hurry: a
-	// tall buttoned leather tub on a swivel, 68 x 67 and 121 to the top of its back (Tools/make_library.py
-	// desk_chair), made for the desk it stands at.
-	Place(D, LibraryProps::DeskChair, FVector(-14.f, -DeskDepth * 0.5f - 66.f, 0.f), FRotator(0.f, 28.f, 0.f),
-		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Leather"), MatLeather }, { TEXT("Iron"), MatIron } });
-	Blocker(D, FVector(-14.f, -DeskDepth * 0.5f - 66.f, 60.f), FVector(66.f, 66.f, 120.f), 28.f);
+	// tall buttoned leather tub on a swivel, 68 over the arms by 67 deep and 121 to the top of its back
+	// (worked out from Tools/make_library.py desk_chair), made for the desk it stands at.
+	KeepFloorDustOff(Place(D, LibraryProps::DeskChair, FVector(-14.f, -DeskDepth * 0.5f - 66.f, 0.f), FRotator(0.f, 28.f, 0.f),
+		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Leather"), MatLeather }, { TEXT("Iron"), MatIron } }));
+	Blocker(D, FVector(-14.f, -DeskDepth * 0.5f - 66.f, 60.5f), FVector(68.f, 67.f, 121.f), 28.f);
 
 	// The top. Centre: the blotter, the notebook open on it (a clue, BuildClues). His right hand (-X):
 	// the ink, the pen laid down across a sheet of notes. His left: the lamp at the back, the big
@@ -1249,12 +1299,12 @@ void ALibraryActor::BuildReadingCorner(FRoomBuilder& Build)
 	const FVector ToFire = (FVector(BreastFaceX(), BreastY, 0.f) - Chair).GetSafeNormal2D();
 	const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(-ToFire.X, ToFire.Y));
 	Build.Cloth(Chair + FVector(25.f, -30.f, 0.6f), FRotator(0.f, Yaw + 8.f, 0.f), FVector2D(210.f, 150.f), 0.5f, 0.f, 8101, MatGreenRug, 90.f, /*bWorn*/ false);
-	Place(Build, RoomProps::CellarArmchair, Chair, FRotator(0.f, Yaw, 0.f),
-		{ { TEXT("Leather"), MatLeather }, { TEXT("Brass"), MatBrass }, { TEXT("Wood"), MatMahogany } });
+	KeepFloorDustOff(Place(Build, RoomProps::CellarArmchair, Chair, FRotator(0.f, Yaw, 0.f),
+		{ { TEXT("Leather"), MatLeather }, { TEXT("Brass"), MatBrass }, { TEXT("Wood"), MatMahogany } }));
 	Blocker(Build, Chair + FVector(0.f, 0.f, 45.f), FVector(88.f, 86.f, 90.f), Yaw);
 
 	const FVector Table = Chair + FRotator(0.f, Yaw, 0.f).RotateVector(FVector(-68.f, 8.f, 0.f));
-	Place(Build, LibraryProps::SideTable, Table, FRotator(0.f, 15.f, 0.f), { { TEXT("Mahogany"), MatMahogany } });
+	KeepFloorDustOff(Place(Build, LibraryProps::SideTable, Table, FRotator(0.f, 15.f, 0.f), { { TEXT("Mahogany"), MatMahogany } }));
 	Blocker(Build, Table + FVector(0.f, 0.f, 34.f), FVector(48.f, 48.f, 68.f));
 	Place(Build, LibraryProps::Mug, Table + FVector(9.f, -6.f, 67.4f), FRotator(0.f, -120.f, 0.f), { { TEXT("Ceramic"), F(TEXT("Ceramic")) }, { TEXT("Charcoal"), F(TEXT("Charcoal")) } });
 	Place(Build, LibraryProps::BookPiles[1], Table + FVector(-6.f, 6.f, 67.4f), FRotator(0.f, 40.f, 0.f), { { TEXT("Books"), MatBooks } });
@@ -1262,7 +1312,7 @@ void ALibraryActor::BuildReadingCorner(FRoomBuilder& Build)
 	Dust(Build, Table + FVector(0.f, 0.f, 67.4f), FVector2D(46.f, 46.f), 0.4f);
 
 	const FVector Lamp = Chair + FRotator(0.f, Yaw, 0.f).RotateVector(FVector(-46.f, -58.f, 0.f));
-	Place(Build, LibraryProps::FloorLamp, Lamp, FRotator(0.f, 0.f, 0.f), { { TEXT("Brass"), MatBrass }, { TEXT("Fabric"), MatFabric } });
+	KeepFloorDustOff(Place(Build, LibraryProps::FloorLamp, Lamp, FRotator(0.f, 0.f, 0.f), { { TEXT("Brass"), MatBrass }, { TEXT("Fabric"), MatFabric } }));
 	Blocker(Build, Lamp + FVector(0.f, 0.f, 60.f), FVector(30.f, 30.f, 120.f));
 	Build.Add(FRoomShapes::Plane(), Lamp + FVector(0.f, 0.f, 150.f), FRotator(0.f, 40.f, 90.f), FVector(30.f, 24.f, 1.f), MatWeb, false);
 }
@@ -1270,8 +1320,8 @@ void ALibraryActor::BuildReadingCorner(FRoomBuilder& Build)
 void ALibraryActor::BuildDecor(FRoomBuilder& Build)
 {
 	// The globe beside the desk, turned to the Atlantic and left.
-	Place(Build, LibraryProps::Globe, GlobeSeat(), FRotator(0.f, 32.f, 0.f),
-		{ { TEXT("Globe"), MatGlobe }, { TEXT("Brass"), MatBrass }, { TEXT("Oak"), MatOak }, { TEXT("Card"), F(TEXT("Card")) } });
+	KeepFloorDustOff(Place(Build, LibraryProps::Globe, GlobeSeat(), FRotator(0.f, 32.f, 0.f),
+		{ { TEXT("Globe"), MatGlobe }, { TEXT("Brass"), MatBrass }, { TEXT("Oak"), MatOak }, { TEXT("Card"), F(TEXT("Card")) } }));
 	Blocker(Build, GlobeSeat() + FVector(0.f, 0.f, 50.f), FVector(70.f, 70.f, 100.f));
 
 	// Between the windows: the gramophone on its record cabinet, the bronze bust on its column, and a
@@ -1328,13 +1378,13 @@ void ALibraryActor::BuildDecor(FRoomBuilder& Build)
 
 	// The chess table north of the fire, a game left in the middle, the two chairs pushed back from it.
 	const FVector Chess = ChessSeat();
-	Place(Build, LibraryProps::ChessTable, Chess, FRotator(0.f, 0.f, 0.f),
-		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Bone"), F(TEXT("Bone")) }, { TEXT("Ebony"), F(TEXT("Ebony")) }, { TEXT("Gilt"), F(TEXT("Gilt")) } });
+	KeepFloorDustOff(Place(Build, LibraryProps::ChessTable, Chess, FRotator(0.f, 0.f, 0.f),
+		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Bone"), F(TEXT("Bone")) }, { TEXT("Ebony"), F(TEXT("Ebony")) }, { TEXT("Gilt"), F(TEXT("Gilt")) } }));
 	Blocker(Build, Chess + FVector(0.f, 0.f, 38.f), FVector(62.f, 62.f, 76.f));
 	const TPair<FVector, float> ChessChairs[] = { { Chess + FVector(-4.f, -64.f, 0.f), 6.f }, { Chess + FVector(10.f, 70.f, 0.f), 196.f } };
 	for (const TPair<FVector, float>& C : ChessChairs)
 	{
-		Place(Build, LibraryProps::SideChair, C.Key, FRotator(0.f, C.Value, 0.f), { { TEXT("Mahogany"), MatMahogany }, { TEXT("LeatherGreen"), MatLeatherGreen } });
+		KeepFloorDustOff(Place(Build, LibraryProps::SideChair, C.Key, FRotator(0.f, C.Value, 0.f), { { TEXT("Mahogany"), MatMahogany }, { TEXT("LeatherGreen"), MatLeatherGreen } }));
 		Blocker(Build, C.Key + FVector(0.f, 0.f, 45.f), FVector(44.f, 44.f, 90.f), C.Value);
 	}
 	Dust(Build, Chess + FVector(0.f, 0.f, 72.f), FVector2D(60.f, 60.f), 0.35f);
@@ -1343,8 +1393,8 @@ void ALibraryActor::BuildDecor(FRoomBuilder& Build)
 	// the glass, one open on its velvet.
 	USceneComponent* VitrineFrame = Pivot(VitrineSeat(), FRotator(0.f, -90.f, 0.f), TEXT("VitrineFrame"));
 	FRoomBuilder V(this, VitrineFrame);
-	Place(V, LibraryProps::Vitrine, FVector::ZeroVector, FRotator::ZeroRotator,
-		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Velvet"), F(TEXT("Velvet")) }, { TEXT("Glass"), MatGlass }, { TEXT("Brass"), MatBrass } });
+	KeepFloorDustOff(Place(V, LibraryProps::Vitrine, FVector::ZeroVector, FRotator::ZeroRotator,
+		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Velvet"), F(TEXT("Velvet")) }, { TEXT("Glass"), MatGlass }, { TEXT("Brass"), MatBrass } }));
 	Place(V, LibraryProps::OpenBook, FVector(-22.f, 2.f, 82.6f), FRotator(0.f, 180.f, 0.f),
 		{ { TEXT("Leather"), MatLeather }, { TEXT("Card"), F(TEXT("Card")) }, { TEXT("Paper"), MatPaperSheet }, { TEXT("Velvet"), F(TEXT("Velvet")) } });
 	Place(V, LibraryProps::BookPiles[1], FVector(34.f, -2.f, 82.6f), FRotator(0.f, 14.f, 0.f), { { TEXT("Books"), MatBooks } });

@@ -2047,6 +2047,23 @@ void AGrandStaircaseActor::SpawnLibrary()
 		LibrarySetup.EastX = EastX();
 		LibrarySetup.WallThickness = Setup.WallThickness;
 		LibrarySetup.HallWallTop = CeilingZ + 10.f;
+		// The library keeps some of the living room's numbers as constants of its own: its south face
+		// is the living room's façade carried up, its windows stand over the living room's, and its
+		// arch's architrave keeps a hand's width off the hall's east wall (a static_assert there, on
+		// the hall's east wall written out). Checked here, against the numbers they copy, so moving
+		// either room cannot leave the other behind without saying so.
+		const float LivingNorth = SouthY() + Setup.WallThickness;
+		ensureMsgf(FMath::IsNearlyEqual(ALibraryActor::SouthFace, LivingNorth + ALivingRoomActor::RoomDepth, 0.5f),
+			TEXT("The library's south face (%.1f) is not the living room's (%.1f)"), ALibraryActor::SouthFace, LivingNorth + ALivingRoomActor::RoomDepth);
+		for (int32 i = 0; i < 3; ++i)
+		{
+			// ALivingRoomActor::WindowX: the middle window on the room's (the hall's) centre line.
+			const float LivingWindowX = (WestX() + EastX()) * 0.5f + (i - 1) * ALivingRoomActor::WindowSpacing;
+			ensureMsgf(FMath::IsNearlyEqual(ALibraryActor::WindowXs[i], LivingWindowX, 0.5f),
+				TEXT("The library's window %d (%.1f) is not over the living room's (%.1f)"), i, ALibraryActor::WindowXs[i], LivingWindowX);
+		}
+		ensureMsgf(ALibraryActor::ArchX + ALibraryActor::ArchHalf + ALibraryActor::ArchArchitrave < EastX() - 15.f,
+			TEXT("The library arch's architrave runs into the hall's east wall"));
 		Library->Configure(LibrarySetup, LeadStorm);
 		Library->FinishSpawning(Transform);
 	}
@@ -2067,6 +2084,13 @@ void AGrandStaircaseActor::SpawnMusicRoom()
 		MusicSetup.WestX = EastX() - AKitchenActor::RoomWidth;
 		MusicSetup.WallThickness = Setup.WallThickness;
 		MusicSetup.HallWallTop = CeilingZ + 10.f;
+		// The arch's static_asserts are written against the hall's east wall as a number; this is the
+		// hall's own: its hall face's architrave a hand's width off the hall's east wall, and its room
+		// face's surround off the music room's (the same plane).
+		ensureMsgf(AMusicRoomActor::ArchX + AMusicRoomActor::ArchHalf + AMusicRoomActor::ArchArchitrave < EastX() - 15.f,
+			TEXT("The music room arch's architrave runs into the hall's east wall"));
+		ensureMsgf(AMusicRoomActor::ArchX + AMusicRoomActor::ArchSurroundHalf < MusicSetup.EastX - 10.f,
+			TEXT("The music room arch's surround runs into the room's east wall"));
 		MusicRoom->Configure(MusicSetup, LeadStorm);
 		MusicRoom->FinishSpawning(Transform);
 	}

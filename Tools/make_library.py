@@ -123,8 +123,9 @@ DESK_W = 180.0
 DESK_D = 90.0
 DESK_TOP = 78.0
 ARCH_HALF = 80.0
-# The corridor's cornice comes down to 281: the architrave over the crown (14) and the keystone
-# have to stop short of it.
+# The arch is off the stair hall's south gallery: its hall face's architrave over the crown (14) and
+# the keystone stand above the hall's picture rail (262), which the hall cuts round them
+# (AGrandStaircaseActor::CutAroundTrim), and under the hall's ceiling.
 ARCH_SPRING = 185.0
 ARCH_CROWN = ARCH_SPRING + ARCH_HALF
 ARCH_WALL = 20.0
@@ -452,9 +453,11 @@ def architrave_profile(width, depth, flip=1.0):
 
 
 def corridor_arch():
-    """The way into the library from the corridor: a round-headed arch through the corridor's south
-    wall, lined in oak, with an architrave on each face. Origin at the opening's middle on the floor,
-    in the middle of the wall; the corridor is at -Y, the library at +Y."""
+    """The way into the library from the stair hall's south gallery (the name is from when it opened
+    off the corridor): a round-headed arch through the hall's south wall, lined in oak, with an
+    architrave on each face. The CorridorWall and Trim slots are the hall face's plaster and staircase
+    oak. Origin at the opening's middle on the floor, in the middle of the wall; the hall is at -Y, the
+    library at +Y."""
     half, spring, crown = ARCH_HALF, ARCH_SPRING, ARCH_CROWN
     hy = ARCH_WALL * 0.5
     # The masonry over the curve, in each room's wall finish: a thin skin on each face, a core.
@@ -483,8 +486,8 @@ def corridor_arch():
         c, d = count - 1 - (k + 1), count - 1 - k
         bm.faces.new((near[a], near[b], near[c], near[d]))
         bm.faces.new((far[d], far[c], far[b], far[a]))
-    # The architraves: up each jamb, round the head, on both faces. The corridor's is painted like
-    # its door casings; the library's is oak. The path runs up the left jamb, over the head left to
+    # The architraves: up each jamb, round the head, on both faces. The hall face's takes the hall's
+    # staircase oak (the Trim slot); the library's is the library's oak. The path runs up the left jamb, over the head left to
     # right and down the right jamb, so the moulding's positive "across" is always away from the
     # opening.
     path = ([(-half - 0.2, 0.0), (-half - 0.2, spring)] + semicircle(0.0, spring, half + 0.2, 48, math.pi, 0.0)[1:-1]
@@ -757,8 +760,8 @@ def chair_shell(part, front_fn, back_fn, nu, nv):
 def desk_chair():
     """His desk chair, made for the desk: a tall button-tufted leather tub on a swivel, the back
     curving round into rolled arms that end in carved mahogany knuckles, a deep buttoned seat, and
-    four splayed mahogany legs on iron castors. About 72 wide, 70 deep, 122 to the top of the back's
-    roll. Faces +Y (the sitter's back to -Y)."""
+    four splayed mahogany legs on iron castors. About 68 wide (over the arms' knuckles), 67 deep, 121
+    to the top of the back's roll. Faces +Y (the sitter's back to -Y)."""
     wood = Part("Mahogany", bevel=0.4)
     iron = Part("Iron")
     seat = Part("Leather", bevel=3.5, segments=4, angle=30.0)

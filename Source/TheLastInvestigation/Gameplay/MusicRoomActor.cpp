@@ -107,6 +107,8 @@ namespace
 	// aimed down from four over the boards (whose top is at zero), so they reach up to thirteen.
 	constexpr float MusicDecalReach = 9.f;
 	constexpr float MusicFloorDecalZ = 4.f;
+	/** The sizes a patch of the floor's film is tried at, largest first, to lay it between the furniture. */
+	constexpr float MusicFilmScales[] = { 1.f, 0.7f, 0.5f };
 
 	/** A floor decal's half extent on the plan: aimed down, its first size runs along world Y and its second along X before the roll (09-27). */
 	FVector2D MusicFloorDecalHalfExtent(const FVector2D& Size, float Roll)
@@ -270,9 +272,7 @@ void AMusicRoomActor::CacheMaterials(FRoomBuilder& Build)
 	// its cornice in the same plaster, on the models' own UVs.
 	MatCeiling = Build.Surface(RoomSurfaces::Ceiling, FLinearColor(0.17f, 0.16f, 0.15f));
 	MatPlasterSheet = Sheet(RoomSurfaces::Ceiling, FLinearColor(0.17f, 0.16f, 0.15f));
-	// old_wooden_floor_02 at the corridor's tint is the boards upstairs; this floor was laid to be
-	// polished, and is darker by half, and rough with dust.
-	MatFloor = Build.Surface(RoomSurfaces::Floorboards, FLinearColor(0.31f, 0.28f, 0.26f), 1.3f);
+	// The floor's boards are made in BuildFloor, from their own asset (the room is wider than deep).
 	// The library's oak and mahogany.
 	MatOak = Sheet(RoomSurfaces::DarkOak, FLinearColor(0.16f, 0.12f, 0.095f), 2.2f);
 	MatOakBox = Build.Surface(RoomSurfaces::DarkOak, FLinearColor(0.16f, 0.12f, 0.095f), 2.2f);
@@ -753,9 +753,37 @@ void AMusicRoomActor::BuildShell(FRoomBuilder& Build)
 
 void AMusicRoomActor::BuildFloor(FRoomBuilder& Build)
 {
-	// Dark boards wall to wall, laid towards the windows. One box, turned so its long side is its
-	// local X (the builder's tiling rule); it collides.
-	Build.Box(FVector(MidX(), MidY(), -2.f), FRotator(0.f, 90.f, 0.f), FVector(SouthY() - NorthY(), EastX() - WestX(), 4.f), MatFloor);
+	// Dark boards wall to wall, laid towards the windows: one box, turned so its local X runs along
+	// world Y, which is the way the photograph's boards run on the top face. It collides.
+	//
+	// The builder's tiling gives the larger repeat count to a part's local X, and over the kitchen this
+	// room is wider (720) than it is deep (620): local X is the short side, and through the builder the
+	// boards came out squeezed along their length and stretched across it. So the floor has an
+	// instance of its own, made straight from the asset and never registered with a builder (which
+	// would re-tile it), its repeats written out for each side (the wine cellar's door strip, 10-09).
+	const float AlongBoards = SouthY() - NorthY();
+	const float AcrossBoards = EastX() - WestX();
+	// old_wooden_floor_02 at the corridor's tint is the boards upstairs; this floor was laid to be
+	// polished, and is darker by half, and rough with dust.
+	const FLinearColor Tint(0.31f, 0.28f, 0.26f);
+	const float RoughnessScale = 1.3f;
+	UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr,
+		*FString::Printf(TEXT("/Game/Materials/MI_%s.MI_%s"), RoomSurfaces::Floorboards.Set, RoomSurfaces::Floorboards.Set));
+	MatFloor = Parent ? UMaterialInstanceDynamic::Create(Parent, this) : nullptr;
+	if (MatFloor)
+	{
+		const float Texel = RoomSurfaces::Floorboards.TexelSizeCm;
+		MatFloor->SetVectorParameterValue(TEXT("Tint"), Tint);
+		MatFloor->SetScalarParameterValue(TEXT("RoughnessScale"), RoughnessScale);
+		MatFloor->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(AlongBoards / Texel, AcrossBoards / Texel, 0.f, 1.f));
+		MatFloor->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(0.f, 0.f, 0.f, 1.f));
+	}
+	else
+	{
+		// The art pipeline has not been run: the builder's flat fallback.
+		MatFloor = Build.Surface(RoomSurfaces::Floorboards, Tint, RoughnessScale);
+	}
+	Build.Box(FVector(MidX(), MidY(), -2.f), FRotator(0.f, 90.f, 0.f), FVector(AlongBoards, AcrossBoards, 4.f), MatFloor);
 }
 
 void AMusicRoomActor::BuildWalls(FRoomBuilder& Build)
@@ -945,7 +973,10 @@ void AMusicRoomActor::BuildEnsemble(FRoomBuilder& Build)
 	// pushed back and turned, as it is when somebody gets up and goes; the cello in its stand beside it.
 	FVector Desk, Normal, Up;
 	DeskFrame(WoodStandSeat(), WoodStandYaw(), WoodDeskZ, Desk, Normal, Up);
-	Place(Build, MusicProps::StandWood, WoodStandSeat(), FRotator(0.f, WoodStandYaw(), 0.f), { { TEXT("Mahogany"), MatMahogany }, { TEXT("Brass"), MatBrass } });
+	// Everything standing in the middle of the floor keeps the floor's film of dust off its feet, read
+	// off its bounds like what stands against the walls: a floor decal projects onto anything in its
+	// box, and the ensemble is exactly where the film is laid.
+	KeepFloorDustOff(Place(Build, MusicProps::StandWood, WoodStandSeat(), FRotator(0.f, WoodStandYaw(), 0.f), { { TEXT("Mahogany"), MatMahogany }, { TEXT("Brass"), MatBrass } }));
 	Blocker(Build, WoodStandSeat() + FVector(0.f, 0.f, 50.f), FVector(40.f, 40.f, 100.f));
 	// The bow laid on the ledge in front of the music, across the desk.
 	{
@@ -955,22 +986,22 @@ void AMusicRoomActor::BuildEnsemble(FRoomBuilder& Build)
 			{ { TEXT("Varnish"), MatVarnish }, { TEXT("Bone"), F(TEXT("Bone")) }, { TEXT("Ebony"), F(TEXT("Ebony")) }, { TEXT("String"), F(TEXT("String")) },
 			  { TEXT("Hair"), F(TEXT("Hair")) } });
 	}
-	Place(Build, MusicProps::SideChair, CellistChairSeat(), FRotator(0.f, 28.f, 0.f), { { TEXT("Mahogany"), MatMahogany }, { TEXT("LeatherGreen"), MatLeatherGreen } });
+	KeepFloorDustOff(Place(Build, MusicProps::SideChair, CellistChairSeat(), FRotator(0.f, 28.f, 0.f), { { TEXT("Mahogany"), MatMahogany }, { TEXT("LeatherGreen"), MatLeatherGreen } }));
 	Blocker(Build, CellistChairSeat() + FVector(0.f, 0.f, 45.f), FVector(44.f, 44.f, 90.f), 28.f);
-	Place(Build, MusicProps::Cello, CelloSeat(), FRotator(0.f, 24.f, 0.f),
+	KeepFloorDustOff(Place(Build, MusicProps::Cello, CelloSeat(), FRotator(0.f, 24.f, 0.f),
 		{ { TEXT("Varnish"), MatVarnish }, { TEXT("Shadow"), F(TEXT("Shadow")) }, { TEXT("Ebony"), F(TEXT("Ebony")) }, { TEXT("Maple"), F(TEXT("Maple")) },
-		  { TEXT("String"), F(TEXT("String")) }, { TEXT("Mahogany"), MatMahogany }, { TEXT("Felt"), F(TEXT("Felt")) } });
+		  { TEXT("String"), F(TEXT("String")) }, { TEXT("Mahogany"), MatMahogany }, { TEXT("Felt"), F(TEXT("Felt")) } }));
 	Blocker(Build, CelloSeat() + FVector(0.f, 0.f, 68.f), FVector(52.f, 52.f, 136.f), 24.f);
 
 	// The violinist's iron stand, an orchestral score open on its desk; her chair beside it with the
 	// bow laid across the seat where she put it down.
 	DeskFrame(IronStandSeat(), IronStandYaw(), IronDeskZ, Desk, Normal, Up);
-	Place(Build, MusicProps::StandIron, IronStandSeat(), FRotator(0.f, IronStandYaw(), 0.f), { { TEXT("Iron"), MatIron } });
+	KeepFloorDustOff(Place(Build, MusicProps::StandIron, IronStandSeat(), FRotator(0.f, IronStandYaw(), 0.f), { { TEXT("Iron"), MatIron } }));
 	Blocker(Build, IronStandSeat() + FVector(0.f, 0.f, 50.f), FVector(44.f, 44.f, 100.f));
 	Place(Build, MusicProps::OpenScore, Desk + Up * (-DeskH * 0.5f - 0.35f) + Normal * 0.6f, FRotationMatrix::MakeFromZY(Normal, Up).Rotator(),
 		{ { TEXT("Card"), F(TEXT("Card")) }, { TEXT("Paper"), MatPaperSheet } });
 	const float ViolinChairYaw = -8.f;
-	Place(Build, MusicProps::SideChair, ViolinChairSeat(), FRotator(0.f, ViolinChairYaw, 0.f), { { TEXT("Mahogany"), MatMahogany }, { TEXT("LeatherGreen"), MatLeatherGreen } });
+	KeepFloorDustOff(Place(Build, MusicProps::SideChair, ViolinChairSeat(), FRotator(0.f, ViolinChairYaw, 0.f), { { TEXT("Mahogany"), MatMahogany }, { TEXT("LeatherGreen"), MatLeatherGreen } }));
 	Blocker(Build, ViolinChairSeat() + FVector(0.f, 0.f, 45.f), FVector(44.f, 44.f, 90.f), ViolinChairYaw);
 	{
 		// The bow rests on its frog and its head across the stuffed seat.
@@ -980,11 +1011,14 @@ void AMusicRoomActor::BuildEnsemble(FRoomBuilder& Build)
 			  { TEXT("Hair"), F(TEXT("Hair")) } });
 	}
 
-	// The guitar on its stand in the corner by the east window, turned to the room.
-	Place(Build, MusicProps::Guitar, GuitarSeat(), FRotator(0.f, 58.f, 0.f),
+	// The guitar on its stand in the corner by the east window, turned to the room. Within a decal's
+	// reach of the east wall and of the floor's dust along its foot: kept off both, from its bounds.
+	UStaticMeshComponent* Guitar = Place(Build, MusicProps::Guitar, GuitarSeat(), FRotator(0.f, 58.f, 0.f),
 		{ { TEXT("Maple"), F(TEXT("Maple")) }, { TEXT("Rosewood"), F(TEXT("Rosewood")) }, { TEXT("Shadow"), F(TEXT("Shadow")) }, { TEXT("Inlay"), F(TEXT("Inlay")) },
 		  { TEXT("Bone"), F(TEXT("Bone")) }, { TEXT("Mahogany"), MatMahogany }, { TEXT("Ebony"), F(TEXT("Ebony")) }, { TEXT("String"), F(TEXT("String")) },
 		  { TEXT("Iron"), MatIron }, { TEXT("Felt"), F(TEXT("Felt")) } });
+	KeepWallDecalsOff(Guitar);
+	KeepFloorDustOff(Guitar);
 	Blocker(Build, GuitarSeat() + FVector(0.f, 0.f, 52.f), FVector(40.f, 40.f, 104.f), 58.f);
 	Build.Add(FRoomShapes::Plane(), GuitarSeat() + FVector(0.f, 0.f, 8.f), FRotator(0.f, 58.f, 90.f), FVector(28.f, 14.f, 1.f), MatWeb, false);
 	// No bust in the corner past the bench: the same marble_bust_01 already stands in the hall and in
@@ -1026,7 +1060,8 @@ void AMusicRoomActor::BuildListening(FRoomBuilder& Build)
 	MusicNoDecals(Place(Build, MusicProps::Metronome, Table + FVector(-12.f, 8.f, SideTableTop), FRotator(0.f, 150.f, 0.f),
 		{ { TEXT("Mahogany"), MatMahogany }, { TEXT("Shadow"), F(TEXT("Shadow")) }, { TEXT("Brass"), MatBrass }, { TEXT("String"), F(TEXT("String")) } }));
 	Dust(Build, Table + FVector(0.f, 0.f, SideTableTop), FVector2D(42.f, 56.f), 0.4f);
-	// A programme fallen beside the further chair, face down: its inside to the boards.
+	// A programme fallen open beside the further chair, lying face up: its inside, the order of the
+	// evening, to the ceiling.
 	Paper(Build, TEXT("programme_in"), ArmchairSeat(1) + FVector(46.f, -38.f, 0.2f), FVector::UpVector, FRotator(0.f, 120.f, 0.f).RotateVector(FVector(1.f, 0.f, 0.f)), 15.f, 21.2f);
 }
 
@@ -1090,9 +1125,16 @@ void AMusicRoomActor::BuildWestWall(FRoomBuilder& Build)
 	Picture(Build, TEXT("music_paintings"), MusicCellist, 1024.f, Portrait + WallNormal(EWall::West) * 1.4f, WallNormal(EWall::West), CellistArtW, CellistArtH,
 		FLinearColor(0.42f, 0.40f, 0.38f));
 	MusicNoDecals(Build.Sph(Portrait + WallNormal(EWall::West) * 1.f + FVector(0.f, 0.f, CellistArtH * 0.5f + 22.f), 1.6f, MatIron));
+	// A sconce either side of her, a hand's width off the frame. The frame is the picture and ten of
+	// gilt round it (Tools/make_music_room.py: music_frame_cellist), and a sconce's drip pan is five
+	// either side of its point: fourteen of wall between the pan and the gilt. At 92 out, over the
+	// kitchen, the southern one was four centimetres past the south wall's face with its backplate in
+	// the corner; at this offset it keeps fourteen off that wall as well.
+	const float SconceOut = CellistArtW * 0.5f + 10.f + 14.f + 5.f;
+	ensureMsgf(ShelfSeat().Y + SconceOut + 5.f < SouthY() - 10.f, TEXT("the cellist's southern sconce has run into the south-west corner"));
 	for (const float Side : { -1.f, 1.f })
 	{
-		const float U = ShelfSeat().Y + Side * 92.f;
+		const float U = ShelfSeat().Y + Side * SconceOut;
 		Build.Sconce(WallPoint(EWall::West, U, 214.f, 0.f), 0.f, Side < 0.f ? 7.f : 4.f, MatBrass, MatWax, F(TEXT("Shadow")));
 		KeepSconce(EWall::West, U, 214.f);
 	}
@@ -1122,17 +1164,19 @@ void AMusicRoomActor::BuildEastWall(FRoomBuilder& Build)
 		FRoomShapes::TintSlots(Vase, FLinearColor(0.22f, 0.21f, 0.19f));
 		KeepWallDecalsOff(Vase);
 	}
-	Place(S, MusicProps::DriedRoses, FVector(-60.f, -6.f, Top + 39.f), FRotator(0.f, 10.f, 0.f),
-		{ { TEXT("Stem"), F(TEXT("Stem")) }, { TEXT("Petal"), F(TEXT("Petal")) } });
-	Place(S, MusicProps::Petals, FVector(-50.f, 8.f, Top), FRotator(0.f, 20.f, 0.f), { { TEXT("Petal"), F(TEXT("Petal")) } });
+	// The flowers lean out of their vases towards the wall as well as the room, inside the reach of the
+	// silk's damp: kept off, from their bounds, like the vases.
+	KeepWallDecalsOff(Place(S, MusicProps::DriedRoses, FVector(-60.f, -6.f, Top + 39.f), FRotator(0.f, 10.f, 0.f),
+		{ { TEXT("Stem"), F(TEXT("Stem")) }, { TEXT("Petal"), F(TEXT("Petal")) } }));
+	KeepWallDecalsOff(Place(S, MusicProps::Petals, FVector(-50.f, 8.f, Top), FRotator(0.f, 20.f, 0.f), { { TEXT("Petal"), F(TEXT("Petal")) } }));
 	if (UStaticMeshComponent* Vase = S.PropSeated(RoomProps::BrassVase, FVector(60.f, -8.f, Top), FRotator(0.f, -20.f, 0.f), 44.f, false))
 	{
 		// brass_vase_01's polished brass, tarnished: at 0.42 it read as cream china.
 		FRoomShapes::TintSlots(Vase, FLinearColor(0.24f, 0.19f, 0.13f));
 		KeepWallDecalsOff(Vase);
 	}
-	Place(S, MusicProps::DriedHydrangea, FVector(60.f, -8.f, Top + 43.f), FRotator(0.f, 40.f, 0.f),
-		{ { TEXT("Stem"), F(TEXT("Stem")) }, { TEXT("Bloom"), F(TEXT("Bloom")) } });
+	KeepWallDecalsOff(Place(S, MusicProps::DriedHydrangea, FVector(60.f, -8.f, Top + 43.f), FRotator(0.f, 40.f, 0.f),
+		{ { TEXT("Stem"), F(TEXT("Stem")) }, { TEXT("Bloom"), F(TEXT("Bloom")) } }));
 	Dust(S, FVector(0.f, 0.f, Top), FVector2D(SideboardD, SideboardW), 0.45f);
 
 	// Over it, what she won: three certificates and the medal in its box, framed and hung together, all
@@ -1270,7 +1314,11 @@ void AMusicRoomActor::BuildFloorDust(FRoomBuilder& Build)
 		}
 		Build.Stain(RoomSurfaces::Damp, FVector(Spot.X, Spot.Y, MusicFloorDecalZ), FRotator(-90.f, 0.f, Roll + Turn), FVector2D(Length, Width), MusicDust, Opacity, 1.35f);
 	}
-	// A thin film over the whole floor, kept out from under the furniture like the rest.
+	// A thin film over the whole floor, kept out from under the furniture like the rest. The middle of
+	// this room is the ensemble's, and at its drawn size a film lands on a stand's, a chair's or the
+	// cello's feet almost anywhere in it (all seven did, once they were kept off): one that would is
+	// laid smaller, and left out only when even half its size reaches something. Every number is drawn
+	// before the test (09-29).
 	for (int32 i = 0; i < 7; ++i)
 	{
 		const float X = Random.FRandRange(WestX() + 140.f, EastX() - 140.f);
@@ -1279,16 +1327,34 @@ void AMusicRoomActor::BuildFloorDust(FRoomBuilder& Build)
 		const float SizeV = Random.FRandRange(130.f, 220.f);
 		const float SizeU = Random.FRandRange(170.f, 260.f);
 		const float Opacity = Random.FRandRange(0.14f, 0.22f);
-		if (FloorDustHitsSomething(FVector2D(X, Y), MusicFloorDecalHalfExtent(FVector2D(SizeU, SizeV), Roll)))
+		const float* Fit = Algo::FindByPredicate(MusicFilmScales, [&](float Scale)
+		{
+			return !FloorDustHitsSomething(FVector2D(X, Y), MusicFloorDecalHalfExtent(FVector2D(SizeU, SizeV) * Scale, Roll));
+		});
+		if (!Fit)
 		{
 			continue;
 		}
-		Build.Stain(RoomSurfaces::Damp, FVector(X, Y, MusicFloorDecalZ), FRotator(-90.f, 0.f, Roll), FVector2D(SizeU, SizeV), MusicDust, Opacity, 1.4f);
+		Build.Stain(RoomSurfaces::Damp, FVector(X, Y, MusicFloorDecalZ), FRotator(-90.f, 0.f, Roll), FVector2D(SizeU, SizeV) * *Fit, MusicDust, Opacity, 1.4f);
 	}
-	// Where the dust never settled: from the arch to the players' chairs, and to the armchairs.
-	const FVector2D Path[] = { { ArchX, SouthY() - 70.f }, { -1500.f, -250.f }, { -1620.f, -390.f }, { -1720.f, -260.f } };
+	// Where the dust never settled: in from the arch, and on between the two stands to the players'
+	// chairs, and across to the armchairs. Each patch is 150 along world Y and 80 across (aimed down,
+	// no roll), laid between what stands there rather than under it: over the kitchen two of them
+	// were under the cello's stand and the nearer armchair. The first starts clear of the arch's sill.
+	const FVector2D PathHalf = MusicFloorDecalHalfExtent(FVector2D(150.f, 80.f), 0.f);
+	const FVector2D Path[] = {
+		{ ArchX - 20.f, SouthY() - 60.f - PathHalf.Y - 2.f },
+		{ -1560.f, -300.f },
+		// The gap between the two stands' feet is 83 across, off centre between their seats.
+		{ -1682.f, -350.f },
+		{ -1640.f, -215.f },
+	};
 	for (const FVector2D& P : Path)
 	{
+		if (FloorDustHitsSomething(P, PathHalf))
+		{
+			continue;
+		}
 		Build.Stain(RoomSurfaces::Damp, FVector(P.X, P.Y, MusicFloorDecalZ), FRotator(-90.f, 0.f, 0.f), FVector2D(150.f, 80.f),
 			FLinearColor(0.10f, 0.085f, 0.07f), 0.28f, 1.3f, 0.8f);
 	}
@@ -1364,7 +1430,11 @@ void AMusicRoomActor::BuildDamage(FRoomBuilder& Build)
 			const float SU = Random.FRandRange(40.f, 80.f);
 			const float SZ = Random.FRandRange(80.f, 160.f);
 			const float Roll = Random.FRandRange(-20.f, 20.f);
-			if (!WallDecalHitsSomething(R.Wall, U, Z, SU * 0.6f, SZ * 0.6f))
+			// Tested by its rolled footprint, as the stains are: at twenty degrees a 160-tall crack
+			// leans its ends out by a third of its height.
+			const float Cos = FMath::Abs(FMath::Cos(FMath::DegreesToRadians(Roll)));
+			const float Sin = FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Roll)));
+			if (!WallDecalHitsSomething(R.Wall, U, Z, (Cos * SU + Sin * SZ) * 0.5f, (Sin * SU + Cos * SZ) * 0.5f))
 			{
 				FVector Location;
 				FRotator Rotation;

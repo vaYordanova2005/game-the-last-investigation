@@ -6,7 +6,6 @@
 #include "DustMotesComponent.h"
 #include "GrandStaircaseActor.h"
 #include "NurseryActor.h"
-#include "KitchenActor.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"

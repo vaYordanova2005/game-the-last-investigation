@@ -70,7 +70,7 @@ public:
 
 	/** A tall room: the shelves go to 470 and the ceiling is over them. */
 	static constexpr float RoomHeight = 520.f;
-	/** The south wall, the living room's south façade carried up. */
+	/** The south wall, the living room's south façade carried up (checked in AGrandStaircaseActor::SpawnLibrary). */
 	static constexpr float SouthFace = 1860.f;
 
 	// The arch from the stair hall's south gallery (Tools/make_library.py: ARCH_*). The hall cuts its
@@ -84,12 +84,14 @@ public:
 	/**
 	 * Where along the north wall the arch stands: at the corridor's end of the hall's south gallery,
 	 * just round the corner from the corridor's archway (the user's call: by the corridor, not by the
-	 * stairhead at -1800). The hall's east wall is at -1270; the architrave keeps a hand's width off it.
+	 * stairhead at -1800). The hall's east wall is at -1270; the architrave keeps a hand's width off it
+	 * (and AGrandStaircaseActor::SpawnLibrary checks it against the hall's own east wall).
 	 */
 	static constexpr float ArchX = -1420.f;
 	static_assert(ArchX + ArchHalf + ArchArchitrave < -1270.f - 15.f, "the arch's architrave stays off the hall's east wall");
 
-	// The three tall windows in the south wall, round-headed (WINDOW_HALF), over the living room's.
+	// The three tall windows in the south wall, round-headed (WINDOW_HALF), over the living room's
+	// (ALivingRoomActor::WindowX; checked in AGrandStaircaseActor::SpawnLibrary).
 	static constexpr float WindowHalf = 75.f;
 	static constexpr float WindowSill = 70.f;
 	static constexpr float WindowTop = 400.f;

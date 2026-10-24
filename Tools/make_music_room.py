@@ -16,7 +16,7 @@ run with its own normals). Workbench previews go to Saved/MusicPreview/.
 
 Frame, as every prop in the house: centimetres, origin on the floor under the middle of the
 footprint, front facing local +Y. Exceptions are noted on the model: the arch is in the plane of its
-wall (the corridor at -Y), wall-hung things on the wall plane, the chandelier and the ceiling rose
+wall (the stair hall at -Y), wall-hung things on the wall plane, the chandelier and the ceiling rose
 hang from z = 0, the cabinet's door has its origin on its hinge, small things at their own base.
 
 The numbers AMusicRoomActor also needs are the constants below, and must stay in step with
@@ -92,8 +92,9 @@ SLOTS = {
 # Shared with MusicRoomActor.h.
 # ---------------------------------------------------------------------------------------------
 
-# The arch from the corridor: a semi-ellipse on its springing. The corridor's cornice comes down to
-# 281, so the corridor face's architrave (14) over the crown has to stop under it. On the room face
+# The arch from the stair hall's north gallery: a semi-ellipse on its springing. Its hall face's
+# architrave (14) over the crown stands above the hall's picture rail (262), which the hall cuts round
+# it (AGrandStaircaseActor::CutAroundTrim), and under the hall's ceiling. On the room face
 # a carved surround stands out round the opening to ARCH_SURROUND_HALF either side and up to
 # ARCH_SURROUND_TOP, and the room's panelling and silk are cut to that rectangle.
 ARCH_HALF = 110.0
@@ -976,12 +977,14 @@ def spandrels(part, half, rise, spring, crown_top, y0, y1, steps=28):
 
 
 def music_arch():
-    """The way into the music room from the corridor: a wide elliptical arch through the corridor's
-    north wall, lined in oak. The corridor face has a painted architrave like the corridor's door
-    casings; the room face a carved surround: fluted pilasters with capitals, an archivolt round the
-    head, a scrolled keystone, acanthus in relief on the spandrels, all on a panelled board out to
+    """The way into the music room from the stair hall's north gallery: a wide elliptical arch through
+    the hall's north wall, lined in oak. The hall face (slot names kept from when it opened off the
+    corridor: CorridorWall is the hall's plaster, Trim its staircase oak) has an architrave like the
+    hall's archway; the room face a carved surround: fluted pilasters with capitals, an archivolt round
+    the head, a scrolled keystone, acanthus in relief on the spandrels, all on a panelled board out to
     ARCH_SURROUND_HALF and up to ARCH_SURROUND_TOP. Origin at the opening's middle on the floor, in the
-    middle of the wall; the corridor at -Y, the room at +Y."""
+    middle of the wall; the hall at -Y, the room at +Y (AMusicRoomActor turns it round, the hall being
+    at +Y there)."""
     half, rise, spring, crown = ARCH_HALF, ARCH_RISE, ARCH_SPRING, ARCH_CROWN
     hy = ARCH_WALL * 0.5
     core = Part("Shadow")
@@ -1013,7 +1016,7 @@ def music_arch():
         c, d = n - 1 - (k + 1), n - 1 - k
         bm.faces.new((near[a], near[b], near[c], near[d]))
         bm.faces.new((far[d], far[c], far[b], far[a]))
-    # The corridor's architrave, up each jamb, round the head and down, with plinth blocks and a key.
+    # The hall face's architrave, up each jamb, round the head and down, with plinth blocks and a key.
     path = ([(-half - 0.2, 0.0), (-half - 0.2, spring)] + ellipse_pts(half + 0.2, rise + 0.2, spring, 56, math.pi, 0.0)[1:-1]
             + [(half + 0.2, spring), (half + 0.2, 0.0)])
     trim = Part("Trim", bevel=0.2)
@@ -1023,7 +1026,7 @@ def music_arch():
     for side in (-1, 1):
         cbox(blocks, side * (half + width * 0.5), -hy - 2.2, 12.0, width + 2.0, 4.4, 24.0)
     # The keystones stand on the head's soffit, not below it: hung four centimetres into the opening,
-    # the room face's read from the corridor as a dark block hanging in the top of the arch.
+    # the room face's read from the hall as a dark block hanging in the top of the arch.
     prism_xz(blocks, [(-8.0, crown + 0.2), (8.0, crown + 0.2), (10.0, crown + 13.5), (-10.0, crown + 13.5)], -hy - 5.0, -hy)
     # The room face. Pilasters from the floor to the springing, standing on the board.
     oak = Part("Oak", bevel=0.25)
