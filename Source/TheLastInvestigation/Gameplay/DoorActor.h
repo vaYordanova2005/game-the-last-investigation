@@ -29,7 +29,7 @@ public:
 	static constexpr float OpenYaw = 100.f;
 
 private:
-	/** Planks, hinges and lock, built at BeginPlay from primitives and attached to the swinging leaf. */
+	/** The black leaf's grooves, lever, keyhole and hinges, built at BeginPlay and attached to the swinging leaf. */
 	void BuildDoorDetail();
 
 	UPROPERTY(VisibleAnywhere, Category = "Door")
@@ -50,6 +50,6 @@ private:
 	bool bIsOpen = false;
 	float TargetYaw = 0.f;
 
-	/** Fixed seed, so the door's rot, splits and rust streaks are the same door every session. */
+	/** Fixed seed, so the dust on the door is the same every session. */
 	FRandomStream Random;
 };

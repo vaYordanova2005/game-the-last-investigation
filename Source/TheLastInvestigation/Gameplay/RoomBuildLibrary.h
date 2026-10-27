@@ -77,6 +77,13 @@ namespace RoomSurfaces
 	extern const FRoomSurface CellarFlags;
 	extern const FRoomSurface Leather;
 	extern const FRoomSurface DarkOak;
+	/**
+	 * The master bedroom (Tools/make_bedroom_art.py): smooth white paint on plaster, a fine roller
+	 * stipple and nothing coarse, tinted down to whatever colour the paint is (the white walls, the
+	 * black door). And the floor's oak boards.
+	 */
+	extern const FRoomSurface Paint;
+	extern const FRoomSurface Oak;
 }
 
 /** Imported prop meshes, /Game/Meshes/<name>. Names match Tools/fetch_assets.py's manifest. */

@@ -2,7 +2,8 @@
 #include "DoorActor.h"
 #include "KeyPickupActor.h"
 #include "StormWindowActor.h"
-#include "RoomDressingActor.h"
+#include "MasterBedroomActor.h"
+#include "RoomBuildLibrary.h"
 #include "CorridorActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
@@ -157,21 +158,10 @@ void AInvestigationRoomActor::ApplySurfaceMaterial()
 		}
 	}
 
-	// The floor slab is not part of the shell as far as the eye is concerned.
-	//
-	// Everywhere else this material is hidden — the walls are behind the plaster panels, the
-	// ceiling is behind the ceiling boards — so its value only has to be plausible for the reveals
-	// of the two openings. The floor is different: the boards are laid over it with a centimetre
-	// and a half between each one, five per cent of them are missing outright, and every one of
-	// those gaps is a window onto this slab. At the shell value that read as a pale, flat, utterly
-	// untextured plank lying among the real ones, brighter than the boards in every channel and
-	// thirty times brighter in blue — the grey boards on the floor were this, seen through the
-	// gaps, not the boards themselves.
-	//
-	// What the gaps show now is a second course of real boards, laid by ARoomDressingActor (see
-	// the subfloor in BuildFloor), so this slab should never be on screen at all — which it was,
-	// until it was lowered out from over the subfloor (see BuildRoom). It stays dark anyway,
-	// because the one thing it must not do again is be paler than the floor above it.
+	// The floor slab is not part of the shell as far as the eye is concerned: the bedroom's oak floor
+	// lies over it, and it is only a backstop under that. It stays dark anyway, because the one thing
+	// it must not do is show paler than the floor above it, which is what it did while the boards
+	// here had gaps between them (09-20).
 	if (FloorSlab)
 	{
 		UMaterialInstanceDynamic* Underfloor = UMaterialInstanceDynamic::Create(BaseMaterial, this);
@@ -189,11 +179,8 @@ void AInvestigationRoomActor::BuildRoom()
 	const float WidthHalf = RoomWidth * 0.5f;
 	const float DepthHalf = RoomDepth * 0.5f;
 
-	// Well below the floor, not flush with it. At a top of 0 this slab swallowed everything the
-	// dressing lays under the boards — the subfloor (-7..-1) and the collapse's void and joists
-	// (down to -38) — so every gap and the hole under the hook showed this flat plate instead. It
-	// is only a backstop now: the boards, the subfloor and the bottom of the collapse carry the
-	// player.
+	// Well below the floor, not flush with it: a backstop only. The bedroom's oak floor (its top at
+	// zero, AMasterBedroomActor::BuildFloor) carries the player.
 	FloorSlab = AddSlab(TEXT("Floor"), FVector(0.f, 0.f, -45.f), FVector(RoomWidth, RoomDepth, 10.f));
 	AddSlab(TEXT("Ceiling"), FVector(0.f, 0.f, RoomHeight + 5.f), FVector(RoomWidth, RoomDepth, 10.f));
 
@@ -252,7 +239,7 @@ void AInvestigationRoomActor::SpawnOccupants()
 	const FVector KeyLocation = GetActorLocation() + FVector(WidthHalf - 26.f, -48.f, WindowSillHeight + 1.f);
 	Key = GetWorld()->SpawnActor<AKeyPickupActor>(AKeyPickupActor::StaticClass(), KeyLocation, FRotator(0.f, 24.f, 0.f), SpawnParams);
 
-	// Storm and dressing are spawned deferred so Configure() lands before their BeginPlay builds
+	// Storm and bedroom are spawned deferred so Configure() lands before their BeginPlay builds
 	// anything — both size their geometry from the shell they are given.
 	const FTransform StormTransform(FRotator::ZeroRotator, GetActorLocation() + FVector(WidthHalf, 0.f, 0.f));
 	Storm = GetWorld()->SpawnActorDeferred<AStormWindowActor>(AStormWindowActor::StaticClass(), StormTransform, this);
@@ -263,32 +250,35 @@ void AInvestigationRoomActor::SpawnOccupants()
 		StormSetup.SillHeight = WindowSillHeight;
 		StormSetup.TopHeight = WindowTopHeight;
 		StormSetup.WallThickness = WallThickness;
+		// The master bedroom's curtains are white: the linen, worked back from its measured blue
+		// (0.284, 0.408, 0.613) to an off-white at about (0.24, 0.23, 0.21).
+		StormSetup.CurtainSurface = &RoomSurfaces::Drapery;
+		StormSetup.CurtainTint = FLinearColor(0.85f, 0.56f, 0.34f);
 		Storm->Configure(StormSetup);
 		Storm->FinishSpawning(StormTransform);
 	}
 
-	const FTransform DressingTransform(FRotator::ZeroRotator, GetActorLocation());
-	Dressing = GetWorld()->SpawnActorDeferred<ARoomDressingActor>(ARoomDressingActor::StaticClass(), DressingTransform, this);
-	if (Dressing)
+	// The master bedroom: the room's finish, its furniture and what was left in it. The rotten floor,
+	// the beams and the plaster that were here (ARoomDressingActor) stand in the cellar now with the
+	// old furniture (ACellarActor), and this room was furnished as the house's owners had it.
+	const FTransform BedroomTransform(FRotator::ZeroRotator, GetActorLocation());
+	Bedroom = GetWorld()->SpawnActorDeferred<AMasterBedroomActor>(AMasterBedroomActor::StaticClass(), BedroomTransform, this);
+	if (Bedroom)
 	{
-		FRoomDressingSetup DressingSetup;
-		DressingSetup.Width = RoomWidth;
-		DressingSetup.Depth = RoomDepth;
-		DressingSetup.Height = RoomHeight;
-		DressingSetup.WallThickness = WallThickness;
-		DressingSetup.DoorOpeningWidth = DoorOpeningWidth;
-		DressingSetup.DoorOpeningCenterX = DoorOpeningCenterX;
-		DressingSetup.WakeSpot = FVector2D(GetWakeLocation());
-		DressingSetup.WindowOpeningWidth = WindowOpeningWidth;
-		DressingSetup.WindowSillHeight = WindowSillHeight;
-		DressingSetup.WindowTopHeight = WindowTopHeight;
-		// The walls, the boards, the ceiling and the hook only: the furniture and everything else
-		// that was in here stands in the cellar now (ACellarActor), and this room is to be
-		// furnished another way.
-		DressingSetup.bContents = false;
-		Dressing->Configure(DressingSetup);
-		Dressing->SetStorm(Storm);
-		Dressing->FinishSpawning(DressingTransform);
+		FMasterBedroomSetup BedroomSetup;
+		BedroomSetup.Width = RoomWidth;
+		BedroomSetup.Depth = RoomDepth;
+		BedroomSetup.Height = RoomHeight;
+		BedroomSetup.WallThickness = WallThickness;
+		BedroomSetup.DoorCenterX = DoorOpeningCenterX;
+		BedroomSetup.DoorWidth = DoorOpeningWidth;
+		BedroomSetup.DoorHeight = DoorOpeningHeight;
+		BedroomSetup.WindowWidth = WindowOpeningWidth;
+		BedroomSetup.WindowSill = WindowSillHeight;
+		BedroomSetup.WindowTop = WindowTopHeight;
+		BedroomSetup.WakeSpot = FVector2D(GetWakeLocation());
+		Bedroom->Configure(BedroomSetup);
+		Bedroom->FinishSpawning(BedroomTransform);
 	}
 
 	// The corridor outside the door, in the room's own frame, looking out through its own window

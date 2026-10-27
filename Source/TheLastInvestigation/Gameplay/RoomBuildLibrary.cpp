@@ -63,6 +63,9 @@ namespace RoomSurfaces
 	const FRoomSurface CellarFlags{ TEXT("large_floor_tiles_02"), 300.f };
 	const FRoomSurface Leather{ TEXT("brown_leather"), 40.f };
 	const FRoomSurface DarkOak{ TEXT("black_oak_veneer"), 100.f };
+	// One repeat every 120cm; Poly Haven's wood_floor at the 170cm it was shot at, boards along V.
+	const FRoomSurface Paint{ TEXT("bedroom_paint"), 120.f };
+	const FRoomSurface Oak{ TEXT("wood_floor"), 170.f };
 }
 
 namespace RoomProps
