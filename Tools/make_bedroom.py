@@ -43,7 +43,7 @@ from mathutils import Matrix, Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import blender_kit as K  # noqa: E402
-from blender_kit import Part, at, box, cbox, lathe, prism_xz, tube  # noqa: E402
+from blender_kit import Part, at, box, cbox, lathe, prism, prism_xz, tube  # noqa: E402
 
 PREVIEW_DIR = os.path.join(K.ROOT, "Saved", "BedroomPreview")
 
@@ -77,6 +77,7 @@ SLOTS = {
     "Liquid": ((0.60, 0.40, 0.15, 1.0), FLAT),
     "Ceramic": ((0.90, 0.89, 0.86, 1.0), FLAT),
     "Stone": ((0.30, 0.29, 0.28, 1.0), FLAT),
+    "Plaster": ((0.70, 0.67, 0.61, 1.0), FLAT),
     "Soil": ((0.12, 0.08, 0.05, 1.0), FLAT),
     "Stem": ((0.30, 0.22, 0.14, 1.0), FLAT),
     "Leaf": ((0.42, 0.30, 0.16, 1.0), FLAT),
@@ -969,6 +970,77 @@ def watch():
     return [metal, face, strap]
 
 
+def ragged_outline(rng, radius, count, low=0.55):
+    """An irregular outline (ccw) round the origin: a broken piece's edge, no two sides alike."""
+    angles = sorted(rng.uniform(0, 2 * math.pi) for _ in range(count))
+    return [(math.cos(a) * radius * rng.uniform(low, 1.0), math.sin(a) * radius * rng.uniform(low, 1.0)) for a in angles]
+
+
+def plaster_fall():
+    """What came down from the ceiling where the leak got into it: flakes of plaster with the paint
+    still on their faces, a lot of small bits and grit, and two laths that came with them. A heap
+    thicker in the middle, about 80 x 56, origin on the floor at its middle. Every flake is an
+    irregular outline, never a rectangle: a straight-edged piece on the floor reads as a tile."""
+    rng = random.Random(83)
+    paint = Part("Paint", bevel=0.12)
+    plaster = Part("Plaster", bevel=0.2)
+    lath = Part("Oak", bevel=0.1)
+    for k in range(46):
+        big = k < 7
+        radius = rng.uniform(5.5, 11.0) if big else (rng.uniform(2.0, 4.5) if k < 22 else rng.uniform(0.6, 1.8))
+        x = rng.gauss(0, 15 if big else 20)
+        y = rng.gauss(0, 10 if big else 14)
+        thick = rng.uniform(1.0, 1.7) if radius > 2 else rng.uniform(0.5, 1.1)
+        tilt = rng.uniform(0, 6 if big else 25)
+        lift = math.sin(math.radians(tilt)) * radius * 0.6
+        m = at(x, y, lift, rng.uniform(0, 360), tilt * rng.choice((-1, 1)), rng.uniform(-tilt, tilt) * 0.5)
+        pts = ragged_outline(rng, radius, rng.randint(5, 9))
+        # Most land face up; the paint is a skin on the face, the broken plaster under it.
+        if rng.random() < 0.75:
+            prism(plaster, pts, 0.0, thick - 0.25, m)
+            prism(paint, pts, thick - 0.25, thick, m)
+        else:
+            prism(paint, pts, 0.0, 0.25, m)
+            prism(plaster, pts, 0.25, thick, m)
+    # Two laths, split and lying across the heap, one end up on the flakes.
+    for x, y, yaw, length, rise in ((-6, 4, 18, 58, 4.0), (10, -6, -34, 41, 2.2)):
+        m = at(x, y, rise * 0.5 + 0.4, yaw, math.degrees(math.atan2(rise, length)), 0)
+        box(lath, -length * 0.5, length * 0.5, -1.3, 1.3, -0.4, 0.4, m)
+    return [paint, plaster, lath]
+
+
+def glass_shards():
+    """Glass from the broken panes, blown in and lying on the boards under the sill: sharp pieces,
+    triangles and long slivers, spread 84 along X and 40 across, origin on the floor at the middle."""
+    rng = random.Random(29)
+    glass = Part("Glass")
+    for k in range(22):
+        radius = rng.uniform(2.5, 9.0) if k < 9 else rng.uniform(0.8, 2.5)
+        x = rng.uniform(-42, 42) * (0.6 if k < 9 else 1.0)
+        y = rng.uniform(-20, 20) * (0.6 if k < 9 else 1.0)
+        tilt = rng.uniform(0, 7)
+        m = at(x, y, math.sin(math.radians(tilt)) * radius * 0.5, rng.uniform(0, 360), tilt, rng.uniform(-3, 3))
+        pts = ragged_outline(rng, radius, rng.choice((3, 3, 4, 5)), low=0.3)
+        if rng.random() < 0.35:
+            pts = [(px * 1.0, py * 0.35) for px, py in pts]
+        prism(glass, pts, 0.0, 0.3, m)
+    return [glass]
+
+
+def dead_leaves():
+    """Leaves the storm has blown in through the broken panes over the years, dried and curled,
+    lying under the window: 64 along X and 36 across, origin on the floor at the middle."""
+    rng = random.Random(47)
+    leaf = Part("Leaf")
+    for k in range(13):
+        a = rng.uniform(0, 2 * math.pi)
+        origin = (rng.uniform(-32, 24), rng.uniform(-16, 12), 0.4)
+        # Curled a little across, not rolled: at the plant's curl these small ones stood up as tents.
+        leaf_sheet(leaf, origin, (math.cos(a), math.sin(a), 0.0), rng.uniform(9, 16), rng.uniform(5, 9),
+                   rng.uniform(0.15, 0.4), -0.01, 120 + k)
+    return [leaf]
+
+
 def door_key():
     """The bedroom door's key: a brass mortice key lying flat, as it was left on the window sill.
     A ring bow, a collar, the round shank and a stepped bit off one side. 7.6 long along X, origin
@@ -1084,6 +1156,9 @@ MODELS = [
     ("bedroom_hairbrush", hairbrush),
     ("bedroom_watch", watch),
     ("bedroom_key", door_key),
+    ("bedroom_plaster_fall", plaster_fall),
+    ("bedroom_glass_shards", glass_shards),
+    ("bedroom_leaves", dead_leaves),
     ("bedroom_tray", tray),
     ("bedroom_folded_clothes", folded_clothes),
     ("bedroom_folded_blanket", folded_blanket),

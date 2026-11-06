@@ -24,7 +24,7 @@ struct FMasterBedroomSetup
 	float DoorWidth = 106.f;
 	float DoorHeight = 208.f;
 	/** The window, in the east wall (+X), centred on Y = 0. */
-	float WindowWidth = 196.f;
+	float WindowWidth = 280.f;
 	float WindowSill = 82.f;
 	float WindowTop = 262.f;
 };
@@ -143,13 +143,13 @@ private:
 	 * through the arm, and the mug on it in the upholstery.
 	 */
 	FVector SideTableSeat() const { return FVector(318.f, 103.f, 0.f); }
-	/** On the window side of the table, out of the waking view: behind the chair it stood across the door. */
 	/**
-	 * Clear of the south drape too: its pole stands 26 off the wall (X 374) and the drape hangs from
-	 * Y 82 to 146 and swings, and the shade is 22.6 across its radius. At (352, 150) the shade stood
-	 * in the cloth.
+	 * On the window side of the table, out of the waking view (behind the chair it stood across the
+	 * door), and clear of the south drape: its pole stands 26 off the wall (X 374) and, with the
+	 * window 280 wide, the drape hangs from Y 124 to 188 and swings. The shade is 22.6 across its
+	 * radius; here it reaches X 353 and Y 199..245.
 	 */
-	FVector FloorLampSeat() const { return FVector(340.f, 168.f, 0.f); }
+	FVector FloorLampSeat() const { return FVector(330.f, 222.f, 0.f); }
 	/** In front of the chair, square to it, 6 clear of its front (45 out), the ottoman 48 deep. */
 	FVector OttomanSeat() const { return FVector(346.f, 15.f, 0.f); }
 	FVector PlantSeat() const { return FVector(350.f, -272.f, 0.f); }
@@ -170,6 +170,8 @@ private:
 	void BuildSittingCorner(FRoomBuilder& Build);
 	void BuildFloorThings(FRoomBuilder& Build);
 	void BuildDamage(FRoomBuilder& Build);
+	/** What years shut up do to a room on top of the dust: damp, peeling paint, mould, the plaster down, webs, glass and leaves blown in. */
+	void BuildDecay(FRoomBuilder& Build);
 	void BuildClues();
 
 	/** Places a generated model and fills its named slots. Never collides; see Blocker. */
@@ -200,6 +202,15 @@ private:
 	 * DecalHitsDoorway): its rolled footprint against each.
 	 */
 	bool WallDecalHitsOpening(EWall Wall, float U, float Z, const FVector2D& Size, float Roll) const;
+	/**
+	 * What stands against a wall within a wall decal's reach, as (along, up) rectangles: the
+	 * headboard, the nightstands and what is on them, the dresser and its things, the plant, the
+	 * media cabinet, the wardrobe run. Read off the same seats the pieces are placed from. The
+	 * canvas, the clock, the television and the mirror take no decals and are not in it.
+	 */
+	TArray<FBox2D> WallKeepOuts(EWall Wall) const;
+	/** WallDecalHitsOpening, or the footprint comes within five of anything in WallKeepOuts. */
+	bool WallDecalHitsSomething(EWall Wall, float U, float Z, const FVector2D& Size, float Roll) const;
 	/** A straight run of moulding (bedroom_panel_moulding, _dado, _skirting) on a wall, along U or up Z. */
 	void Moulding(FRoomBuilder& Build, const TCHAR* Name, EWall Wall, float U, float Z, float Length, bool bVertical);
 
@@ -239,6 +250,8 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatPictures;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatIron;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatGlass;
+	/** The glass blown in on the floor: more there than the photographs' glass. */
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatShardGlass;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatWeb;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatVoid;
 	/** Flat colours by name: steel, brass, black glass, the mirror, ceramic, leather. */

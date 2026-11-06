@@ -250,6 +250,7 @@ void AInvestigationRoomActor::SpawnOccupants()
 		StormSetup.SillHeight = WindowSillHeight;
 		StormSetup.TopHeight = WindowTopHeight;
 		StormSetup.WallThickness = WallThickness;
+		StormSetup.PaneColumns = WindowPaneColumns;
 		// The master bedroom's curtains are white: the linen, worked back from its measured blue
 		// (0.284, 0.408, 0.613) to an off-white at about (0.24, 0.23, 0.21).
 		StormSetup.CurtainSurface = &RoomSurfaces::Drapery;

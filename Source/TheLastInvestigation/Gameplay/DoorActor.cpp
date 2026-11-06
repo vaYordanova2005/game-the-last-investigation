@@ -87,7 +87,7 @@ void ADoorActor::BuildDoorDetail()
 	// hole in the wall, which is how the doorway read before the leaf was widened (09-20). It is
 	// greyed a little and taken matt: the satin under years of dust, which an even film over the
 	// whole leaf is, where any decal laid over it has an edge somewhere.
-	UMaterialInstanceDynamic* LeafMat = Build.Surface(RoomSurfaces::Paint, FLinearColor(0.062f, 0.059f, 0.056f), 1.2f);
+	UMaterialInstanceDynamic* LeafMat = Build.Surface(RoomSurfaces::Paint, FLinearColor(0.076f, 0.071f, 0.064f), 1.25f);
 	UMaterialInstanceDynamic* GrooveMat = Build.Flat(FLinearColor(0.002f, 0.002f, 0.002f), 1.f);
 	UMaterialInstanceDynamic* SteelMat = Build.Flat(FLinearColor(0.30f, 0.30f, 0.30f), 0.38f, 1.f);
 	UMaterialInstanceDynamic* HingeMat = Build.Flat(FLinearColor(0.012f, 0.012f, 0.013f), 0.45f, 0.6f);
@@ -129,10 +129,12 @@ void ADoorActor::BuildDoorDetail()
 	}
 
 	// The door is years old and has stood shut in a dusty house: the dust is in the paint's tint
-	// (above), a little heavier towards the foot, and the paint is worn round the handle by a hand
-	// and low down where it was pushed open with a foot. The patches are the room's own smooth paint
-	// photograph through a soft, barely torn edge, at very low opacity: at 0.16 the dust read as a
-	// pale cloud with a ragged outline on the black, and an outline is what has to go.
+	// (above), the whole leaf greyed by it evenly; where hands pushed it and turned the handle they
+	// took the dust with them, so those places are darker; the foot carries black rubber marks
+	// where it was kicked open, and a band of dirt along the bottom. Every mark is DARKER than the
+	// dust: a pale patch on the dark leaf, at any opacity that shows, came out as a cloud with an
+	// outline (the dust bloom), and pale scuffs as a row of pills. Every patch is the room's own
+	// smooth paint photograph through a soft, barely torn edge.
 	// REMOVED (the user): scuffs and a dust bloom cut from the substrate and damp photographs with a
 	// torn edge. Pale on black paint, their blotches came out as scraps of paper and a camouflage
 	// patch stuck to the door, which is not what wear on paint looks like.
@@ -142,16 +144,26 @@ void ADoorActor::BuildDoorDetail()
 	// inside the leaf (Y 0 at the hinge, 106 at the lock, Z 0..210) with a margin: past an edge it
 	// would land on the reveal and the architrave whenever the door is shut, and below the foot on
 	// the boards the leaf sweeps (10-05).
-	struct FWear { float Y; float Z; float Tall; float Wide; float Opacity; };
+	const FLinearColor HandTint(0.02f, 0.02f, 0.02f);
+	const FLinearColor RubberTint(0.012f, 0.012f, 0.012f);
+	const FLinearColor DirtTint(0.05f, 0.04f, 0.028f);
+	struct FWear { float Y; float Z; float Tall; float Wide; float Turn; FLinearColor Tint; float Opacity; };
 	const FWear Wear[] = {
-		{ LeafY, 54.f, 88.f, 90.f, 0.05f },         // the dust, heavier low down
-		{ LeafY + 30.f, 100.f, 34.f, 30.f, 0.07f }, // dulled round the handle and the keyhole
-		{ LeafY + 16.f, 22.f, 22.f, 56.f, 0.06f },  // pushed open with a foot
+		{ LeafY + 32.f, 100.f, 36.f, 28.f, 0.f, HandTint, 0.45f },   // wiped dark round the handle
+		{ LeafY + 36.f, 130.f, 16.f, 12.f, 12.f, HandTint, 0.35f },  // where a palm pushed it open
+		{ LeafY + 30.f, 143.f, 14.f, 11.f, -8.f, HandTint, 0.3f },
+		{ LeafY + 38.f, 116.f, 12.f, 10.f, 20.f, HandTint, 0.28f },
+		{ 40.f, 18.f, 1.6f, 16.f, 4.f, RubberTint, 0.45f },          // kicked open: rubber marks
+		{ 58.f, 24.f, 2.f, 20.f, -6.f, RubberTint, 0.4f },
+		{ 72.f, 15.f, 1.4f, 12.f, 8.f, RubberTint, 0.45f },
+		{ 50.f, 31.f, 1.6f, 14.f, -3.f, RubberTint, 0.35f },
+		{ 84.f, 21.f, 2.f, 18.f, 5.f, RubberTint, 0.4f },
+		{ LeafY, 12.f, 12.f, 92.f, 0.f, DirtTint, 0.35f },           // dirt along the bottom
 	};
 	for (const FWear& Patch : Wear)
 	{
-		Build.Stain(RoomSurfaces::Paint, FVector(0.f, Patch.Y, Patch.Z), FRotator(0.f, 0.f, 90.f), FVector2D(Patch.Tall, Patch.Wide),
-			FLinearColor(0.42f, 0.40f, 0.36f), Patch.Opacity, 0.25f);
+		Build.Stain(RoomSurfaces::Paint, FVector(0.f, Patch.Y, Patch.Z), FRotator(0.f, 0.f, 90.f + Patch.Turn), FVector2D(Patch.Tall, Patch.Wide),
+			Patch.Tint, Patch.Opacity, 0.3f);
 	}
 
 	// Three black hinges on the hinge edge, their knuckles on the room side, where the leaf swings.

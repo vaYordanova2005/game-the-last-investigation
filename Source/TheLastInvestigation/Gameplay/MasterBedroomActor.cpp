@@ -47,6 +47,9 @@ namespace
 		const TCHAR* Perfume = TEXT("bedroom_perfume");
 		const TCHAR* Hairbrush = TEXT("bedroom_hairbrush");
 		const TCHAR* Watch = TEXT("bedroom_watch");
+		const TCHAR* PlasterFall = TEXT("bedroom_plaster_fall");
+		const TCHAR* GlassShards = TEXT("bedroom_glass_shards");
+		const TCHAR* Leaves = TEXT("bedroom_leaves");
 		const TCHAR* Tray = TEXT("bedroom_tray");
 		const TCHAR* FoldedClothes = TEXT("bedroom_folded_clothes");
 		const TCHAR* FoldedBlanket = TEXT("bedroom_folded_blanket");
@@ -61,6 +64,13 @@ namespace
 
 	/** The house's dust, the colour it is everywhere. */
 	const FLinearColor BedroomDust(0.42f, 0.40f, 0.36f);
+	/**
+	 * Dust, grime and water marks laid on the room's smooth paint photograph (linear ~0.58) rather
+	 * than the damp one, whose blotches read as camouflage on white paint and bedding: a dust grey
+	 * a shade under the white it lies on, and a water brown darker than the ivory walls.
+	 */
+	const FLinearColor BedroomFilm(0.21f, 0.20f, 0.17f);
+	const FLinearColor BedroomWater(0.20f, 0.16f, 0.10f);
 
 	/** laundry_shirt's hook rises this far over its bar (make_laundry.py: SHIRT_HOOK). */
 	constexpr float BedroomShirtHook = 7.f;
@@ -192,6 +202,7 @@ void AMasterBedroomActor::BeginPlay()
 	BuildSittingCorner(Build);
 	BuildFloorThings(Build);
 	BuildDamage(Build);
+	BuildDecay(Build);
 	BuildClues();
 }
 
@@ -213,7 +224,7 @@ void AMasterBedroomActor::CacheMaterials(FRoomBuilder& Build)
 	// the rest of the mansion. Warm rather than neutral, as everywhere: the only fill is the window.
 	// Poly Haven's ceiling_interior was the first paint, and is a knock-down stucco: a wall of it
 	// came out as heavy blobs.
-	MatWall = Sheet(RoomSurfaces::Paint, FLinearColor(0.260f, 0.241f, 0.215f), 1.1f);
+	MatWall = Sheet(RoomSurfaces::Paint, FLinearColor(0.250f, 0.228f, 0.196f), 1.1f);
 	MatCeiling = Build.Surface(RoomSurfaces::Paint, FLinearColor(0.252f, 0.238f, 0.215f), 1.1f);
 	MatPaint = Sheet(RoomSurfaces::Paint, FLinearColor(0.294f, 0.284f, 0.262f), 0.9f);
 	MatPaintBox = Build.Surface(RoomSurfaces::Paint, FLinearColor(0.294f, 0.284f, 0.262f), 0.9f);
@@ -223,7 +234,7 @@ void AMasterBedroomActor::CacheMaterials(FRoomBuilder& Build)
 	// each tint worked back from it: ivory upholstery, white bedding gone the yellow-grey of linen
 	// nobody has washed or aired in years, a beige throw.
 	MatUpholstery = Sheet(RoomSurfaces::Drapery, FLinearColor(0.60f, 0.40f, 0.23f), 1.15f);
-	MatLinen = Sheet(RoomSurfaces::Drapery, FLinearColor(0.70f, 0.465f, 0.27f), 1.15f);
+	MatLinen = Sheet(RoomSurfaces::Drapery, FLinearColor(0.64f, 0.43f, 0.24f), 1.15f);
 	MatMattress = Sheet(RoomSurfaces::Drapery, FLinearColor(0.64f, 0.43f, 0.25f), 1.15f);
 	MatThrow = Sheet(RoomSurfaces::Drapery, FLinearColor(0.60f, 0.32f, 0.14f), 1.2f);
 	MatShade = Sheet(RoomSurfaces::Drapery, FLinearColor(0.70f, 0.47f, 0.26f), 1.1f);
@@ -275,6 +286,8 @@ void AMasterBedroomActor::CacheMaterials(FRoomBuilder& Build)
 		{ TEXT("Liquid"), FLinearColor(0.18f, 0.08f, 0.02f), 0.2f, 0.f },
 		{ TEXT("Ceramic"), FLinearColor(0.22f, 0.215f, 0.20f), 0.3f, 0.f },
 		{ TEXT("Stone"), FLinearColor(0.03f, 0.03f, 0.03f), 0.5f, 0.f },
+		// The broken edges of the plaster that came down: grey-white, under the paint skin.
+		{ TEXT("Plaster"), FLinearColor(0.20f, 0.19f, 0.17f), 0.95f, 0.f },
 		{ TEXT("Soil"), FLinearColor(0.025f, 0.018f, 0.012f), 1.f, 0.f },
 		{ TEXT("Stem"), FLinearColor(0.06f, 0.04f, 0.025f), 0.9f, 0.f },
 		{ TEXT("Leaf"), FLinearColor(0.09f, 0.055f, 0.025f), 0.85f, 0.f },
@@ -342,9 +355,10 @@ void AMasterBedroomActor::Dust(FRoomBuilder& Build, const FVector& Top, const FV
 {
 	// Aimed down, a decal lays its first size along world Y and its second along X (09-27): Size is
 	// given as (X, Y) in the piece's own frame and swapped here, the roll turning it with the piece.
-	// The damp photograph's blotches read as camouflage on a white top at the full opacity and a
-	// soft edge; most of it, torn harder at the edge, is a film of dust.
-	Build.Stain(RoomSurfaces::Damp, Top + FVector(0.f, 0.f, 4.f), FRotator(-90.f, 0.f, Yaw), FVector2D(Size.Y, Size.X), BedroomDust, Opacity * 0.8f, 1.8f);
+	// The room's own smooth paint photograph in a dust grey, through a soft edge: a film. The damp
+	// photograph that was here read as camouflage on the white tops and the bedding, the same
+	// blotches the user had taken off the door.
+	Build.Stain(RoomSurfaces::Paint, Top + FVector(0.f, 0.f, 4.f), FRotator(-90.f, 0.f, Yaw), FVector2D(Size.Y, Size.X), BedroomFilm, Opacity * 0.8f, 0.45f);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -429,6 +443,78 @@ bool AMasterBedroomActor::WallDecalHitsOpening(EWall Wall, float U, float Z, con
 	for (const FBox2D& Opening : Openings(Wall, /*bWithArchitrave*/ true))
 	{
 		if (Footprint.Intersect(Opening.ExpandBy(Margin)))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+TArray<FBox2D> AMasterBedroomActor::WallKeepOuts(EWall Wall) const
+{
+	TArray<FBox2D> Out;
+	switch (Wall)
+	{
+	case EWall::North:
+	{
+		const float HeadHalf = BedWidth * 0.5f + 10.f;
+		Out.Add(FBox2D(FVector2D(BedX - HeadHalf, 0.f), FVector2D(BedX + HeadHalf, 152.f)));
+		for (const int32 Side : { -1, 1 })
+		{
+			// The stand 52 across, the photograph and the books on it up to about 80.
+			const float X = NightstandSeat(Side).X;
+			Out.Add(FBox2D(FVector2D(X - 26.f, 0.f), FVector2D(X + 26.f, 82.f)));
+		}
+		// The dresser 160 across, the vase on it the tallest thing at 30 over its top.
+		const float DresserX = DresserSeat().X;
+		Out.Add(FBox2D(FVector2D(DresserX - 80.f, 0.f), FVector2D(DresserX + 80.f, DresserTop + 32.f)));
+		// The plant's leaves fall to the floor against the wall, its stems stand to 150.
+		Out.Add(FBox2D(FVector2D(PlantSeat().X - 50.f, 0.f), FVector2D(PlantSeat().X + 50.f, 152.f)));
+		break;
+	}
+	case EWall::South:
+	{
+		// The cabinet 190 across, the sculptures and the photograph on it up to about 28 over it.
+		const FVector Cabinet = MediaSeat();
+		Out.Add(FBox2D(FVector2D(Cabinet.X - 95.f, 0.f), FVector2D(Cabinet.X + 95.f, Cabinet.Z + MediaHeight + 28.f)));
+		// The wardrobe run's side stands square off this wall, its carcass in the corner behind it.
+		Out.Add(FBox2D(FVector2D(WestX(), 0.f), FVector2D(WestX() + WardrobeDepth, Setup.Height)));
+		break;
+	}
+	case EWall::West:
+		Out.Add(FBox2D(FVector2D(WardrobeStartY() - 2.f, 0.f), FVector2D(SouthY(), Setup.Height)));
+		break;
+	case EWall::East:
+	{
+		// The drape pole's brackets and finials, which AStormWindowActor::BuildWindow puts 38 and 44
+		// past the opening's sides, 20 over its head, standing 8 to 17 off the wall.
+		const float Half = Setup.WindowWidth * 0.5f;
+		const float PoleZ = Setup.WindowTop + 20.f;
+		for (const float Side : { -1.f, 1.f })
+		{
+			const float A = Side * (Half + 28.f);
+			const float B = Side * (Half + 52.f);
+			Out.Add(FBox2D(FVector2D(FMath::Min(A, B), PoleZ - 10.f), FVector2D(FMath::Max(A, B), PoleZ + 10.f)));
+		}
+		break;
+	}
+	}
+	return Out;
+}
+
+bool AMasterBedroomActor::WallDecalHitsSomething(EWall Wall, float U, float Z, const FVector2D& Size, float Roll) const
+{
+	if (WallDecalHitsOpening(Wall, U, Z, Size, Roll))
+	{
+		return true;
+	}
+	const float Cos = FMath::Abs(FMath::Cos(FMath::DegreesToRadians(Roll)));
+	const float Sin = FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Roll)));
+	const FVector2D Half(Cos * Size.X * 0.5f + Sin * Size.Y * 0.5f, Sin * Size.X * 0.5f + Cos * Size.Y * 0.5f);
+	const FBox2D Footprint(FVector2D(U, Z) - Half, FVector2D(U, Z) + Half);
+	for (const FBox2D& KeepOut : WallKeepOuts(Wall))
+	{
+		if (Footprint.Intersect(KeepOut.ExpandBy(5.f)))
 		{
 			return true;
 		}
@@ -669,9 +755,13 @@ void AMasterBedroomActor::BuildCeiling(FRoomBuilder& Build)
 			const float OffX = Random.FRandRange(-15.f, 15.f);
 			const float OffY = Random.FRandRange(-15.f, 15.f);
 			const float Roll = Random.FRandRange(0.f, 360.f);
-			Build.Stain(RoomSurfaces::Damp, FVector(Leak.X + OffX, Leak.Y + OffY, C - 3.f), FRotator(90.f, 0.f, Roll),
-				FVector2D(Size, Size * Aspect), Ring == 0 ? FLinearColor(0.30f, 0.28f, 0.24f) : FLinearColor(0.46f, 0.42f, 0.35f),
-				Ring == 0 ? 0.45f : 0.22f, 1.1f + Ring * 0.15f);
+			// A water stain on a ceiling is a smooth discolouring with a tide-mark for an edge: the
+			// smooth paint photograph through a soft edge, not the damp one's blotches, which read
+			// as camouflage, and at an edge noise that stays inside the decal's box (at 1.25 the
+			// noise ran past it and the stain was cut square, the 10-13 note).
+			Build.Stain(RoomSurfaces::Paint, FVector(Leak.X + OffX, Leak.Y + OffY, C - 3.f), FRotator(90.f, 0.f, Roll),
+				FVector2D(Size, Size * Aspect), Ring == 0 ? BedroomWater : FLinearColor(0.26f, 0.22f, 0.16f),
+				Ring == 0 ? 0.4f : 0.22f, 0.65f);
 		}
 	}
 
@@ -755,7 +845,7 @@ void AMasterBedroomActor::BuildBed(FRoomBuilder& Build)
 
 	// The dust over the duvet, and the bedding gone the yellow of linen that has not been washed or
 	// aired in years: two faint blooms where the light from the window fell on it.
-	Dust(Build, FVector(BedX, Seat.Y + 30.f, MattressTop + 3.f), FVector2D(190.f, 150.f), 0.f, 0.32f);
+	Dust(Build, FVector(BedX, Seat.Y + 30.f, MattressTop + 3.f), FVector2D(190.f, 150.f), 0.f, 0.4f);
 	Build.Stain(RoomSurfaces::Damp, FVector(BedX + 40.f, Seat.Y + 50.f, MattressTop + 8.f), FRotator(-90.f, 0.f, 30.f), FVector2D(60.f, 80.f),
 		FLinearColor(0.55f, 0.45f, 0.30f), 0.18f, 1.3f);
 
@@ -934,7 +1024,7 @@ void AMasterBedroomActor::BuildMirror(FRoomBuilder& Build)
 	{
 		const float Height = 50.f + i * 55.f;
 		const FVector At = Foot + Up * Height + Front * 6.f;
-		Build.Stain(RoomSurfaces::Damp, At, Into, FVector2D(78.f, 70.f), BedroomDust, 0.22f - i * 0.05f, 1.3f);
+		Build.Stain(RoomSurfaces::Damp, At, Into, FVector2D(78.f, 70.f), BedroomDust, 0.3f - i * 0.07f, 1.3f);
 	}
 }
 
@@ -1048,8 +1138,10 @@ void AMasterBedroomActor::BuildDamage(FRoomBuilder& Build)
 		{ EWall::North, -330.f, 250.f, 110.f, 0.30f }, { EWall::North, -90.f, 275.f, 150.f, 0.22f },
 		{ EWall::North, 120.f, 250.f, 120.f, 0.26f }, { EWall::North, 330.f, 200.f, 140.f, 0.34f },
 		{ EWall::North, 215.f, 150.f, 90.f, 0.18f }, { EWall::North, 50.f, 125.f, 60.f, 0.2f },
-		{ EWall::East, -250.f, 150.f, 130.f, 0.3f }, { EWall::East, -210.f, 270.f, 110.f, 0.32f },
-		{ EWall::East, 250.f, 260.f, 120.f, 0.3f }, { EWall::East, 230.f, 140.f, 100.f, 0.22f },
+		// Beside the window, which is 280 wide now: its keep-out reaches 168 from the middle, and the
+		// drape pole's brackets and finials stand 178..191 out at 282 up. Sized to pass at any roll.
+		{ EWall::East, -252.f, 170.f, 84.f, 0.3f }, { EWall::East, -255.f, 250.f, 70.f, 0.32f },
+		{ EWall::East, 255.f, 250.f, 70.f, 0.3f }, { EWall::East, 250.f, 150.f, 84.f, 0.22f },
 		{ EWall::South, DoorEast + 62.f, 150.f, 80.f, 0.28f }, { EWall::South, DoorEast + 62.f, 260.f, 80.f, 0.3f },
 		{ EWall::South, -90.f, 255.f, 160.f, 0.22f }, { EWall::South, -250.f, 250.f, 100.f, 0.28f },
 		{ EWall::West, -230.f, 240.f, 120.f, 0.3f }, { EWall::West, -200.f, 130.f, 90.f, 0.22f },
@@ -1105,12 +1197,191 @@ void AMasterBedroomActor::BuildDamage(FRoomBuilder& Build)
 	for (const FDrift& Drift : Drifts)
 	{
 		const float Roll = Drift.Roll + Random.FRandRange(-10.f, 10.f);
+		// The damp photograph, as everywhere on the floors of this house. Tried on the smooth paint
+		// photograph like the tops: on the dark oak every pale patch came out as a cloud.
 		Build.Stain(RoomSurfaces::Damp, FVector(Drift.At.X, Drift.At.Y, BedroomFloorDecalZ), FRotator(-90.f, 0.f, Roll), Drift.Size,
 			BedroomDust, Drift.Opacity, 1.35f);
 	}
 	// The water that came in through the broken panes and dried, a tide-mark on the oak.
 	Build.Stain(RoomSurfaces::Damp, FVector(EastX() - 40.f, -55.f, BedroomFloorDecalZ), FRotator(-90.f, 0.f, 15.f), FVector2D(70.f, 50.f),
 		FLinearColor(0.20f, 0.18f, 0.15f), 0.45f, 1.2f);
+}
+
+void AMasterBedroomActor::BuildDecay(FRoomBuilder& Build)
+{
+	// The room has stood shut for years with a leaking roof and two panes out, and it shows: water
+	// run down the walls from the cornice, paint lifting off the plaster in places, mould low in
+	// the corners and high in the damp ones, a piece of the ceiling down on the floor, glass and
+	// leaves blown in under the window, webs in the corners of the furniture. Nothing in it is
+	// broken by a hand: abandoned, not wrecked, and the middle of the floor stays open (the story
+	// needs it). Built after BuildDamage, so its draws come after that function's and change none
+	// of them; every number drawn into locals before its test (09-29).
+
+	// On the walls. Every one is tested against the openings and against what stands against that
+	// wall (WallDecalHitsSomething); the lists are placed to pass, the test is the guard.
+	enum class EKind : uint8 { Grime, Water, Peel, Mould };
+	struct FMark { EWall Wall; float U; float Z; FVector2D Size; EKind Kind; float Opacity; };
+	const FMark Marks[] = {
+		// Water from the roof down the face of the plaster, a tide-marked run from the cornice.
+		{ EWall::North, -332.f, 205.f, FVector2D(30.f, 150.f), EKind::Water, 0.34f },
+		{ EWall::North, 300.f, 228.f, FVector2D(26.f, 110.f), EKind::Water, 0.3f },
+		{ EWall::East, 240.f, 210.f, FVector2D(30.f, 140.f), EKind::Water, 0.32f },
+		{ EWall::East, -244.f, 200.f, FVector2D(26.f, 140.f), EKind::Water, 0.3f },
+		{ EWall::South, -300.f, 215.f, FVector2D(30.f, 130.f), EKind::Water, 0.3f },
+		{ EWall::West, -200.f, 215.f, FVector2D(30.f, 140.f), EKind::Water, 0.3f },
+		// The paint lifted off the plaster in patches, the grey of the plaster under it.
+		{ EWall::North, -60.f, 238.f, FVector2D(40.f, 30.f), EKind::Peel, 0.65f },
+		{ EWall::North, 135.f, 205.f, FVector2D(34.f, 28.f), EKind::Peel, 0.6f },
+		{ EWall::East, -262.f, 115.f, FVector2D(30.f, 40.f), EKind::Peel, 0.6f },
+		{ EWall::East, 230.f, 240.f, FVector2D(36.f, 30.f), EKind::Peel, 0.65f },
+		{ EWall::South, 335.f, 200.f, FVector2D(36.f, 30.f), EKind::Peel, 0.6f },
+		{ EWall::South, -150.f, 232.f, FVector2D(40.f, 30.f), EKind::Peel, 0.6f },
+		{ EWall::West, -250.f, 160.f, FVector2D(36.f, 30.f), EKind::Peel, 0.6f },
+		// Mould: low where the damp rises, high in the corner the roof has been leaking into.
+		{ EWall::North, 372.f, 228.f, FVector2D(50.f, 60.f), EKind::Mould, 0.3f },
+		{ EWall::North, -368.f, 60.f, FVector2D(50.f, 60.f), EKind::Mould, 0.28f },
+		{ EWall::West, -292.f, 52.f, FVector2D(60.f, 50.f), EKind::Mould, 0.3f },
+		{ EWall::East, 282.f, 46.f, FVector2D(50.f, 40.f), EKind::Mould, 0.28f },
+		{ EWall::South, 362.f, 44.f, FVector2D(50.f, 40.f), EKind::Mould, 0.28f },
+		{ EWall::East, -290.f, 245.f, FVector2D(50.f, 50.f), EKind::Mould, 0.26f },
+		// More of the grey-brown film of shut-up air, heavier towards the ceiling.
+		{ EWall::North, -230.f, 238.f, FVector2D(100.f, 100.f), EKind::Grime, 0.26f },
+		{ EWall::North, 20.f, 255.f, FVector2D(110.f, 110.f), EKind::Grime, 0.24f },
+		{ EWall::South, 10.f, 232.f, FVector2D(110.f, 110.f), EKind::Grime, 0.22f },
+		{ EWall::West, -170.f, 205.f, FVector2D(90.f, 90.f), EKind::Grime, 0.26f },
+		{ EWall::East, -258.f, 120.f, FVector2D(70.f, 70.f), EKind::Grime, 0.24f },
+	};
+	for (const FMark& Mark : Marks)
+	{
+		// Water runs straight down, give or take; the rest turns any way.
+		const float Jitter = Random.FRandRange(-1.f, 1.f);
+		const float Roll = Mark.Kind == EKind::Water ? Jitter * 5.f : (Jitter + 1.f) * 180.f;
+		if (WallDecalHitsSomething(Mark.Wall, Mark.U, Mark.Z, Mark.Size, Roll))
+		{
+			continue;
+		}
+		const FRotator Into(0.f, FacingYaw(Mark.Wall) - 90.f, Roll);
+		const FVector At = WallPoint(Mark.Wall, Mark.U, Mark.Z, 2.f);
+		switch (Mark.Kind)
+		{
+		case EKind::Water:
+			Build.Stain(RoomSurfaces::Paint, At, Into, Mark.Size, BedroomWater, Mark.Opacity, 0.7f);
+			break;
+		case EKind::Peel:
+			// The plaster under paint is a mid grey, not a hole: dark, the patches read as burns.
+			Build.Stain(RoomSurfaces::Substrate, At, Into, Mark.Size, FLinearColor(0.50f, 0.47f, 0.43f), Mark.Opacity, 1.6f);
+			break;
+		case EKind::Mould:
+			Build.Stain(RoomSurfaces::Damp, At, Into, Mark.Size, FLinearColor(0.13f, 0.15f, 0.11f), Mark.Opacity, 1.4f);
+			break;
+		default:
+			Build.Stain(RoomSurfaces::Paint, At, Into, Mark.Size, BedroomFilm, Mark.Opacity, 0.5f);
+			break;
+		}
+	}
+
+	// The ceiling where the leak got into it in the corner past the bed: the paint and the skim
+	// came away and the laths show, in a brown ring of water. Its plaster is on the floor under
+	// it, with the dust it came down in. Aimed up from three under the ceiling, the floor ones
+	// down from four over the boards (09-29). Clear of the wardrobes (from Y -85), of the
+	// nightstand and the books by it (to Y -228), of the rug (from X -255) and of the walls'
+	// cornice (98 off the west wall).
+	const FVector2D Fall(-292.f, -178.f);
+	const float C = Setup.Height;
+	if (UDecalComponent* Ring = Build.Stain(RoomSurfaces::Paint, FVector(Fall.X, Fall.Y, C - 3.f), FRotator(90.f, 0.f, 25.f), FVector2D(150.f, 130.f),
+		BedroomWater, 0.5f, 0.65f))
+	{
+		Ring->SortOrder = 1;
+	}
+	// What shows where the plaster has gone is the laths it was keyed onto: the weathered boards
+	// photograph, dark. The damaged-plaster one is brick, which no ceiling has behind it.
+	if (UDecalComponent* Hole = Build.Stain(RoomSurfaces::RoughWood, FVector(Fall.X + 4.f, Fall.Y - 3.f, C - 3.f), FRotator(90.f, 0.f, 70.f), FVector2D(72.f, 54.f),
+		FLinearColor(0.45f, 0.45f, 0.45f), 0.95f, 1.0f))
+	{
+		Hole->SortOrder = 2;
+	}
+	// A broad brown stain over the foot of the bed, where the water spread before it found a way through.
+	Build.Stain(RoomSurfaces::Paint, FVector(-90.f, -110.f, C - 3.f), FRotator(90.f, 0.f, 40.f), FVector2D(170.f, 140.f),
+		BedroomWater, 0.3f, 0.65f);
+	// Mould in the damp corner over the plant, kept off the cornice's top.
+	Build.Stain(RoomSurfaces::Damp, FVector(325.f, -245.f, C - 3.f), FRotator(90.f, 0.f, 10.f), FVector2D(60.f, 55.f),
+		FLinearColor(0.13f, 0.15f, 0.11f), 0.3f, 1.4f);
+
+	// Turned ninety the heap is 64 along X and 87 along Y (bedroom_plaster_fall): X -324..-260.
+	// Aimed down, a decal's first size is along world Y (09-27).
+	Build.Stain(RoomSurfaces::Damp, FVector(Fall.X, Fall.Y, BedroomFloorDecalZ), FRotator(-90.f, 0.f, 0.f), FVector2D(92.f, 60.f),
+		FLinearColor(0.55f, 0.53f, 0.48f), 0.2f, 1.2f);
+	Place(Build, BedroomProps::PlasterFall, FVector(Fall.X, Fall.Y, 0.f), FRotator(0.f, 90.f, 0.f),
+		{ { TEXT("Paint"), MatPaint }, { TEXT("Plaster"), F(TEXT("Plaster")) }, { TEXT("Oak"), MatOak } });
+
+	// Under the window: the glass of the two panes that went, north of the chair's ottoman, and the
+	// leaves the storm has been blowing in, south of it. Both turned ninety to lie along the wall,
+	// under the sill (which stands 33 out at 76..82).
+	// Pieces on the floor have to catch the lantern on their faces and edges: at the photographs'
+	// glass (opacity 0.035) they would not be there at all, and at 0.15 they were specks.
+	MatShardGlass = Build.Glass(RoomPalette::GlassShard, 0.3f, 0.05f);
+	Place(Build, BedroomProps::GlassShards, FVector(EastX() - 22.f, -90.f, 0.f), FRotator(0.f, 90.f, 0.f), { { TEXT("Glass"), MatShardGlass } });
+	Place(Build, BedroomProps::Leaves, FVector(EastX() - 24.f, 92.f, 0.f), FRotator(0.f, 90.f, 0.f), { { TEXT("Leaf"), F(TEXT("Leaf")) } });
+
+	// Webs in the corners things make with the walls and the floor, which nobody has disturbed. A
+	// plane cut into threads by M_RoomWeb, never a box (09-20); no decals on it. A plane faces its
+	// local +Z; rolled by A, that is (0, -sin A, cos A).
+	auto Web = [&](FRoomBuilder& B, const FVector& Centre, const FRotator& Rotation, float SizeX, float SizeY)
+	{
+		BedroomNoDecals(B.Add(FRoomShapes::Plane(), Centre, Rotation, FVector(SizeX, SizeY, 1.f), MatWeb, false));
+	};
+	// In the angle between the floor and the wall under both ends of the floating cabinet.
+	for (const float Side : { -1.f, 1.f })
+	{
+		Web(Build, FVector(MediaSeat().X + Side * 82.f, SouthY() - 7.8f, 7.8f), FRotator(0.f, 0.f, 45.f), 24.f, 22.f);
+	}
+	// From the lamp's shade to the east wall, hung vertically, a little off square.
+	Web(Build, FVector((FloorLampSeat().X + 22.6f + EastX()) * 0.5f, FloorLampSeat().Y, 170.f), FRotator(0.f, 8.f, 90.f),
+		EastX() - FloorLampSeat().X - 22.f, 26.f);
+	// Between the back of the dresser's top and the wall, past the jewellery box.
+	Web(Build, FVector(DresserSeat().X + 25.f, NorthY() + NorthWallGap + 4.f, DresserTop + 4.5f), FRotator(0.f, 0.f, -45.f), 24.f, 14.f);
+	// Between the headboard's top and the wall, at its west end.
+	Web(Build, FVector(BedX - 100.f, NorthY() + 6.f, 160.f), FRotator(0.f, 0.f, -45.f), 22.f, 18.f);
+	// In the angle between the floor and the foot of the bed's frame, at both corners.
+	const float FootY = BedSeat().Y + BedLength * 0.5f;
+	for (const float Side : { -1.f, 1.f })
+	{
+		Web(Build, FVector(BedX + Side * 92.f, FootY + 5.f, 5.f), FRotator(0.f, 0.f, -45.f), 20.f, 14.f);
+	}
+	// Across the angle between the open wardrobe door and its carcass, under the top, in the
+	// module's own frame (X along the run, the front at +Y; the door opened by -64 about its hinge).
+	{
+		USceneComponent* Module = BedroomPivot(this, RoomRoot, WardrobeSeat(OpenWardrobe), FRotator(0.f, FacingYaw(EWall::West), 0.f), TEXT("WardrobeWeb"));
+		FRoomBuilder W(this, Module);
+		const FVector2D Hinge(WardrobeModule * 0.5f - 0.2f, WardrobeDepth * 0.5f - 2.2f);
+		const FVector2D Leaf(FRotator(0.f, -64.f, 0.f).RotateVector(FVector(-1.f, 0.f, 0.f)));
+		const FVector2D A = Hinge + FVector2D(-16.f, 0.7f);
+		const FVector2D B = Hinge + Leaf * 16.f;
+		const FVector Along(B.X - A.X, B.Y - A.Y, 0.f);
+		const FVector Normal = FVector::CrossProduct(Along, FVector(0.f, 0.f, 1.f)).GetSafeNormal();
+		const FRotator Turn = FRotationMatrix::MakeFromZX(Normal, Along).Rotator();
+		Web(W, FVector((A.X + B.X) * 0.5f, (A.Y + B.Y) * 0.5f, 268.f), Turn, Along.Size(), 38.f);
+	}
+
+	// A film of dust and grime down the wardrobes' white fronts, the first thing the detective sees
+	// on his right as he wakes: aimed into the fronts (local +X turned to world -X) from two in
+	// front of them, so the nine either way reaches the doors and their bars and nothing else. Kept
+	// off the open module (Y 115..215, its door standing out to X -283) and, low down, off the
+	// suitcase in front of the first two (from X -315), and the last one 76 wide, clear of the
+	// south wall's skirting and panel stile that start at its side.
+	const float FrontX = WestX() + WardrobeDepth + 2.f;
+	struct FFront { float Y; float Z; float Tall; float Wide; float Opacity; };
+	const FFront Fronts[] = {
+		{ -40.f, 190.f, 150.f, 84.f, 0.3f }, { -40.f, 90.f, 70.f, 84.f, 0.22f },
+		{ 62.f, 200.f, 140.f, 80.f, 0.28f },
+		{ 262.f, 175.f, 170.f, 76.f, 0.3f }, { 262.f, 45.f, 70.f, 76.f, 0.36f },
+	};
+	for (const FFront& Front : Fronts)
+	{
+		// Rolled ninety, the first size runs up the front and the second along it.
+		Build.Stain(RoomSurfaces::Paint, FVector(FrontX, Front.Y, Front.Z), FRotator(0.f, 180.f, 90.f), FVector2D(Front.Tall, Front.Wide),
+			BedroomFilm, Front.Opacity, 0.5f);
+	}
 }
 
 // ---------------------------------------------------------------------------------------------

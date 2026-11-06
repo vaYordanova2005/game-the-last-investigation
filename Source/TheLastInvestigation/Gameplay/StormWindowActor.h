@@ -39,6 +39,13 @@ struct FStormWindowSetup
 	float InnerSillProud = 33.f;
 
 	/**
+	 * How many panes across the sash. Four keeps every window as it was; a wider opening needs more,
+	 * or its panes come out as wide flat letterboxes (Room01's 280 opening has six, near square).
+	 * The rows stay four: the meeting rail is the middle muntin.
+	 */
+	int32 PaneColumns = 4;
+
+	/**
 	 * For a follower (see SetLead) on another side of the house: builds its own sky, treeline,
 	 * rain and bolts rather than borrowing the lead's, which are all on the lead's side. The lead's
 	 * directional light cannot come in through a window facing away from it, so an own-view

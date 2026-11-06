@@ -624,7 +624,7 @@ void AStormWindowActor::BuildWindow()
 
 		// Sash: the perimeter, then the muntin grid that divides it into small panes. The grid is the
 		// point of the whole assembly — it is the pattern the storm prints across the far wall.
-		const int32 Cols = 4;
+		const int32 Cols = FMath::Max(1, Setup.PaneColumns);
 		const int32 Rows = 4;
 		const float SashW = 7.f;
 		const float MuntinW = 2.6f;

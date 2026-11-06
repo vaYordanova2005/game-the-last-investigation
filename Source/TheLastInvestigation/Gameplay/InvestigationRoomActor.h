@@ -100,14 +100,16 @@ private:
 	//
 	// The two openings are on adjacent walls and both have to be in frame at once: the detective
 	// wakes in the far corner looking at a window with a locked door to the right of it, and the
-	// whole room is laid out around that one view. The window is a tall domestic sash rather than
-	// the wide gap the greybox had — a narrow opening throws a sharper, more readable rectangle of
-	// storm light across the door wall, and leaves wall either side of it to decay.
+	// whole room is laid out around that one view. The window was a tall domestic sash, 196 wide;
+	// the master bedroom has it wide (280, six panes across), with wall still left either side of
+	// it for the drapes, the lamp and the plant.
 	static constexpr float DoorOpeningWidth = 106.f;
 	static constexpr float DoorOpeningHeight = 208.f;
 	/** How far along the door wall the opening sits, from the room's centre. */
 	static constexpr float DoorOpeningCenterX = 205.f;
-	static constexpr float WindowOpeningWidth = 196.f;
+	/** Widened from 196 for the master bedroom (the user): a broad window on the storm, six panes across. */
+	static constexpr float WindowOpeningWidth = 280.f;
+	static constexpr int32 WindowPaneColumns = 6;
 	static constexpr float WindowSillHeight = 82.f;
 	static constexpr float WindowTopHeight = 262.f;
 
