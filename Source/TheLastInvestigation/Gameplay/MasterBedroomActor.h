@@ -136,10 +136,22 @@ private:
 	/** The armchair by the window, turned to the storm, and what stands round it. */
 	FVector ArmchairSeat() const { return FVector(275.f, 40.f, 0.f); }
 	static constexpr float ArmchairYaw = -109.f;
-	FVector SideTableSeat() const { return FVector(312.f, 85.f, 0.f); }
+	/**
+	 * Beside the chair's left arm, clear of it. The chair is 94 wide, its arms out to 47 from its
+	 * middle, the table's top 23 across its radius: the table's middle goes 74 out along the
+	 * chair's own -X (world (-0.33, -0.95) at this yaw) and 20 forward. At 55 out the table stood
+	 * through the arm, and the mug on it in the upholstery.
+	 */
+	FVector SideTableSeat() const { return FVector(318.f, 103.f, 0.f); }
 	/** On the window side of the table, out of the waking view: behind the chair it stood across the door. */
-	FVector FloorLampSeat() const { return FVector(352.f, 150.f, 0.f); }
-	FVector OttomanSeat() const { return FVector(335.f, 19.f, 0.f); }
+	/**
+	 * Clear of the south drape too: its pole stands 26 off the wall (X 374) and the drape hangs from
+	 * Y 82 to 146 and swings, and the shade is 22.6 across its radius. At (352, 150) the shade stood
+	 * in the cloth.
+	 */
+	FVector FloorLampSeat() const { return FVector(340.f, 168.f, 0.f); }
+	/** In front of the chair, square to it, 6 clear of its front (45 out), the ottoman 48 deep. */
+	FVector OttomanSeat() const { return FVector(346.f, 15.f, 0.f); }
 	FVector PlantSeat() const { return FVector(350.f, -272.f, 0.f); }
 	/** The ceiling hook: where it always was, in the middle of the waking view. */
 	FVector HookAnchor() const { return FVector(95.f, 60.f, Setup.Height); }

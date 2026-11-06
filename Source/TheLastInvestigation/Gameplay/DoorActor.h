@@ -49,7 +49,4 @@ private:
 
 	bool bIsOpen = false;
 	float TargetYaw = 0.f;
-
-	/** Fixed seed, so the dust on the door is the same every session. */
-	FRandomStream Random;
 };

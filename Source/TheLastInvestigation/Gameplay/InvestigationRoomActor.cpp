@@ -233,10 +233,10 @@ void AInvestigationRoomActor::SpawnOccupants()
 
 	// The key is on the window sill — the one surface in the room the storm lights for free, so a
 	// player who walks to the window to look out finds it without ever being told to.
-	// Lying on the sill, not floating a finger's width over it: the mesh is a 9 by 2 by 2 cm bar
-	// whose origin is its own centre, so the offset that rests it on the boards is its half
-	// height. At seven it hung six centimetres clear of the sill with its shadow under it.
-	const FVector KeyLocation = GetActorLocation() + FVector(WidthHalf - 26.f, -48.f, WindowSillHeight + 1.f);
+	// Lying on the sill, not floating a finger's width over it: the key's origin is its underside.
+	// The inner sill is tilted a degree and a half up towards the room (AStormWindowActor), which
+	// puts its top 0.16 over SillHeight here, 26 in from the wall's middle.
+	const FVector KeyLocation = GetActorLocation() + FVector(WidthHalf - 26.f, -48.f, WindowSillHeight + 0.2f);
 	Key = GetWorld()->SpawnActor<AKeyPickupActor>(AKeyPickupActor::StaticClass(), KeyLocation, FRotator(0.f, 24.f, 0.f), SpawnParams);
 
 	// Storm and bedroom are spawned deferred so Configure() lands before their BeginPlay builds

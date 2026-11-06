@@ -969,6 +969,22 @@ def watch():
     return [metal, face, strap]
 
 
+def door_key():
+    """The bedroom door's key: a brass mortice key lying flat, as it was left on the window sill.
+    A ring bow, a collar, the round shank and a stepped bit off one side. 7.6 long along X, origin
+    under its middle; it lies on its side, the bit flat on the sill."""
+    brass = Part("Brass", bevel=0.05)
+    z = 0.26
+    ring = [(-2.4 + math.cos(2 * math.pi * k / 40) * 1.25, math.sin(2 * math.pi * k / 40) * 1.25, z) for k in range(41)]
+    tube(brass, ring, 0.26, sides=10)
+    tube(brass, [(-1.15, 0.0, z), (-0.55, 0.0, z)], 0.42, sides=14)
+    tube(brass, [(-0.55, 0.0, z), (3.7, 0.0, z)], 0.24, sides=12)
+    # The bit: two steps, the wards cut between them.
+    box(brass, 2.3, 3.0, -1.25, -0.1, z - 0.2, z + 0.2)
+    box(brass, 3.15, 3.7, -0.95, -0.1, z - 0.2, z + 0.2)
+    return [brass]
+
+
 def tray():
     """A small decorative tray: a marble-white base in a thin brass rim. 34 x 22."""
     brass = Part("Brass", bevel=0.2)
@@ -1067,6 +1083,7 @@ MODELS = [
     ("bedroom_perfume", perfume),
     ("bedroom_hairbrush", hairbrush),
     ("bedroom_watch", watch),
+    ("bedroom_key", door_key),
     ("bedroom_tray", tray),
     ("bedroom_folded_clothes", folded_clothes),
     ("bedroom_folded_blanket", folded_blanket),

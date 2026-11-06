@@ -59,10 +59,6 @@ void ADoorActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// The door's own stream, for the same reason the clock has one: the object the player spends
-	// the longest looking at has to be the same door every session (09-22).
-	Random.Initialize(19551104 + 7);
-
 	BuildDoorDetail();
 
 	// -OpenDoors: every door in the house starts open, for walking round it without playing it.
@@ -86,10 +82,12 @@ void ADoorActor::BuildDoorDetail()
 	// keyhole under it, black hinges. The old panelled door, rotten and padlocked, went with the
 	// room's old life (the cellar keeps the rest of it).
 	//
-	// The paint is the room's own (RoomSurfaces::Paint, linear ~0.58) taken down to about 0.022: a
+	// The paint is the room's own (RoomSurfaces::Paint, linear ~0.58) taken down to about 0.034: a
 	// black that still shows its surface under the lantern. Flat-colour black at this size is a
-	// hole in the wall, which is how the doorway read before the leaf was widened (09-20).
-	UMaterialInstanceDynamic* LeafMat = Build.Surface(RoomSurfaces::Paint, FLinearColor(0.040f, 0.039f, 0.041f), 0.55f);
+	// hole in the wall, which is how the doorway read before the leaf was widened (09-20). It is
+	// greyed a little and taken matt: the satin under years of dust, which an even film over the
+	// whole leaf is, where any decal laid over it has an edge somewhere.
+	UMaterialInstanceDynamic* LeafMat = Build.Surface(RoomSurfaces::Paint, FLinearColor(0.062f, 0.059f, 0.056f), 1.2f);
 	UMaterialInstanceDynamic* GrooveMat = Build.Flat(FLinearColor(0.002f, 0.002f, 0.002f), 1.f);
 	UMaterialInstanceDynamic* SteelMat = Build.Flat(FLinearColor(0.30f, 0.30f, 0.30f), 0.38f, 1.f);
 	UMaterialInstanceDynamic* HingeMat = Build.Flat(FLinearColor(0.012f, 0.012f, 0.013f), 0.45f, 0.6f);
@@ -130,31 +128,31 @@ void ADoorActor::BuildDoorDetail()
 		Build.Cyl(FVector(Proud(0.82f), HandleY, KeyZ + 0.5f), FRotator(90.f, 0.f, 0.f), FVector(0.9f, 0.9f, 0.1f), SlotMat, /*bBlockingCollision*/ false);
 	}
 
-	// Dust settled on the leaf where it has stood shut, heavier low down. One decal through the leaf
-	// from its middle reaches both faces (nine either way, FRoomBuilder::Stain); it is kept well off
-	// the floor, because it swings with the leaf, and a floor decal that moves with a door is the
-	// one thing worse than a floor decal it sweeps over (10-05). Numbers drawn into locals (09-29).
-	const float DustZ = Random.FRandRange(64.f, 76.f);
-	const float DustOpacity = Random.FRandRange(0.16f, 0.22f);
-	Build.Stain(RoomSurfaces::Damp, FVector(0.f, LeafY, DustZ), FRotator(0.f, 0.f, 90.f), FVector2D(84.f, 56.f),
-		FLinearColor(0.42f, 0.40f, 0.36f), DustOpacity, 1.4f);
-
-	// The paint is not new any more either: scuffed at the foot where it was pushed open with a
-	// foot or a bag for years, and rubbed back round the handle by a hand. Kept above the boards for
-	// the reason the dust is, and inside the leaf's edges (Y 0 at the hinge, 106 at the lock): its
-	// projection runs nine either way through the leaf, so past an edge it lands on the reveal and
-	// the architrave whenever the door is shut. A scuff turned any way reaches 7.6 from its centre,
-	// the rub round the handle is ten either side of it along the leaf. Numbers drawn into locals.
-	for (int32 i = 0; i < 4; ++i)
+	// The door is years old and has stood shut in a dusty house: the dust is in the paint's tint
+	// (above), a little heavier towards the foot, and the paint is worn round the handle by a hand
+	// and low down where it was pushed open with a foot. The patches are the room's own smooth paint
+	// photograph through a soft, barely torn edge, at very low opacity: at 0.16 the dust read as a
+	// pale cloud with a ragged outline on the black, and an outline is what has to go.
+	// REMOVED (the user): scuffs and a dust bloom cut from the substrate and damp photographs with a
+	// torn edge. Pale on black paint, their blotches came out as scraps of paper and a camouflage
+	// patch stuck to the door, which is not what wear on paint looks like.
+	//
+	// Each decal runs nine either way through the leaf from its middle, so it reaches both faces;
+	// rolled ninety, its first size goes up the leaf and its second across it. All of them stay
+	// inside the leaf (Y 0 at the hinge, 106 at the lock, Z 0..210) with a margin: past an edge it
+	// would land on the reveal and the architrave whenever the door is shut, and below the foot on
+	// the boards the leaf sweeps (10-05).
+	struct FWear { float Y; float Z; float Tall; float Wide; float Opacity; };
+	const FWear Wear[] = {
+		{ LeafY, 54.f, 88.f, 90.f, 0.05f },         // the dust, heavier low down
+		{ LeafY + 30.f, 100.f, 34.f, 30.f, 0.07f }, // dulled round the handle and the keyhole
+		{ LeafY + 16.f, 22.f, 22.f, 56.f, 0.06f },  // pushed open with a foot
+	};
+	for (const FWear& Patch : Wear)
 	{
-		const float ScuffY = Random.FRandRange(20.f, 90.f);
-		const float ScuffZ = Random.FRandRange(18.f, 34.f);
-		const float ScuffRoll = Random.FRandRange(0.f, 360.f);
-		Build.Stain(RoomSurfaces::Substrate, FVector(0.f, ScuffY, ScuffZ), FRotator(0.f, 0.f, ScuffRoll), FVector2D(14.f, 6.f),
-			FLinearColor(0.30f, 0.28f, 0.25f), 0.5f, 1.8f);
+		Build.Stain(RoomSurfaces::Paint, FVector(0.f, Patch.Y, Patch.Z), FRotator(0.f, 0.f, 90.f), FVector2D(Patch.Tall, Patch.Wide),
+			FLinearColor(0.42f, 0.40f, 0.36f), Patch.Opacity, 0.25f);
 	}
-	Build.Stain(RoomSurfaces::Damp, FVector(0.f, LeafY + 37.f, 100.f), FRotator(0.f, 0.f, 90.f), FVector2D(26.f, 20.f),
-		FLinearColor(0.20f, 0.18f, 0.15f), 0.3f, 1.6f);
 
 	// Three black hinges on the hinge edge, their knuckles on the room side, where the leaf swings.
 	for (const float Z : { 22.f, 105.f, 188.f })
