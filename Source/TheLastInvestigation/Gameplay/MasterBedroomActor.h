@@ -27,8 +27,6 @@ struct FMasterBedroomSetup
 	float WindowWidth = 196.f;
 	float WindowSill = 82.f;
 	float WindowTop = 262.f;
-	/** Where the detective comes round: kept clear of everything. */
-	FVector2D WakeSpot = FVector2D(228.f, -110.f);
 };
 
 /**
@@ -36,13 +34,14 @@ struct FMasterBedroomSetup
  *
  * It was done over ten or twenty years before the house was shut, and it is the one room that
  * says who the house belonged to. The Victorian shell is kept — the tall sash window on the
- * storm, the panelled door, a plaster cornice — and dressed in white: painted panel mouldings
- * on the walls over a dado rail, a white ceiling with a flush light, dark oak boards. Into it
- * went modern things: a king-size bed with a tall upholstered headboard, built-in wardrobes in
- * matte white, a white dresser, a big white television over a floating cabinet, a white armchair
- * by the window turned to the storm. All of it is under an even dust, and nothing in it is broken:
- * life in here simply stopped. It is kept deliberately sparse, with the floor in the middle of the
- * room open, because the story will need that floor later.
+ * storm, a plaster cornice — and dressed in white: painted panel mouldings on the walls over a
+ * dado rail, a white ceiling with a flush light, dark oak boards. Into it went modern things: a
+ * flush door in black satin paint where the panelled one hung (ADoorActor), a king-size bed with
+ * a tall upholstered headboard, built-in wardrobes in matte white, a white dresser, a big white
+ * television over a floating cabinet, a white armchair by the window turned to the storm. All of
+ * it is under an even dust, and nothing in it is broken: life in here simply stopped. It is kept
+ * deliberately sparse, with the floor in the middle of the room open, because the story will need
+ * that floor later.
  *
  *                        north
  *      +-- nightstand [ BED head ] nightstand ---- dresser ----- plant --+
@@ -89,6 +88,22 @@ public:
 	/** The painted joinery on the walls. */
 	static constexpr float DadoZ = 95.f;
 	static constexpr float CorniceDrop = 34.f;
+	/** The door's architrave: its width each side of the opening, and its height over the head. */
+	static constexpr float DoorCasing = 9.f;
+	/**
+	 * The window's architrave, which stands outside the storm window's own reveal lining
+	 * (AStormWindowActor::RevealLining): its width each side, and the height of the head over it.
+	 * The joinery is cut round exactly this, and the wall decals keep off it.
+	 */
+	static constexpr float WindowCasing = 7.f;
+	static constexpr float WindowHead = 5.f;
+
+	/**
+	 * How far the pieces backed up to a wall stand off it: clear of the skirting (2.2 proud), the
+	 * dado (2.8) and the panel moulding (1.6) that run behind them.
+	 */
+	static constexpr float NorthWallGap = 3.f;
+	static constexpr float MediaWallGap = 2.f;
 
 private:
 	enum class EWall : uint8 { North, South, East, West };
@@ -100,19 +115,21 @@ private:
 	float SouthY() const { return Setup.Depth * 0.5f - Setup.WallThickness * 0.5f; }
 
 	// Where the furniture stands, shared between the pieces and what is put on them.
-	/** The bed: head to the north wall, its middle line at X = BedX. */
+	/** The bed: head to the north wall (its headboard's back NorthWallGap off it), its middle line at X = BedX. */
 	static constexpr float BedX = -90.f;
-	FVector BedSeat() const { return FVector(BedX, NorthY() + BedLength * 0.5f, 0.f); }
-	FVector NightstandSeat(int32 Side) const { return FVector(BedX + Side * 144.f, NorthY() + 22.f, 0.f); }
-	FVector BenchSeat() const { return FVector(BedX, NorthY() + BedLength + 33.f, 0.f); }
+	FVector BedSeat() const { return FVector(BedX, NorthY() + NorthWallGap + BedLength * 0.5f, 0.f); }
+	/** The nightstands are 40 deep about their middle. */
+	FVector NightstandSeat(int32 Side) const { return FVector(BedX + Side * 144.f, NorthY() + NorthWallGap + 20.f, 0.f); }
+	FVector BenchSeat() const { return FVector(BedX, BedSeat().Y + BedLength * 0.5f + 33.f, 0.f); }
 	/** The run of built-in wardrobes along the west wall, from WardrobeStartY to the south wall. */
 	float WardrobeStartY() const { return SouthY() - WardrobeModule * 4.f; }
 	FVector WardrobeSeat(int32 Module) const { return FVector(WestX() + WardrobeDepth * 0.5f, WardrobeStartY() + WardrobeModule * (Module + 0.5f), 0.f); }
 	/** Which module stands with its right-hand door open. */
 	static constexpr int32 OpenWardrobe = 2;
-	FVector DresserSeat() const { return FVector(215.f, NorthY() + 24.f, 0.f); }
-	/** The cabinet and the television over it, on the south wall, across from the bed. */
-	FVector MediaSeat() const { return FVector(BedX, SouthY() - 20.f, 30.f); }
+	/** The dresser is 48 deep about its middle. */
+	FVector DresserSeat() const { return FVector(215.f, NorthY() + NorthWallGap + 24.f, 0.f); }
+	/** The cabinet (40 deep about its middle) and the television over it, on the south wall, across from the bed. */
+	FVector MediaSeat() const { return FVector(BedX, SouthY() - MediaWallGap - 20.f, 30.f); }
 	FVector TelevisionSeat() const { return FVector(BedX, SouthY(), 92.f); }
 	/** The black mirror leaning on the south wall beside the door. */
 	FVector MirrorSeat() const { return FVector(Setup.DoorCenterX - Setup.DoorWidth * 0.5f - 72.f, SouthY() - 18.5f, 0.f); }
@@ -159,8 +176,18 @@ private:
 	FVector WallPoint(EWall Wall, float U, float Z, float Proud) const;
 	/** The yaw that turns a model's local +Y — the way every model here faces — out of a wall. */
 	static float FacingYaw(EWall Wall);
-	/** The openings on a wall, as (along, up) rectangles, with their trim. */
-	TArray<FBox2D> Openings(EWall Wall, float Trim) const;
+	/**
+	 * The openings on a wall, as (along, up) rectangles: the bare opening, or with its architrave
+	 * (the door's DoorCasing; the window's reveal lining, WindowCasing and WindowHead, down to the
+	 * underside of its inner sill).
+	 */
+	TArray<FBox2D> Openings(EWall Wall, bool bWithArchitrave) const;
+	/**
+	 * Whether a decal aimed into a wall at (U, Z), of the given full size and roll, would reach an
+	 * opening on it, its architrave, or the fifteen kept clear round them (ACellarActor's
+	 * DecalHitsDoorway): its rolled footprint against each.
+	 */
+	bool WallDecalHitsOpening(EWall Wall, float U, float Z, const FVector2D& Size, float Roll) const;
 	/** A straight run of moulding (bedroom_panel_moulding, _dado, _skirting) on a wall, along U or up Z. */
 	void Moulding(FRoomBuilder& Build, const TCHAR* Name, EWall Wall, float U, float Z, float Length, bool bVertical);
 

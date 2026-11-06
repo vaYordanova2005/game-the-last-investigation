@@ -276,7 +276,6 @@ void AInvestigationRoomActor::SpawnOccupants()
 		BedroomSetup.WindowWidth = WindowOpeningWidth;
 		BedroomSetup.WindowSill = WindowSillHeight;
 		BedroomSetup.WindowTop = WindowTopHeight;
-		BedroomSetup.WakeSpot = FVector2D(GetWakeLocation());
 		Bedroom->Configure(BedroomSetup);
 		Bedroom->FinishSpawning(BedroomTransform);
 	}

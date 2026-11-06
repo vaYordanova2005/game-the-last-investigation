@@ -605,9 +605,10 @@ void AStormWindowActor::BuildWindow()
 	{
 		// The reveal. The wall is twenty centimetres thick, so the opening is a short tunnel, and
 		// lining it is what gives the window depth instead of the look of a rectangle cut in card.
-		Build.Box(FVector(0.f, -HalfWidth - 3.f, CenterZ), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, 6.f, Height + 12.f), PaintMat);
-		Build.Box(FVector(0.f, HalfWidth + 3.f, CenterZ), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, 6.f, Height + 12.f), PaintMat);
-		Build.Box(FVector(0.f, 0.f, Setup.TopHeight + 3.f), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, Setup.OpeningWidth + 12.f, 6.f), PaintMat);
+		const float Lining = RevealLining;
+		Build.Box(FVector(0.f, -HalfWidth - Lining * 0.5f, CenterZ), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, Lining, Height + Lining * 2.f), PaintMat);
+		Build.Box(FVector(0.f, HalfWidth + Lining * 0.5f, CenterZ), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, Lining, Height + Lining * 2.f), PaintMat);
+		Build.Box(FVector(0.f, 0.f, Setup.TopHeight + Lining * 0.5f), FRotator::ZeroRotator, FVector(Setup.WallThickness + 2.f, Setup.OpeningWidth + Lining * 2.f, Lining), PaintMat);
 
 		// The inner sill, projecting into the room and tilted a degree to shed water it has not had
 		// to shed in years. Deep enough to stand things on: it is where the key sits.

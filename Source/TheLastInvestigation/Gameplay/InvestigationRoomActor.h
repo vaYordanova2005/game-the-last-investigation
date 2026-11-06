@@ -43,7 +43,7 @@ public:
 	 * The bed is then behind him and to the left, just out of frame. Waking with your back to it is
 	 * worth more than waking looking at it. What is straight ahead of him is the television on the
 	 * far wall, with the hook in the ceiling on the same line, and the black mirror by the door to
-	 * the right. The bedroom (AMasterBedroomActor) keeps the spot clear.
+	 * the right. The bedroom's layout (AMasterBedroomActor) leaves the spot clear.
 	 */
 	static FVector GetWakeLocation() { return FVector(228.f, -110.f, 100.f); }
 	static FRotator GetWakeRotation() { return FRotator(-7.f, 128.f, 0.f); }

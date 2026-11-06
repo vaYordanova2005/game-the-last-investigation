@@ -141,16 +141,19 @@ void ADoorActor::BuildDoorDetail()
 
 	// The paint is not new any more either: scuffed at the foot where it was pushed open with a
 	// foot or a bag for years, and rubbed back round the handle by a hand. Kept above the boards for
-	// the reason the dust is. Numbers drawn into locals first.
+	// the reason the dust is, and inside the leaf's edges (Y 0 at the hinge, 106 at the lock): its
+	// projection runs nine either way through the leaf, so past an edge it lands on the reveal and
+	// the architrave whenever the door is shut. A scuff turned any way reaches 7.6 from its centre,
+	// the rub round the handle is ten either side of it along the leaf. Numbers drawn into locals.
 	for (int32 i = 0; i < 4; ++i)
 	{
-		const float ScuffY = Random.FRandRange(20.f, 95.f);
+		const float ScuffY = Random.FRandRange(20.f, 90.f);
 		const float ScuffZ = Random.FRandRange(18.f, 34.f);
 		const float ScuffRoll = Random.FRandRange(0.f, 360.f);
 		Build.Stain(RoomSurfaces::Substrate, FVector(0.f, ScuffY, ScuffZ), FRotator(0.f, 0.f, ScuffRoll), FVector2D(14.f, 6.f),
 			FLinearColor(0.30f, 0.28f, 0.25f), 0.5f, 1.8f);
 	}
-	Build.Stain(RoomSurfaces::Damp, FVector(0.f, LeafY + 44.f, 100.f), FRotator(0.f, 0.f, 90.f), FVector2D(26.f, 34.f),
+	Build.Stain(RoomSurfaces::Damp, FVector(0.f, LeafY + 37.f, 100.f), FRotator(0.f, 0.f, 90.f), FVector2D(26.f, 20.f),
 		FLinearColor(0.20f, 0.18f, 0.15f), 0.3f, 1.6f);
 
 	// Three black hinges on the hinge edge, their knuckles on the room side, where the leaf swings.

@@ -1,5 +1,6 @@
 #include "MasterBedroomActor.h"
 #include "RoomBuildLibrary.h"
+#include "StormWindowActor.h"
 #include "ClueActor.h"
 #include "DustMotesComponent.h"
 #include "ProceduralMeshComponent.h"
@@ -392,20 +393,47 @@ float AMasterBedroomActor::FacingYaw(EWall Wall)
 	}
 }
 
-TArray<FBox2D> AMasterBedroomActor::Openings(EWall Wall, float Trim) const
+TArray<FBox2D> AMasterBedroomActor::Openings(EWall Wall, bool bWithArchitrave) const
 {
 	TArray<FBox2D> Holes;
 	if (Wall == EWall::South)
 	{
+		const float Trim = bWithArchitrave ? DoorCasing : 0.f;
 		const float Half = Setup.DoorWidth * 0.5f + Trim;
 		Holes.Add(FBox2D(FVector2D(Setup.DoorCenterX - Half, 0.f), FVector2D(Setup.DoorCenterX + Half, Setup.DoorHeight + Trim)));
 	}
 	else if (Wall == EWall::East)
 	{
-		const float Half = Setup.WindowWidth * 0.5f + Trim;
-		Holes.Add(FBox2D(FVector2D(-Half, Setup.WindowSill - Trim), FVector2D(Half, Setup.WindowTop + Trim)));
+		// The window's trim is the storm window's reveal lining and then the architrave outside it
+		// (BuildJoinery). One trim all round, as this used to take, cut the dado off four centimetres
+		// inside the architrave, where it stood out of it. Under the sill it is the lining's foot, the
+		// underside of the inner sill board.
+		const float Lining = bWithArchitrave ? AStormWindowActor::RevealLining : 0.f;
+		const float Half = Setup.WindowWidth * 0.5f + (bWithArchitrave ? Lining + WindowCasing : 0.f);
+		const float Head = Setup.WindowTop + (bWithArchitrave ? Lining + WindowHead : 0.f);
+		Holes.Add(FBox2D(FVector2D(-Half, Setup.WindowSill - Lining), FVector2D(Half, Head)));
 	}
 	return Holes;
+}
+
+bool AMasterBedroomActor::WallDecalHitsOpening(EWall Wall, float U, float Z, const FVector2D& Size, float Roll) const
+{
+	// A decal projects straight through: one that reaches a doorway smears over the architrave and
+	// down the reveal, and over the leaf as it swings (10-05). Its footprint is its two sizes turned
+	// by its roll; the box round that is tested against each opening with its trim and fifteen more.
+	const float Margin = 15.f;
+	const float Cos = FMath::Abs(FMath::Cos(FMath::DegreesToRadians(Roll)));
+	const float Sin = FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Roll)));
+	const FVector2D Half(Cos * Size.X * 0.5f + Sin * Size.Y * 0.5f, Sin * Size.X * 0.5f + Cos * Size.Y * 0.5f);
+	const FBox2D Footprint(FVector2D(U, Z) - Half, FVector2D(U, Z) + Half);
+	for (const FBox2D& Opening : Openings(Wall, /*bWithArchitrave*/ true))
+	{
+		if (Footprint.Intersect(Opening.ExpandBy(Margin)))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 void AMasterBedroomActor::Moulding(FRoomBuilder& Build, const TCHAR* Name, EWall Wall, float U, float Z, float Length, bool bVertical)
@@ -471,7 +499,7 @@ void AMasterBedroomActor::BuildWalls(FRoomBuilder& Build)
 	for (const FRun& Run : Runs)
 	{
 		const bool bAlongX = Run.Wall == EWall::North || Run.Wall == EWall::South;
-		const TArray<FBox2D> Pieces = RoomWalls::CutAround(Openings(Run.Wall, 0.f), Run.U0, Run.U1, 0.f, Setup.Height);
+		const TArray<FBox2D> Pieces = RoomWalls::CutAround(Openings(Run.Wall, /*bWithArchitrave*/ false), Run.U0, Run.U1, 0.f, Setup.Height);
 		BedroomFacade(this, RoomRoot, Pieces, WallPoint(Run.Wall, 0.f, 0.f, 0.3f), bAlongX ? FVector(1.f, 0.f, 0.f) : FVector(0.f, 1.f, 0.f),
 			WallNormal(Run.Wall), RoomSurfaces::Paint.TexelSizeCm, MatWall);
 	}
@@ -493,12 +521,14 @@ void AMasterBedroomActor::BuildJoinery(FRoomBuilder& Build)
 {
 	// The Victorian part the renovation kept and painted: a moulded skirting, a dado rail, panels
 	// laid out in bolection moulding above and below it, a plaster cornice. Every run is cut round
-	// the door's and the window's architraves; nothing goes behind the built-in wardrobes.
-	const float Casing = 9.f;
+	// the door's and the window's architraves; nothing goes behind the built-in wardrobes, which
+	// stand on the west wall from WardrobeStartY to the south wall, so the south wall's run starts at
+	// their side rather than in the corner behind them.
+	const float WardrobeSideX = WestX() + WardrobeDepth;
 	struct FRun { EWall Wall; float U0; float U1; };
 	const FRun Runs[] = {
 		{ EWall::North, WestX(), EastX() },
-		{ EWall::South, WestX(), EastX() },
+		{ EWall::South, WardrobeSideX, EastX() },
 		{ EWall::East, NorthY(), SouthY() },
 		{ EWall::West, NorthY(), WardrobeStartY() },
 	};
@@ -506,7 +536,7 @@ void AMasterBedroomActor::BuildJoinery(FRoomBuilder& Build)
 	auto FreeAlong = [&](const FRun& Run, float Z0, float Z1)
 	{
 		TArray<FVector2D> Free;
-		for (const FBox2D& Piece : RoomWalls::CutAround(Openings(Run.Wall, Casing), Run.U0, Run.U1, Z0, Z1))
+		for (const FBox2D& Piece : RoomWalls::CutAround(Openings(Run.Wall, /*bWithArchitrave*/ true), Run.U0, Run.U1, Z0, Z1))
 		{
 			if (FMath::IsNearlyEqual(Piece.Min.Y, Z0, 0.5f) && FMath::IsNearlyEqual(Piece.Max.Y, Z1, 0.5f) && Piece.GetSize().X > 1.f)
 			{
@@ -570,34 +600,36 @@ void AMasterBedroomActor::BuildJoinery(FRoomBuilder& Build)
 	}
 
 	// The architraves: the door's and the window's, flat and broad, as the renovation left them.
+	// Their sizes are the ones the runs above are cut to (Openings), so a rail ends against one.
 	const float DoorHalf = Setup.DoorWidth * 0.5f;
 	for (const float Side : { -1.f, 1.f })
 	{
-		const FVector At = WallPoint(EWall::South, Setup.DoorCenterX + Side * (DoorHalf + Casing * 0.5f), Setup.DoorHeight * 0.5f, 1.1f);
-		Build.Box(At, FRotator::ZeroRotator, FVector(Casing, 2.2f, Setup.DoorHeight), MatPaintBox, false);
+		const FVector At = WallPoint(EWall::South, Setup.DoorCenterX + Side * (DoorHalf + DoorCasing * 0.5f), Setup.DoorHeight * 0.5f, 1.1f);
+		Build.Box(At, FRotator::ZeroRotator, FVector(DoorCasing, 2.2f, Setup.DoorHeight), MatPaintBox, false);
 	}
-	Build.Box(WallPoint(EWall::South, Setup.DoorCenterX, Setup.DoorHeight + Casing * 0.5f, 1.1f), FRotator::ZeroRotator,
-		FVector(Setup.DoorWidth + Casing * 2.f, 2.2f, Casing), MatPaintBox, false);
-	// The window's: outside the storm window's own reveal lining, which stands 6 past the opening.
+	Build.Box(WallPoint(EWall::South, Setup.DoorCenterX, Setup.DoorHeight + DoorCasing * 0.5f, 1.1f), FRotator::ZeroRotator,
+		FVector(Setup.DoorWidth + DoorCasing * 2.f, 2.2f, DoorCasing), MatPaintBox, false);
+	// The window's: outside the storm window's own reveal lining, which stands RevealLining past the
+	// opening, the sides standing on the inner sill and the head across both of them.
 	const float WindowHalf = Setup.WindowWidth * 0.5f;
-	const float WindowCasing = 7.f;
+	const float Lining = AStormWindowActor::RevealLining;
 	for (const float Side : { -1.f, 1.f })
 	{
-		const float U = Side * (WindowHalf + 6.f + WindowCasing * 0.5f);
-		Build.Box(WallPoint(EWall::East, U, (Setup.WindowSill + Setup.WindowTop + 6.f) * 0.5f, 1.1f), FRotator::ZeroRotator,
-			FVector(2.2f, WindowCasing, Setup.WindowTop + 6.f - Setup.WindowSill), MatPaintBox, false);
+		const float U = Side * (WindowHalf + Lining + WindowCasing * 0.5f);
+		Build.Box(WallPoint(EWall::East, U, (Setup.WindowSill + Setup.WindowTop + Lining) * 0.5f, 1.1f), FRotator::ZeroRotator,
+			FVector(2.2f, WindowCasing, Setup.WindowTop + Lining - Setup.WindowSill), MatPaintBox, false);
 	}
-	Build.Box(WallPoint(EWall::East, 0.f, Setup.WindowTop + 6.f + 2.5f, 1.1f), FRotator::ZeroRotator,
-		FVector(2.2f, Setup.WindowWidth + 12.f + WindowCasing * 2.f, 5.f), MatPaintBox, false);
+	Build.Box(WallPoint(EWall::East, 0.f, Setup.WindowTop + Lining + WindowHead * 0.5f, 1.1f), FRotator::ZeroRotator,
+		FVector(2.2f, Setup.WindowWidth + (Lining + WindowCasing) * 2.f, WindowHead), MatPaintBox, false);
 
 	// The cornice: the library's plaster crown moulding, painted, laid end to end along each wall.
 	// Along the west wall it stops at the wardrobes, which are built up to a bulkhead under the
-	// ceiling instead.
+	// ceiling instead, and along the south wall it stops at their side.
 	struct FCorniceRun { FVector Start; FVector Dir; float Length; float Yaw; };
 	const float C = Setup.Height;
 	const FCorniceRun Cornices[] = {
 		{ FVector(WestX(), NorthY(), C), FVector(1.f, 0.f, 0.f), EastX() - WestX(), 0.f },
-		{ FVector(EastX(), SouthY(), C), FVector(-1.f, 0.f, 0.f), EastX() - WestX(), 180.f },
+		{ FVector(EastX(), SouthY(), C), FVector(-1.f, 0.f, 0.f), EastX() - WardrobeSideX, 180.f },
 		{ FVector(WestX(), WardrobeStartY(), C), FVector(0.f, -1.f, 0.f), WardrobeStartY() - NorthY(), -90.f },
 		{ FVector(EastX(), NorthY(), C), FVector(0.f, 1.f, 0.f), SouthY() - NorthY(), 90.f },
 	};
@@ -718,7 +750,8 @@ void AMasterBedroomActor::BuildBed(FRoomBuilder& Build)
 		{ { TEXT("Paint"), MatPaint }, { TEXT("Shadow"), F(TEXT("Shadow")) }, { TEXT("Upholstery"), MatUpholstery },
 		  { TEXT("Linen"), MatLinen }, { TEXT("Mattress"), MatMattress }, { TEXT("Throw"), MatThrow } });
 	Blocker(Build, Seat + FVector(0.f, 4.f, 30.f), FVector(BedWidth, BedLength - 8.f, 60.f), 0.f);
-	Blocker(Build, FVector(BedX, NorthY() + 5.f, 75.f), FVector(BedWidth + 22.f, 12.f, 150.f), 0.f);
+	// The headboard, from its back (half the bed's length behind its middle) twelve into the room.
+	Blocker(Build, FVector(BedX, Seat.Y - BedLength * 0.5f + 5.f, 75.f), FVector(BedWidth + 22.f, 12.f, 150.f), 0.f);
 
 	// The dust over the duvet, and the bedding gone the yellow of linen that has not been washed or
 	// aired in years: two faint blooms where the light from the window fell on it.
@@ -759,7 +792,7 @@ void AMasterBedroomActor::BuildBed(FRoomBuilder& Build)
 	Dust(Build, BenchAt + FVector(0.f, 0.f, BenchTop), FVector2D(140.f, 44.f), 0.f, 0.3f);
 
 	// The rug, under the lower two thirds of the bed and out past the bench.
-	Build.Cloth(FVector(BedX, NorthY() + 175.f, 0.8f), FRotator::ZeroRotator, FVector2D(330.f, 250.f), 0.35f, 0.f, 4401, MatRug, 60.f, /*bWorn*/ false);
+	Build.Cloth(FVector(BedX, BedSeat().Y - BedLength * 0.5f + 175.f, 0.8f), FRotator::ZeroRotator, FVector2D(330.f, 250.f), 0.35f, 0.f, 4401, MatRug, 60.f, /*bWorn*/ false);
 }
 
 void AMasterBedroomActor::BuildWardrobes(FRoomBuilder& Build)
@@ -811,7 +844,7 @@ void AMasterBedroomActor::BuildWardrobes(FRoomBuilder& Build)
 		Gown->SetRelativeScale3D(FVector(1.22f, 1.22f, 1.3f));
 		Dress(Gown, { { TEXT("Fabric"), MatDress }, { TEXT("Wood"), F(TEXT("Hanger")) }, { TEXT("Brass"), F(TEXT("Metal")) } });
 	}
-	// Two boxes of shoes on the low shelf, and dust along the open shelf's front.
+	// Two boxes of shoes on the low shelf.
 	W.Box(FVector(18.f, 4.f, 36.f + 6.f), FRotator(0.f, 3.f, 0.f), FVector(30.f, 18.f, 12.f), F(TEXT("CoverC")), false);
 	W.Box(FVector(34.f, 3.f, 36.f + 5.f), FRotator(0.f, -5.f, 0.f), FVector(26.f, 16.f, 10.f), F(TEXT("Black")), false);
 }
@@ -986,6 +1019,10 @@ void AMasterBedroomActor::BuildDamage(FRoomBuilder& Build)
 	{
 		const float Roll = Random.FRandRange(0.f, 360.f);
 		const float Aspect = Random.FRandRange(0.7f, 1.3f);
+		if (WallDecalHitsOpening(Peel.Wall, Peel.U, Peel.Z, FVector2D(Peel.Size, Peel.Size * Aspect), Roll))
+		{
+			continue;
+		}
 		const FRotator Into = Peel.Wall == EWall::East ? FRotator(0.f, 0.f, Roll) : FRotator(0.f, -90.f, Roll);
 		Build.Stain(RoomSurfaces::Substrate, WallPoint(Peel.Wall, Peel.U, Peel.Z, 2.f), Into, FVector2D(Peel.Size, Peel.Size * Aspect),
 			// The plaster under paint is a mid grey, not a hole: dark, the patches read as burns.
@@ -999,18 +1036,21 @@ void AMasterBedroomActor::BuildDamage(FRoomBuilder& Build)
 
 	// Grime: years of shut-up air on the paint, a grey-brown wash heavier high up and in the corners.
 	// Every patch is on a stretch of wall nothing stands against within a decal's reach (nine either
-	// way, from two off the face): above the furniture, beside the window, east of the door with the
-	// doorway and its architrave kept fifteen clear. What hangs over them (the canvas, the clock,
-	// the television, the mirror) takes no decals. Numbers drawn into locals first.
+	// way, from two off the face): above the furniture, beside the window, east of the door. What
+	// hangs over them (the canvas, the clock, the television, the mirror) takes no decals. Any patch
+	// that would reach an opening or its architrave, or come within fifteen of one, is skipped
+	// (WallDecalHitsOpening) once its numbers are drawn. The two east of the door are sized and
+	// placed to pass at any roll: their rolled half-width (at most 59 for 80 at an aspect of 1.1)
+	// stays east of DoorEast, the keep-out's edge. Numbers drawn into locals first.
 	struct FWash { EWall Wall; float U; float Z; float Size; float Opacity; };
-	const float DoorEast = Setup.DoorCenterX + Setup.DoorWidth * 0.5f + 9.f + 15.f;
+	const float DoorEast = Setup.DoorCenterX + Setup.DoorWidth * 0.5f + DoorCasing + 15.f;
 	const FWash Washes[] = {
 		{ EWall::North, -330.f, 250.f, 110.f, 0.30f }, { EWall::North, -90.f, 275.f, 150.f, 0.22f },
 		{ EWall::North, 120.f, 250.f, 120.f, 0.26f }, { EWall::North, 330.f, 200.f, 140.f, 0.34f },
 		{ EWall::North, 215.f, 150.f, 90.f, 0.18f }, { EWall::North, 50.f, 125.f, 60.f, 0.2f },
-		{ EWall::East, -250.f, 150.f, 130.f, 0.3f }, { EWall::East, -200.f, 270.f, 110.f, 0.32f },
+		{ EWall::East, -250.f, 150.f, 130.f, 0.3f }, { EWall::East, -210.f, 270.f, 110.f, 0.32f },
 		{ EWall::East, 250.f, 260.f, 120.f, 0.3f }, { EWall::East, 230.f, 140.f, 100.f, 0.22f },
-		{ EWall::South, DoorEast + 52.f, 150.f, 100.f, 0.28f }, { EWall::South, DoorEast + 62.f, 260.f, 90.f, 0.3f },
+		{ EWall::South, DoorEast + 62.f, 150.f, 80.f, 0.28f }, { EWall::South, DoorEast + 62.f, 260.f, 80.f, 0.3f },
 		{ EWall::South, -90.f, 255.f, 160.f, 0.22f }, { EWall::South, -250.f, 250.f, 100.f, 0.28f },
 		{ EWall::West, -230.f, 240.f, 120.f, 0.3f }, { EWall::West, -200.f, 130.f, 90.f, 0.22f },
 	};
@@ -1018,6 +1058,10 @@ void AMasterBedroomActor::BuildDamage(FRoomBuilder& Build)
 	{
 		const float Roll = Random.FRandRange(0.f, 360.f);
 		const float Aspect = Random.FRandRange(0.6f, 1.1f);
+		if (WallDecalHitsOpening(Wash.Wall, Wash.U, Wash.Z, FVector2D(Wash.Size, Wash.Size * Aspect), Roll))
+		{
+			continue;
+		}
 		// A decal projects along its +X: into the wall is against the wall's normal.
 		const FRotator Into(0.f, FacingYaw(Wash.Wall) - 90.f, Roll);
 		Build.Stain(RoomSurfaces::Damp, WallPoint(Wash.Wall, Wash.U, Wash.Z, 2.f), Into, FVector2D(Wash.Size, Wash.Size * Aspect),
@@ -1033,6 +1077,10 @@ void AMasterBedroomActor::BuildDamage(FRoomBuilder& Build)
 	for (const FHairline& Hairline : Hairlines)
 	{
 		const float Roll = Random.FRandRange(50.f, 130.f);
+		if (WallDecalHitsOpening(Hairline.Wall, Hairline.U, Hairline.Z, FVector2D(Hairline.Length, Hairline.Length * 0.4f), Roll))
+		{
+			continue;
+		}
 		Build.Crack(WallPoint(Hairline.Wall, Hairline.U, Hairline.Z, 2.f), FRotator(0.f, FacingYaw(Hairline.Wall) - 90.f, Roll),
 			FVector2D(Hairline.Length, Hairline.Length * 0.4f), 0.7f, 26.f);
 	}
