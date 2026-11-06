@@ -67,6 +67,9 @@ TEXTURES = {
     "large_floor_tiles_02": "the wine cellar's stone floor",
     "brown_leather": "the two leather armchairs in the tasting alcove",
     "black_oak_veneer": "the wine racks, the tasting table and the cabinet",
+    # The master bedroom (Room01): wide engineered oak boards, laid in the renovation, tinted to a
+    # dark natural oak.
+    "wood_floor": "the master bedroom's oak floor",
 }
 
 # The three maps the master material wants. nor_dx because UE expects DirectX-convention normals;

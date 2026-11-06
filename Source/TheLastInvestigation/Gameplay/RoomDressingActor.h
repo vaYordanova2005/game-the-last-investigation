@@ -33,13 +33,14 @@ struct FRoomDressingSetup
 	bool bWakeSpot = true;
 
 	/**
-	 * The furniture, the debris, the traces and the clue markers. Off in Room01 upstairs, whose
-	 * contents now stand in the cellar (ACellarActor), and which is to be furnished another way.
+	 * The furniture, the debris, the traces and the clue markers. This actor now dresses only the
+	 * maid's room in the cellar (ACellarActor), which has it on; Room01 upstairs, for which it was
+	 * off, is the master bedroom (AMasterBedroomActor) and no longer uses this actor at all.
 	 */
 	bool bContents = true;
 	/** The window in the east wall. The cellar's east wall is blind. */
 	bool bWindow = true;
-	/** The hook in the beam and the collapsed boards under it. They stay upstairs. */
+	/** The hook in the beam and the collapsed boards under it. Off everywhere now: Room01 has its own hook (AMasterBedroomActor). */
 	bool bHook = true;
 	/**
 	 * The chair lying on its back, a metre off the hook. It belongs with the hook: the cellar room,

@@ -62,6 +62,7 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | `large_floor_tiles_02` | texture | the cellar's stone floor |
 | `brown_leather` | texture | the two armchairs in the tasting alcove |
 | `black_oak_veneer` | texture | the racks, the tasting table and the cabinet |
+| `wood_floor` | texture | the master bedroom's dark oak floor (Room01) |
 | `wine_barrel_01` | model | the barrels on their cradles |
 | `worn_metal_rack` | model | the rusted shelving |
 | `wooden_crate_02` | model | the storage crate |
@@ -84,6 +85,8 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | `Art/Source/Models/library_*` | `Tools/make_library.py` (Blender) | the library's bookcases, rows of books, arch, window heads, cornice, fireplace, desk and everything on it, globe, gramophone, chess table, furniture, frames, carpet |
 | `Art/Source/Textures/library_*` | `Tools/make_library_art.py` | the spines, the papers on the desk and the walls, the two maps, the globe's gores, the two portraits, the oriental carpet |
 | `Art/Source/Models/music_*` | `Tools/make_music_room.py` (Blender) | the music room's arch, cello on its stand, violin in its open case, bows, guitar on its stand, music stands, metronome, crystal chandelier, ceiling rose and mouldings, instrument cabinet, shelf of music, sideboard, side table, window bench, frames, photographs, dried flowers, the open score |
+| `Art/Source/Models/bedroom_*` | `Tools/make_bedroom.py` (Blender) | the master bedroom's bed and bedding, nightstands, bench, built-in wardrobes, dresser, media cabinet and television, armchair, ottoman, side table, floor lamp, the black mirror, suitcase, dead plant, wall clock, ceiling light, canvas, photo frames, the small things on the tops, the wall mouldings |
+| `Art/Source/Textures/bedroom_*` | `Tools/make_bedroom_art.py` | the room's paint, the canvas over the bed, the wedding and family photographs |
 | `Art/Source/Textures/music_*` | `Tools/make_music_art.py` | the emerald velvet, the silk damask, the scores, manuscript, programme and certificates, the photographs, the spines of the music, the three paintings |
 
 The stained-glass inscription, the wine labels, the crate brands, the library's spines, maps and calendar and the music room's scores, programme, certificates and spines are set in Cinzel (SIL Open Font License, `Content/Fonts/OFL.txt`).

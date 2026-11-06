@@ -39,6 +39,13 @@ struct FStormWindowSetup
 	float InnerSillProud = 33.f;
 
 	/**
+	 * How many panes across the sash. Four keeps every window as it was; a wider opening needs more,
+	 * or its panes come out as wide flat letterboxes (Room01's 280 opening has six, near square).
+	 * The rows stay four: the meeting rail is the middle muntin.
+	 */
+	int32 PaneColumns = 4;
+
+	/**
 	 * For a follower (see SetLead) on another side of the house: builds its own sky, treeline,
 	 * rain and bolts rather than borrowing the lead's, which are all on the lead's side. The lead's
 	 * directional light cannot come in through a window facing away from it, so an own-view
@@ -136,6 +143,13 @@ public:
 
 	/** Lux of the strike currently in progress, before FlashAlpha scales it. */
 	float GetStrikeIntensity() const { return StrikeIntensity; }
+
+	/**
+	 * The reveal lining's thickness: it lines the opening on both sides and over the head, so it
+	 * stands this far past the opening into the wall face, and down to this far under the sill. A
+	 * room that trims the window on its own side (AMasterBedroomActor's architrave) starts outside it.
+	 */
+	static constexpr float RevealLining = 6.f;
 
 private:
 	/** See SetViewUnderground. One player, one world: a plain static is enough. */
