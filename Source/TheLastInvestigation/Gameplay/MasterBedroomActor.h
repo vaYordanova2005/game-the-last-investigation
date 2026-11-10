@@ -133,8 +133,13 @@ private:
 	FVector TelevisionSeat() const { return FVector(BedX, SouthY(), 92.f); }
 	/** The black mirror leaning on the south wall beside the door. */
 	FVector MirrorSeat() const { return FVector(Setup.DoorCenterX - Setup.DoorWidth * 0.5f - 72.f, SouthY() - 18.5f, 0.f); }
-	/** The armchair by the window, turned to the storm, and what stands round it. */
-	FVector ArmchairSeat() const { return FVector(275.f, 40.f, 0.f); }
+	/**
+	 * The armchair by the window, turned to the storm, and what stands round it. Seventy further into
+	 * the room than it first stood (the user's note): at X 275 the ottoman was up against the
+	 * window's panelling and the chair crowded the glass. The group moved together, so every offset
+	 * worked out below still holds.
+	 */
+	FVector ArmchairSeat() const { return FVector(205.f, 40.f, 0.f); }
 	static constexpr float ArmchairYaw = -109.f;
 	/**
 	 * Beside the chair's left arm, clear of it. The chair is 94 wide, its arms out to 47 from its
@@ -142,16 +147,16 @@ private:
 	 * chair's own -X (world (-0.33, -0.95) at this yaw) and 20 forward. At 55 out the table stood
 	 * through the arm, and the mug on it in the upholstery.
 	 */
-	FVector SideTableSeat() const { return FVector(318.f, 103.f, 0.f); }
+	FVector SideTableSeat() const { return FVector(248.f, 103.f, 0.f); }
 	/**
 	 * On the window side of the table, out of the waking view (behind the chair it stood across the
 	 * door), and clear of the south drape: its pole stands 26 off the wall (X 374) and, with the
 	 * window 280 wide, the drape hangs from Y 124 to 188 and swings. The shade is 22.6 across its
-	 * radius; here it reaches X 353 and Y 199..245.
+	 * radius; here it reaches X 283 and Y 199..245.
 	 */
-	FVector FloorLampSeat() const { return FVector(330.f, 222.f, 0.f); }
+	FVector FloorLampSeat() const { return FVector(260.f, 222.f, 0.f); }
 	/** In front of the chair, square to it, 6 clear of its front (45 out), the ottoman 48 deep. */
-	FVector OttomanSeat() const { return FVector(346.f, 15.f, 0.f); }
+	FVector OttomanSeat() const { return FVector(276.f, 15.f, 0.f); }
 	FVector PlantSeat() const { return FVector(350.f, -272.f, 0.f); }
 	/** The ceiling hook: where it always was, in the middle of the waking view. */
 	FVector HookAnchor() const { return FVector(95.f, 60.f, Setup.Height); }

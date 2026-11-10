@@ -946,7 +946,9 @@ void ANurseryActor::BuildBed(FRoomBuilder& Build)
 	Dress(Build.Prop(RoomProps::Pillow, FVector(Centre.X - BedHalfWidth - 32.f, HeadY - 86.f, 0.5f), FRotator(0.f, 64.f, 6.f), 0.f, false), { { TEXT("Fabric"), MatQuilt } });
 	const TMap<FName, UMaterialInterface*> ShoeSlots = { { TEXT("Canvas"), F(TEXT("Canvas")) }, { TEXT("Sole"), F(TEXT("Sole")) }, { TEXT("Lace"), F(TEXT("Lace")) }, { TEXT("Shadow"), MatShadow } };
 	Dress(Build.Prop(RoomProps::Sneaker, FVector(Centre.X - BedHalfWidth - 18.f, Centre.Y - 34.f, 0.f), FRotator(0.f, 168.f, 0.f), 0.f, false), ShoeSlots);
-	if (UStaticMeshComponent* Right = Build.Prop(RoomProps::Sneaker, FVector(Centre.X - BedHalfWidth - 32.f, Centre.Y - 60.f, 4.2f), FRotator(0.f, 214.f, 82.f), 0.f, false))
+	// On its side is a turn about its length, which is the model's Y (toe at +Y): pitch. It was a
+	// roll, about its width, and stood the trainer up on its heel with the toe in the air.
+	if (UStaticMeshComponent* Right = Build.Prop(RoomProps::Sneaker, FVector(Centre.X - BedHalfWidth - 32.f, Centre.Y - 60.f, 4.2f), FRotator(82.f, 214.f, 0.f), 0.f, false))
 	{
 		Right->SetRelativeScale3D(Right->GetRelativeScale3D() * FVector(-1.f, 1.f, 1.f));
 		Dress(Right, ShoeSlots);

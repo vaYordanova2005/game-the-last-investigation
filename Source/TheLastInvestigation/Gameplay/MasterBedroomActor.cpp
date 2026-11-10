@@ -1335,9 +1335,14 @@ void AMasterBedroomActor::BuildDecay(FRoomBuilder& Build)
 	{
 		Web(Build, FVector(MediaSeat().X + Side * 82.f, SouthY() - 7.8f, 7.8f), FRotator(0.f, 0.f, 45.f), 24.f, 22.f);
 	}
-	// From the lamp's shade to the east wall, hung vertically, a little off square.
-	Web(Build, FVector((FloorLampSeat().X + 22.6f + EastX()) * 0.5f, FloorLampSeat().Y, 170.f), FRotator(0.f, 8.f, 90.f),
-		EastX() - FloorLampSeat().X - 22.f, 26.f);
+	// Between the lamp's stem and one of its legs (the first, at 30 degrees, the lamp turned 20): the
+	// lamp stands clear of the east wall now the chair has moved off the window, so the web that ran
+	// from its shade to the wall would have been a metre of thread in the air.
+	{
+		const float LegYaw = 50.f;
+		const FVector Out(FMath::Cos(FMath::DegreesToRadians(LegYaw)), FMath::Sin(FMath::DegreesToRadians(LegYaw)), 0.f);
+		Web(Build, FloorLampSeat() + Out * 11.f + FVector(0.f, 0.f, 62.f), FRotator(0.f, LegYaw, 90.f), 18.f, 70.f);
+	}
 	// Between the back of the dresser's top and the wall, past the jewellery box.
 	Web(Build, FVector(DresserSeat().X + 25.f, NorthY() + NorthWallGap + 4.f, DresserTop + 4.5f), FRotator(0.f, 0.f, -45.f), 24.f, 14.f);
 	// Between the headboard's top and the wall, at its west end.
