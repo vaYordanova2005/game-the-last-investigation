@@ -84,6 +84,13 @@ namespace RoomSurfaces
 	 */
 	extern const FRoomSurface Paint;
 	extern const FRoomSurface Oak;
+	/**
+	 * The bathroom (Tools/make_bathroom_art.py): bevelled white wall tiles in running bond, one
+	 * repeat every 60cm; and the floor's hexagon mosaic, whose repeat is 54 x 51.96 (not square:
+	 * ABathroomActor writes both counts out), given here by its width.
+	 */
+	extern const FRoomSurface BathTiles;
+	extern const FRoomSurface BathMosaic;
 }
 
 /** Imported prop meshes, /Game/Meshes/<name>. Names match Tools/fetch_assets.py's manifest. */

@@ -6,6 +6,7 @@
 #include "DustMotesComponent.h"
 #include "GrandStaircaseActor.h"
 #include "NurseryActor.h"
+#include "BathroomActor.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -78,6 +79,7 @@ void ACorridorActor::Configure(const FCorridorSetup& InSetup, AStormWindowActor*
 	Openings = {
 		{ ESide::North, Setup.StartDoorCenterX, Setup.StartDoorWidth * 0.5f, Setup.StartDoorHeight },
 		{ ESide::South, NurseryDoorU, DoorHalf, HallDoorHeight },
+		{ ESide::South, BathroomDoorU, DoorHalf, HallDoorHeight },
 		{ ESide::East, CenterY(), WindowWidth * 0.5f, WindowTop, WindowSill },
 		{ ESide::West, CenterY(), StairOpeningWidth * 0.5f, StairOpeningHeight },
 	};
@@ -112,6 +114,7 @@ void ACorridorActor::BeginPlay()
 	SpawnWindow();
 	SpawnStairHall();
 	SpawnNursery();
+	SpawnBathroom();
 	BuildClues();
 }
 
@@ -353,9 +356,9 @@ void ACorridorActor::BuildBackRooms(FRoomBuilder& Build)
 	const float H = Setup.Height;
 	for (const FOpening& Opening : Openings)
 	{
-		// The girl's room is a real room (ANurseryActor), not a black box.
+		// The girl's room and the bathroom are real rooms (ANurseryActor, ABathroomActor), not black boxes.
 		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || Opening.CenterU == Setup.StartDoorCenterX
-			|| (Opening.Side == ESide::South && Opening.CenterU == NurseryDoorU))
+			|| (Opening.Side == ESide::South && (Opening.CenterU == NurseryDoorU || Opening.CenterU == BathroomDoorU)))
 		{
 			continue;
 		}
@@ -1202,6 +1205,9 @@ void ACorridorActor::SpawnDoors()
 	struct FDoorSpec { bool bNorth; float U; float Ajar; FLinearColor Tint; bool bSix; bool bHole; float OpenYaw; };
 	const FDoorSpec Specs[] = {
 		{ false, NurseryDoorU, 6.f, FLinearColor(0.300f, 0.300f, 0.290f), false, true, 89.f },
+		// The bathroom's: six panels, no hole in it, shut but for a crack. Built after hers, so her
+		// door keeps its seed.
+		{ false, BathroomDoorU, 3.f, FLinearColor(0.280f, 0.285f, 0.280f), true, false, BathroomDoorOpenYaw },
 		// The two south doors past hers are gone: the library is behind that stretch of wall. The two
 		// north doors (-690, -1060) are gone too: the music room is behind them. Both rooms are
 		// entered off the stair hall's gallery.
@@ -1295,6 +1301,33 @@ void ACorridorActor::SpawnNursery()
 		NurserySetup.CorridorHeight = Setup.Height;
 		Nursery->Configure(NurserySetup, LeadStorm);
 		Nursery->FinishSpawning(Transform);
+	}
+}
+
+void ACorridorActor::SpawnBathroom()
+{
+	// The bathroom, behind the south door between hers and the stairs. Same frame as the corridor;
+	// its north face is the far side of the corridor's south wall, its east face the far side of the
+	// girl's west wall. The corridor hangs its door (SpawnDoors), hinged on the west jamb.
+	const FTransform Transform = GetActorTransform();
+	Bathroom = GetWorld()->SpawnActorDeferred<ABathroomActor>(ABathroomActor::StaticClass(), Transform, this);
+	if (Bathroom)
+	{
+		const float T = Setup.WallThickness;
+		FBathroomSetup BathSetup;
+		BathSetup.NorthFace = SouthFace() + T;
+		BathSetup.EastX = EastFace() - ANurseryActor::RoomWidth - T;
+		BathSetup.WallThickness = T;
+		BathSetup.DoorX = BathroomDoorU;
+		BathSetup.DoorHalf = HallDoorWidth * 0.5f;
+		BathSetup.DoorHeight = HallDoorHeight;
+		// SpawnDoors: the hinge 2 inside the opening's west side, the leaf 4 short of the opening.
+		BathSetup.HingeX = BathroomDoorU - HallDoorWidth * 0.5f + 2.f;
+		BathSetup.DoorLeafWidth = HallDoorWidth - 4.f;
+		BathSetup.DoorOpenYaw = BathroomDoorOpenYaw;
+		BathSetup.CorridorHeight = Setup.Height;
+		Bathroom->Configure(BathSetup);
+		Bathroom->FinishSpawning(Transform);
 	}
 }
 

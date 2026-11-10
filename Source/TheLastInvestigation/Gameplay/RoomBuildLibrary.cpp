@@ -66,6 +66,8 @@ namespace RoomSurfaces
 	// One repeat every 120cm; Poly Haven's wood_floor at the 170cm it was shot at, boards along V.
 	const FRoomSurface Paint{ TEXT("bedroom_paint"), 120.f };
 	const FRoomSurface Oak{ TEXT("wood_floor"), 170.f };
+	const FRoomSurface BathTiles{ TEXT("bathroom_tiles"), 60.f };
+	const FRoomSurface BathMosaic{ TEXT("bathroom_mosaic"), 54.f };
 }
 
 namespace RoomProps
