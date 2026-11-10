@@ -982,7 +982,20 @@ void ABathroomActor::BuildFurniture(FRoomBuilder& Build)
 	Blocker(Build, FernSeat() + FVector(0.f, 0.f, 50.f), FVector(36.f, 36.f, 100.f), 0.f);
 	// wicker_basket_02 comes in a pale cane that the lantern turned to a peach-coloured pot a step from
 	// it: darkened to old wicker.
-	FRoomShapes::TintSlots(Build.PropSeated(RoomProps::WickerBasket, HamperSeat(), FRotator(0.f, 18.f, 0.f), 46.f, false), FLinearColor(0.42f, 0.34f, 0.26f));
+	if (UStaticMeshComponent* Hamper = Build.PropSeated(RoomProps::WickerBasket, HamperSeat(), FRotator(0.f, 18.f, 0.f), 46.f, false))
+	{
+		FRoomShapes::TintSlots(Hamper, FLinearColor(0.42f, 0.34f, 0.26f));
+		// Scaled to 46 tall and turned, the basket is wider than the seat allowed for and went into
+		// the tiles: it is stood off the wall by its own bounds (the bedroom crate's rule), two clear
+		// of the tile face.
+		const FBox Bounds = Hamper->Bounds.GetBox();
+		const float MinX = GetActorTransform().InverseTransformPosition(Bounds.Min).X;
+		const float Clear = WestX() + TileProud + 2.f;
+		if (MinX < Clear)
+		{
+			Hamper->AddRelativeLocation(FVector(Clear - MinX, 0.f, 0.f));
+		}
+	}
 	Blocker(Build, HamperSeat() + FVector(0.f, 0.f, 24.f), FVector(44.f, 44.f, 48.f), 18.f);
 
 	// The tiles that came off the west wall south of the vanity, on the floor under the gap.

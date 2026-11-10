@@ -125,6 +125,7 @@ SCREEN_W = 100.0
 SCREEN_H = 200.0
 WC_BACK = 34.0             # from the pan's origin back to the wall
 WC_SEAT = 43.0
+LID_UP = 90.4              # the lid's turn up from flat, leaning on the flush pipe (see toilet)
 RAIL_W = 64.0
 RAIL_BARS = (44.0, 66.0, 88.0)
 RAIL_TUBE = 1.4
@@ -825,7 +826,9 @@ def toilet():
     # The back of the pan, where the flush pipe goes in, and the water left in the trap.
     tube(ceramic, [(0.0, -18.0, 34.0), (0.0, -24.0, 36.5)], 3.2, sides=16)
     plan_slab(water, a - 13.5, b - 13.0, n, 23.0, 23.3, sides=40, cy=9.5)
-    # The seat, the hinge bar, and the lid standing up against the pipe.
+    # The seat, the hinge bar, and the lid standing up against the pipe: turned up from flat by
+    # LID_UP, just past square, so its back face at the top touches the pipe's front (wall + 4 - 2)
+    # and goes no further. At 100 degrees it leaned back through the pipe.
     plan_ring(wood, a + 0.5, b + 0.5, n, 6.5, 41.2, WC_SEAT, sides=56, cy=5.0)
     for x in (-8.0, 8.0):
         tube(brass, [(x, -21.5, 42.0), (x, -24.0, 43.0)], 0.9, sides=10)
@@ -833,7 +836,7 @@ def toilet():
     lid = Part("Wood", bevel=0.4)
     plan_slab(lid, a + 0.2, b, n, 0.0, 1.8, sides=56)
     lid.bm.verts.ensure_lookup_table()
-    bmesh.ops.transform(lid.bm, matrix=at(0.0, -25.5, 43.0) @ Matrix.Rotation(math.radians(100.0), 4, "X") @ Matrix.Translation((0.0, b, 0.0)),
+    bmesh.ops.transform(lid.bm, matrix=at(0.0, -25.5, 43.0) @ Matrix.Rotation(math.radians(LID_UP), 4, "X") @ Matrix.Translation((0.0, b, 0.0)),
                         verts=lid.bm.verts)
     # The flush pipe: up the wall a hand off it into the cistern's bottom.
     wall = -WC_BACK
@@ -1045,17 +1048,27 @@ def fern():
     base_z = top + 18.0
     for f in range(16):
         a = 2 * math.pi * f / 16 + rng.uniform(-0.2, 0.2)
-        reach = rng.uniform(28.0, 46.0)
-        rise = rng.uniform(4.0, 14.0)
+        reach = rng.uniform(30.0, 46.0)
+        rise = rng.uniform(9.0, 17.0)
         fall = rng.uniform(30.0, 70.0)
         out = Vector((math.cos(a), math.sin(a), 0.0))
+        # Up out of the soil until clear of the rim (radius CLEAR), over it in a short arc, then down
+        # outside the pot. The first version bent over at once and every frond went out through the
+        # side of the pot under its rim.
+        clear = 19.0
         path = []
         for k in range(12):
-            t = k / 11
-            p = Vector((0.0, 0.0, base_z)) + out * (3.0 + reach * t) + Vector((0.0, 0.0, rise * math.sin(t * math.pi * 0.6) - fall * t ** 2.4))
+            r = 3.0 + reach * k / 11
+            if r < clear:
+                h = rise * math.sqrt((r - 3.0) / (clear - 3.0))
+            else:
+                u = (r - clear) / (reach + 3.0 - clear)
+                h = rise + 3.0 * math.sin(min(u * 3.0, 1.0) * math.pi * 0.5) - fall * u ** 2.2
+            p = Vector((0.0, 0.0, base_z)) + out * r + Vector((0.0, 0.0, h))
             path.append(tuple(p))
         tube(stem, path, [0.32 - 0.22 * k / 11 for k in range(12)], sides=5)
-        for k in range(2, 11):
+        # Leaflets from the fourth point on, past the rim: nearer in they drooped into the pot's wall.
+        for k in range(3, 11):
             if rng.random() < 0.45:
                 continue
             p0, p1 = Vector(path[k]), Vector(path[min(k + 1, 11)])
