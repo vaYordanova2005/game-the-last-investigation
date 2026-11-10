@@ -24,7 +24,7 @@ void SInteractionPrompt::Construct(const FArguments& InArgs)
 		[
 			SNew(SBorder)
 			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
-			.BorderBackgroundColor(FLinearColor(MenuStyle::InkDeep().R, MenuStyle::InkDeep().G, MenuStyle::InkDeep().B, 0.72f))
+			.BorderBackgroundColor(FLinearColor(MenuStyle::Panel().R, MenuStyle::Panel().G, MenuStyle::Panel().B, 0.72f))
 			.Padding(FMargin(18.f, 10.f))
 			.Visibility_Lambda([PromptText]()
 			{
@@ -34,7 +34,7 @@ void SInteractionPrompt::Construct(const FArguments& InArgs)
 				SAssignNew(PromptTextBlock, STextBlock)
 				.Text(PromptText)
 				.Font(MenuStyle::ButtonFont())
-				.ColorAndOpacity(MenuStyle::GoldLite())
+				.ColorAndOpacity(MenuStyle::TextColor())
 			]
 		]
 	];
