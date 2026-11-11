@@ -14,6 +14,7 @@ class AHallDoorActor;
 class AClueActor;
 class AGrandStaircaseActor;
 class ANurseryActor;
+class ABathroomActor;
 
 /** The bedroom this corridor runs past, handed over by the room that spawns it. */
 struct FCorridorSetup
@@ -74,6 +75,13 @@ public:
 	 * (ANurseryActor), the one door upstairs that opens.
 	 */
 	static constexpr float NurseryDoorU = -40.f;
+	/**
+	 * The bathroom's door (ABathroomActor), on the south wall between the girl's room and the stairs,
+	 * clear of the portrait at -680 and the clock in front of her wall.
+	 */
+	static constexpr float BathroomDoorU = -520.f;
+	/** How far the bathroom's door opens: as hers, it stops short of the casing on the room side. */
+	static constexpr float BathroomDoorOpenYaw = 89.f;
 	// The doors that stood on the stretches west of the girl's door and of the bedroom (-470 and -880
 	// south, -690 and -1060 north) are gone: the walls are blank. The library and the music room that
 	// were behind them are over the living room and the kitchen now (AGrandStaircaseActor spawns them),
@@ -117,6 +125,7 @@ private:
 	void SpawnWindow();
 	void SpawnStairHall();
 	void SpawnNursery();
+	void SpawnBathroom();
 
 	/** Places a thin panel on a wall's corridor face. */
 	void FacePanel(FRoomBuilder& Build, ESide Side, float U, float V, float SizeU, float SizeV, UMaterialInterface* Mat) const;
@@ -155,6 +164,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ANurseryActor> Nursery;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ABathroomActor> Bathroom;
 
 	/** The two shapes at the far end of the corridor that are only there while the sky is lit. */
 	UPROPERTY(Transient)

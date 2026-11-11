@@ -152,8 +152,9 @@ public:
 	static constexpr float RevealLining = 6.f;
 
 private:
-	/** See SetViewUnderground. One player, one world: a plain static is enough. */
+	/** See SetViewUnderground and SetViewSealed. One player, one world: plain statics are enough. */
 	static inline bool bViewUnderground = false;
+	static inline bool bViewSealed = false;
 
 public:
 
@@ -167,6 +168,28 @@ public:
 	 * so for those this is a second guard rather than the fix.
 	 */
 	static void SetViewUnderground(bool bUnderground) { bViewUnderground = bUnderground; }
+
+	/**
+	 * Whether the player's eye is in a room with no window (set by ABathroomActor when it changes).
+	 * Nothing of the storm should light such a room, and the unshadowed glows of the windows near it
+	 * would, through its walls: while this is set every window's glow stays dark, as underground,
+	 * and the rest of the storm's light stays at its floor (LitFlash).
+	 */
+	static void SetViewSealed(bool bSealed) { bViewSealed = bSealed; }
+
+private:
+	/**
+	 * The flash as the storm's lights carry it: FlashAlpha, or nothing while the eye is in a sealed
+	 * room. Turning the glows off was not enough there: the volumetric fog is one volume through
+	 * every wall, and the sky portals' and the directional light's strike lit the bathroom's air
+	 * through its walls, a faint cold haze over the dark tiles on every flash. Checked with
+	 * -StormFlash and the detective started in the room (-StartX/Y/Z): a -RoomShot camera moved in
+	 * half a second before the capture still shows the fog as it was seen from outside. The sky
+	 * still flashes and GetFlashAlpha still reports it; only the light stays at its floor.
+	 */
+	float LitFlash() const { return bViewSealed ? 0.f : FlashAlpha; }
+
+public:
 
 	/** Counts strikes since BeginPlay, so a listener can tell one flash from the next. */
 	int32 GetStrikeCount() const { return StrikeCount; }
