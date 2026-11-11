@@ -1126,7 +1126,7 @@ def bath_caddy():
 
 
 def duck():
-    """The girl's rubber duck, yellow gone to the colour of old teeth, sitting on the rim. 9 long."""
+    """The girl's rubber duck, yellow gone to the colour of old teeth, floating in the bath. 9 long."""
     body = Part("Duck", smooth=True)
     beak = Part("Beak", smooth=True)
     eye = Part("Black")

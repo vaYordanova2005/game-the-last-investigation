@@ -71,6 +71,12 @@ namespace
 
 	/** The house's dust, and the film of it laid on the paint photograph (the bedroom's 11-06 rule). */
 	const FLinearColor BathFilm(0.21f, 0.20f, 0.17f);
+	/**
+	 * Grime on the walls: darker than both the bottle-green paint and the white tiles it is laid on.
+	 * In the dust's colour it came out as pale clouds on the dark paint, the black door's 11-06
+	 * lesson: on a dark surface every mark has to be darker than it, or it is a cloud with an outline.
+	 */
+	const FLinearColor BathGrime(0.022f, 0.024f, 0.018f);
 	const FLinearColor BathWater(0.20f, 0.15f, 0.08f);
 	const FLinearColor BathMould(0.10f, 0.13f, 0.09f);
 	const FLinearColor BathRust(0.30f, 0.12f, 0.04f);
@@ -113,6 +119,13 @@ namespace
 	 * A sheet laid over pieces of a wall, its UVs in centimetres from the wall's own origin over
 	 * TexelCm, so the tiles and the paint run on across every cut (the bedroom's facade). Both
 	 * windings, the normal forced (the 09-21 pane lesson).
+	 *
+	 * The tangent basis has to agree with the UVs, or the bevelled tiles' normal map comes out
+	 * upside down on half the room. The engine builds TangentY as (TangentZ ^ TangentX), negated
+	 * when the tangent is flagged, and wants it along increasing V (what
+	 * UKismetProceduralMeshLibrary::CalculateTangentsForMesh works out from the UVs). V runs down
+	 * the wall here, and Face ^ Along points down on the north and east walls but up on the south
+	 * and west ones: those two are flagged, so every wall's tiles catch the lantern on the same edge.
 	 */
 	UProceduralMeshComponent* BathFacade(AActor* Owner, USceneComponent* Parent, const TArray<FBox2D>& Pieces, const FVector& Origin,
 		const FVector& Along, const FVector& Face, float TexelCm, UMaterialInterface* Mat)
@@ -126,6 +139,7 @@ namespace
 		TArray<FVector2D> UVs;
 		TArray<FProcMeshTangent> Tangents;
 		TArray<int32> Tris;
+		const bool bFlipTangentY = (Face ^ Along).Z > 0.f;
 		for (const FBox2D& Piece : Pieces)
 		{
 			const int32 First = Verts.Num();
@@ -135,7 +149,7 @@ namespace
 				Verts.Add(Origin + Along * C.X + FVector(0.f, 0.f, C.Y));
 				Normals.Add(Face);
 				UVs.Add(FVector2D(C.X / TexelCm, -C.Y / TexelCm));
-				Tangents.Add(FProcMeshTangent(Along, false));
+				Tangents.Add(FProcMeshTangent(Along, bFlipTangentY));
 			}
 			Tris.Append({ First, First + 1, First + 2, First, First + 2, First + 1, First, First + 2, First + 3, First, First + 3, First + 2 });
 		}
@@ -660,8 +674,12 @@ void ABathroomActor::BuildWalls(FRoomBuilder& Build)
 		}
 	}
 
-	// The door: its reveal lined the depth of the wall, and an ivory architrave on this side, flat
-	// and broad, which the tiles and their trim are cut to (Openings).
+	// The door: an ivory architrave on this side, flat and broad, which the tiles and their trim are
+	// cut to (Openings), and a lining behind the reveal. The corridor lines every door's reveal
+	// itself (ACorridorActor::BuildDoorCasings: from seven to nineteen into the wall from its face,
+	// and across the head), and its lining stands 0.8 nearer the opening than this one, so what
+	// shows of this one is the last centimetre at the room's face and the strip between the
+	// corridor's face and its lining: it fills what the corridor leaves bare, nothing more.
 	const float T = Setup.WallThickness;
 	const float RevealY = NorthY() - T * 0.5f;
 	for (const float Side : { -1.f, 1.f })
@@ -712,8 +730,9 @@ void ABathroomActor::BuildTileTrim(FRoomBuilder& Build)
 			Lay(BathProps::TileCap, Wall, Run.X, Run.Y, Run.Z, CapHeight, 0.f, Glaze);
 		}
 		Lay(BathProps::TilePencil, Wall, U0, U1, PencilZ, 2.4f, TileProud, Black);
-		// The skirting stops at the shower's tray, on the two walls it stands against.
-		const float SkirtU0 = Wall == EWall::North ? ScreenEnd : (Wall == EWall::West ? TrayEnd : U0);
+		// The skirting stops at the shower's tray, on the two walls it stands against: at the tray's
+		// own edge, not at the screen's channel past it, or five of tile foot by the tray have none.
+		const float SkirtU0 = Wall == EWall::North ? WestX() + TrayWidth : (Wall == EWall::West ? TrayEnd : U0);
 		Lay(BathProps::TileSkirt, Wall, SkirtU0, U1, 0.f, 13.f, TileProud, Black);
 	}
 
@@ -881,10 +900,12 @@ void ABathroomActor::BuildMirror(FRoomBuilder& Build)
 		const FVector At = Centre + Facing.RotateVector(Local);
 		// The bulb's glass runs along its local +Y, out of the frame: its spin is a pitch.
 		const FRotator Turn(Spin, Facing.Yaw, 0.f);
+		// The glass's decals project out past its edges, and the sockets' brass caps are right there:
+		// no bulb, whole or broken, takes any.
 		switch (States[i])
 		{
-		case EBulb::Whole:  Place(Build, BathProps::Bulb, At, Turn, {}); break;
-		case EBulb::Broken: Place(Build, BathProps::BulbBroken, At, Turn, {}); break;
+		case EBulb::Whole:  BathNoDecals(Place(Build, BathProps::Bulb, At, Turn, {})); break;
+		case EBulb::Broken: BathNoDecals(Place(Build, BathProps::BulbBroken, At, Turn, {})); break;
 		default: break;
 		}
 	}
@@ -894,16 +915,24 @@ void ABathroomActor::BuildMirror(FRoomBuilder& Build)
 	// glass and the frame's face, and not the tiles behind them).
 	const FRotator Into(0.f, FacingYaw(EWall::West) - 90.f, 0.f);
 	const FVector Glass = WallPoint(EWall::West, VanityY, MirrorZ, MirrorProud + MirrorDepth + 6.f);
+	// Each bloom is turned any way, so its box can reach 0.64 of its size (half the diagonal of
+	// Size x 0.8 Size) from its middle in any direction; every one is placed so that whole reach
+	// stays on the glass (MirrorWidth/2 = 38 across, MirrorHeight/2 = 50 up), right out into the
+	// corners and no further. Placed nearer the edges, they reached the outer bulbs' caps at
+	// +-44 and over the frame. On the smooth paint photograph through a soft edge, as the film over
+	// the glass is (the bedroom's 11-06 rule): on the damp photograph a bloom this small is a crop
+	// of its blotches, and every one came out as a hatched square turned on the silvering.
 	struct FSpot { float U; float Z; float Size; };
-	const FSpot Spots[] = { { -30.f, -42.f, 22.f }, { 31.f, -38.f, 18.f }, { -33.f, 36.f, 16.f }, { 28.f, 44.f, 20.f }, { -12.f, -46.f, 14.f } };
+	const FSpot Spots[] = { { -24.f, -36.f, 20.f }, { 26.f, -34.f, 18.f }, { -27.f, 36.f, 16.f }, { 24.f, 36.f, 20.f }, { -10.f, -40.f, 14.f } };
 	for (const FSpot& Spot : Spots)
 	{
 		const float Roll = Random.FRandRange(0.f, 360.f);
-		Build.Stain(RoomSurfaces::Damp, Glass + FVector(0.f, -Spot.U, Spot.Z), FRotator(Into.Pitch, Into.Yaw, Roll), FVector2D(Spot.Size, Spot.Size * 0.8f),
-			FLinearColor(0.03f, 0.03f, 0.025f), 0.7f, 1.3f);
+		Build.Stain(RoomSurfaces::Paint, Glass + FVector(0.f, -Spot.U, Spot.Z), FRotator(Into.Pitch, Into.Yaw, Roll), FVector2D(Spot.Size, Spot.Size * 0.8f),
+			FLinearColor(0.02f, 0.02f, 0.018f), 0.8f, 0.55f);
 	}
-	// Small enough, turned as it is, to stay inside the bulbs either side (BulbX).
-	Build.Crack(Glass + FVector(0.f, -10.f, -30.f), FRotator(Into.Pitch, Into.Yaw, 35.f), FVector2D(46.f, 30.f), 0.9f, 34.f);
+	// Small enough, turned as it is (27.4 across and 25.5 up either way of its middle), to stay on
+	// the glass: inside the bulbs either side and over the frame's bottom rail.
+	Build.Crack(Glass + FVector(0.f, -10.f, -24.f), FRotator(Into.Pitch, Into.Yaw, 35.f), FVector2D(46.f, 30.f), 0.9f, 34.f);
 	// And a film of the room's dust and steam over the whole glass.
 	Build.Stain(RoomSurfaces::Paint, Glass, Into, FVector2D(MirrorWidth - 4.f, MirrorHeight - 4.f), BathFilm, 0.35f, 0.5f);
 
@@ -1013,25 +1042,36 @@ void ABathroomActor::BuildDecay(FRoomBuilder& Build)
 	// the cornice down, the grout gone dark, tiles cracked and a patch of them fallen, rust run down
 	// the wall under the cistern, a brown tide-mark in the bath. Every number is drawn into locals
 	// before its test (09-29); every wall decal is tested against the door and what stands at the
-	// wall (WallDecalHitsSomething), the lists placed to pass, the test the guard.
-	enum class EKind : uint8 { Grime, Water, Mould, Crack, Rust, Gone };
+	// wall (WallDecalHitsSomething), the lists placed to pass, the test the guard. Placed to pass
+	// means at any roll the draw can give it: a mark turned any way reaches half its diagonal from
+	// its middle in every direction, and that whole reach is what clears the door (+15) and the
+	// keep-outs (+5), not the size it was asked for.
+	//
+	// Mould in a corner (CornerMould) rises up the grout of the angle, nearly plumb like the water,
+	// so it is turned by a few degrees and not any way: the shower's corner is only thirty-two
+	// wide between the angle and the riser's keep-out, and a mould turned freely in it would have
+	// to be the size of a hand to fit at every roll.
+	enum class EKind : uint8 { Grime, Water, Mould, CornerMould, Crack, Rust, Gone };
 	struct FMark { EWall Wall; float U; float Z; FVector2D Size; EKind Kind; float Opacity; };
 	const float W = WestX();
 	const float E = EastX();
 	const float N = NorthY();
 	const float S = SouthY();
 	const FMark Marks[] = {
-		// Black mould in the shower's corner, up the grout of both walls, and out across the ceiling line.
-		{ EWall::West, N + 14.f, 160.f, FVector2D(46.f, 120.f), EKind::Mould, 0.55f },
-		{ EWall::North, W + 14.f, 150.f, FVector2D(44.f, 110.f), EKind::Mould, 0.5f },
+		// Black mould in the shower's corner, up the grout of both walls, and out across the ceiling
+		// line. The west wall's stays between the angle and the riser (N + 55, its keep-out from
+		// N + 32): at 46 wide it reached the riser at every roll and was never laid.
+		{ EWall::West, N + 12.f, 160.f, FVector2D(28.f, 110.f), EKind::CornerMould, 0.6f },
+		{ EWall::North, W + 14.f, 150.f, FVector2D(44.f, 110.f), EKind::CornerMould, 0.5f },
 		{ EWall::West, N + 80.f, 60.f, FVector2D(30.f, 50.f), EKind::Mould, 0.35f },
 		{ EWall::North, W + 70.f, 248.f, FVector2D(70.f, 40.f), EKind::Mould, 0.4f },
-		// Over the bath, where the steam went up the south wall for years.
-		{ EWall::South, W + 210.f, 250.f, FVector2D(110.f, 60.f), EKind::Mould, 0.4f },
+		// Over the bath, where the steam went up the south wall for years. The west one is over the
+		// west sconce, so it is kept above the sconce's keep-out (to 214) at any roll.
+		{ EWall::South, W + 210.f, 258.f, FVector2D(76.f, 40.f), EKind::Mould, 0.45f },
 		{ EWall::South, E - 150.f, 255.f, FVector2D(90.f, 50.f), EKind::Mould, 0.35f },
-		// Low in the corners, where the damp rises.
-		{ EWall::East, S - 20.f, 40.f, FVector2D(40.f, 50.f), EKind::Mould, 0.35f },
-		{ EWall::South, W + 20.f, 40.f, FVector2D(40.f, 50.f), EKind::Mould, 0.35f },
+		// Low in the corners, where the damp rises: up the angle, clear of the WC's keep-out on the east wall.
+		{ EWall::East, S - 18.f, 40.f, FVector2D(36.f, 50.f), EKind::CornerMould, 0.35f },
+		{ EWall::South, W + 20.f, 40.f, FVector2D(40.f, 50.f), EKind::CornerMould, 0.35f },
 		// Water down the paint from the cornice, and grime in the paint.
 		{ EWall::North, E - 70.f, 220.f, FVector2D(28.f, 140.f), EKind::Water, 0.32f },
 		{ EWall::East, N + 110.f, 215.f, FVector2D(26.f, 140.f), EKind::Water, 0.3f },
@@ -1039,16 +1079,18 @@ void ABathroomActor::BuildDecay(FRoomBuilder& Build)
 		{ EWall::South, W + 110.f, 225.f, FVector2D(28.f, 120.f), EKind::Water, 0.3f },
 		{ EWall::North, W + 220.f, 240.f, FVector2D(100.f, 90.f), EKind::Grime, 0.24f },
 		{ EWall::East, N + 250.f, 250.f, FVector2D(110.f, 100.f), EKind::Grime, 0.22f },
-		{ EWall::West, N + 200.f, 255.f, FVector2D(100.f, 90.f), EKind::Grime, 0.22f },
+		// South of the mirror: over it, the mirror's keep-out took it at every roll.
+		{ EWall::West, N + 430.f, 255.f, FVector2D(90.f, 80.f), EKind::Grime, 0.22f },
 		// Grime in the tiles' lower courses, where the floor's wet met the wall.
 		{ EWall::South, W + 330.f, 30.f, FVector2D(120.f, 40.f), EKind::Grime, 0.3f },
-		{ EWall::East, N + 160.f, 34.f, FVector2D(60.f, 40.f), EKind::Grime, 0.3f },
+		// Between the rail's feet and the roll holder: at N + 160 it was on the feet at every roll.
+		{ EWall::East, N + 255.f, 34.f, FVector2D(60.f, 40.f), EKind::Grime, 0.3f },
 		{ EWall::North, E - 70.f, 36.f, FVector2D(70.f, 40.f), EKind::Grime, 0.3f },
 		// Cracks through the tiles.
 		{ EWall::South, W + 150.f, 90.f, FVector2D(60.f, 40.f), EKind::Crack, 0.85f },
 		{ EWall::East, N + 70.f, 110.f, FVector2D(50.f, 50.f), EKind::Crack, 0.8f },
 		{ EWall::West, FallenTilesY + 34.f, 74.f, FVector2D(46.f, 40.f), EKind::Crack, 0.85f },
-		{ EWall::North, W + 300.f, 70.f, FVector2D(50.f, 36.f), EKind::Crack, 0.8f },
+		{ EWall::North, W + 280.f, 70.f, FVector2D(50.f, 36.f), EKind::Crack, 0.8f },
 		// Rust run down the wall from the cistern's brackets.
 		{ EWall::East, ToiletSeat().Y - 16.f, 150.f, FVector2D(14.f, 70.f), EKind::Rust, 0.5f },
 		{ EWall::East, ToiletSeat().Y + 16.f, 156.f, FVector2D(12.f, 60.f), EKind::Rust, 0.45f },
@@ -1057,9 +1099,9 @@ void ABathroomActor::BuildDecay(FRoomBuilder& Build)
 	};
 	for (const FMark& Mark : Marks)
 	{
-		// Water runs straight down, give or take; the rest turns any way.
+		// Water runs straight down, give or take, and mould up a corner's angle; the rest turns any way.
 		const float Jitter = Random.FRandRange(-1.f, 1.f);
-		const bool bDown = Mark.Kind == EKind::Water || Mark.Kind == EKind::Rust;
+		const bool bDown = Mark.Kind == EKind::Water || Mark.Kind == EKind::Rust || Mark.Kind == EKind::CornerMould;
 		const float Roll = bDown ? Jitter * 5.f : (Mark.Kind == EKind::Gone ? Jitter * 3.f : (Jitter + 1.f) * 180.f);
 		// The rust runs from the brackets, which are inside the cistern's keep-out: they skip the test.
 		if (Mark.Kind != EKind::Rust && Mark.Kind != EKind::Gone && WallDecalHitsSomething(Mark.Wall, Mark.U, Mark.Z, Mark.Size, Roll))
@@ -1076,6 +1118,11 @@ void ABathroomActor::BuildDecay(FRoomBuilder& Build)
 		case EKind::Mould:
 			Build.Stain(RoomSurfaces::Damp, At, Into, Mark.Size, BathMould, Mark.Opacity, 1.4f);
 			break;
+		case EKind::CornerMould:
+			// A narrow strip: at the free moulds' 1.4 the noise runs past its box and cuts its long
+			// sides straight (the 10-13 note).
+			Build.Stain(RoomSurfaces::Damp, At, Into, Mark.Size, BathMould, Mark.Opacity, 0.8f);
+			break;
 		case EKind::Crack:
 			Build.Crack(At, Into, Mark.Size, Mark.Opacity, 30.f);
 			break;
@@ -1086,7 +1133,7 @@ void ABathroomActor::BuildDecay(FRoomBuilder& Build)
 			Build.Stain(RoomSurfaces::Substrate, At, Into, Mark.Size, FLinearColor(0.42f, 0.38f, 0.32f), Mark.Opacity, 0.9f);
 			break;
 		default:
-			Build.Stain(RoomSurfaces::Paint, At, Into, Mark.Size, BathFilm, Mark.Opacity, 0.5f);
+			Build.Stain(RoomSurfaces::Paint, At, Into, Mark.Size, BathGrime, Mark.Opacity, 0.5f);
 			break;
 		}
 	}
@@ -1105,7 +1152,9 @@ void ABathroomActor::BuildDecay(FRoomBuilder& Build)
 		const FVector At(Patch.At.X, Patch.At.Y, RoomHeight - 3.f);
 		if (Patch.bMould)
 		{
-			Build.Stain(RoomSurfaces::Damp, At, FRotator(90.f, 0.f, Roll), Patch.Size, BathMould, Patch.Opacity, 1.1f);
+			// Edge noise 0.8: at 1.1 the noise ran past the box and cut the patch over the bath straight
+			// along one side (the 10-13 note).
+			Build.Stain(RoomSurfaces::Damp, At, FRotator(90.f, 0.f, Roll), Patch.Size, BathMould, Patch.Opacity, 0.8f);
 		}
 		else
 		{
@@ -1119,7 +1168,9 @@ void ABathroomActor::BuildDecay(FRoomBuilder& Build)
 	const FVector Bath = BathSeat();
 	struct FFloor { FVector2D At; FVector2D Size; FLinearColor Tint; float Opacity; bool bDamp; };
 	const FFloor Floor[] = {
-		{ FVector2D(MidX() + 40.f, MidY() - 60.f), FVector2D(220.f, 160.f), BathFilm, 0.35f, false },
+		// In the middle of the room, as near the door as it can come: turned any way its box reaches
+		// 111 from its middle, and the leaf sweeps to 673 (108 off the hinge, with its margin).
+		{ FVector2D(MidX() + 40.f, MidY() - 25.f), FVector2D(180.f, 130.f), BathFilm, 0.35f, false },
 		{ FVector2D(W + 180.f, N + 200.f), FVector2D(160.f, 140.f), BathFilm, 0.3f, false },
 		{ FVector2D(E - 150.f, S - 150.f), FVector2D(160.f, 130.f), BathFilm, 0.3f, false },
 		{ FVector2D(Bath.X - 64.f, Bath.Y - 28.f), FVector2D(26.f, 22.f), BathWater, 0.45f, true },
@@ -1141,11 +1192,29 @@ void ABathroomActor::BuildDecay(FRoomBuilder& Build)
 			FVector2D(Patch.Size.Y, Patch.Size.X), Patch.Tint, Patch.Opacity, Patch.bDamp ? 1.1f : 0.6f);
 	}
 
-	// In the bath: the tide-mark the water left as it went down, a brown ring round the enamel, and
-	// the streak under the spout. Aimed down into it from just over the water: a decal reaches nine,
-	// so the ring lies on the enamel from the water to nine over it.
-	Build.Stain(RoomSurfaces::Damp, FVector(Bath.X, Bath.Y, BathWaterZ + 4.f), FRotator(-90.f, 0.f, 0.f), FVector2D(BathWidth - 18.f, BathLength - 26.f),
-		FLinearColor(0.22f, 0.14f, 0.06f), 0.55f, 0.6f);
+	// In the bath: the tide-mark the water left as it went down, a brown band round the enamel, and
+	// the streak under the spout. Aimed down from 9.5 over the water, so a decal's reach of nine
+	// starts just above it (26.6..44.6) and never lies on the water, which is meant to be the one
+	// mirror-smooth dark thing in the bath.
+	//
+	// Not one decal over the whole bath: the shell is thin, and the black outside stands only four
+	// off the enamel inside (make_bathroom.py, BATH_INNER and BATH_OUTER off the plan's 86 x 39:
+	// the enamel at 29.4 off the long axis at the bottom of the reach and 32.7 at 36, the iron at
+	// 33.9 and out). A box wide enough to put the inner wall inside its patch's strong middle
+	// (the falloff is full only to about six tenths of the way out) lays it on the paint outside
+	// as well, and one that stops short of the paint leaves the enamel at its faded edge. So it is
+	// four narrow strips, each centred on the enamel's line over that reach and stopping short of
+	// the iron: down both long sides (30.3 off the axis, three either way), and across both ends
+	// (76 off the middle, the iron at 80.9). They fade out towards the round corners, which is
+	// where a tide-mark is broken anyway. Aimed down, a decal lays its first size along Y (09-27).
+	const FLinearColor Tide(0.22f, 0.14f, 0.06f);
+	for (const float Side : { -1.f, 1.f })
+	{
+		Build.Stain(RoomSurfaces::Damp, FVector(Bath.X, Bath.Y + Side * 30.3f, BathWaterZ + 9.5f), FRotator(-90.f, 0.f, 0.f), FVector2D(6.f, 130.f),
+			Tide, 0.6f, 0.6f);
+		Build.Stain(RoomSurfaces::Damp, FVector(Bath.X + Side * 76.f, Bath.Y, BathWaterZ + 9.5f), FRotator(-90.f, 0.f, 0.f), FVector2D(30.f, 6.f),
+			Tide, 0.6f, 0.6f);
+	}
 	Build.Stain(RoomSurfaces::Paint, FVector(FillerSeat().X - FillerReach - 2.f, Bath.Y, 40.f), FRotator(-90.f, 0.f, 0.f), FVector2D(14.f, 20.f),
 		BathRust, 0.6f, 0.8f);
 }
@@ -1192,11 +1261,16 @@ void ABathroomActor::BuildClues()
 		FRoomBuilder B(Clue, Clue->GetRootScene());
 		Dress(B.Prop(BathProps::Bottles, FVector::ZeroVector, FRotator::ZeroRotator, 0.f, false), {});
 	}
-	// The duck, sitting low in the water at the foot of the bath, turned to look at the door.
+	// The duck, sitting low in the water at the foot of the bath, turned to look at the door. Its
+	// model faces local +X (the beak), and a yaw of A turns +X to (cos A, sin A): from here the
+	// door's middle (-520, 565) is 80 east and 423 north, a yaw of -79. It takes no decals: the
+	// tide-mark is projected down into the bath just over the water it floats in.
 	const FVector Bath = BathSeat();
-	if (AClueActor* Clue = SpawnClue(FVector(Bath.X + 40.f, Bath.Y - 8.f, BathWaterZ - 1.6f), FRotator(0.f, -120.f, 0.f)))
+	if (AClueActor* Clue = SpawnClue(FVector(Bath.X + 40.f, Bath.Y - 8.f, BathWaterZ - 1.6f), FRotator(0.f, -79.f, 0.f)))
 	{
 		FRoomBuilder B(Clue, Clue->GetRootScene());
-		Dress(B.Prop(BathProps::Duck, FVector::ZeroVector, FRotator::ZeroRotator, 0.f, false), {});
+		UStaticMeshComponent* Duck = B.Prop(BathProps::Duck, FVector::ZeroVector, FRotator::ZeroRotator, 0.f, false);
+		Dress(Duck, {});
+		BathNoDecals(Duck);
 	}
 }

@@ -1335,13 +1335,28 @@ void AMasterBedroomActor::BuildDecay(FRoomBuilder& Build)
 	{
 		Web(Build, FVector(MediaSeat().X + Side * 82.f, SouthY() - 7.8f, 7.8f), FRotator(0.f, 0.f, 45.f), 24.f, 22.f);
 	}
-	// Between the lamp's stem and one of its legs (the first, at 30 degrees, the lamp turned 20): the
-	// lamp stands clear of the east wall now the chair has moved off the window, so the web that ran
-	// from its shade to the wall would have been a metre of thread in the air.
+	// Low across the lamp's tripod, between the two legs that face the room: the lamp stands clear
+	// of the east wall now the chair has moved off the window, so the web that ran from its shade to
+	// the wall would have been a metre of thread in the air. There is no stem below the collar to
+	// hang one from (make_bedroom.py, floor_lamp: three legs from 30 out at the floor to 3 out at
+	// 112, the collar at 108..116, the stem from there up), so it is strung between legs. Two legs
+	// lie in one plane that leans in towards the lamp's axis, their chord R/2 off it, R = 30 - 27h/112
+	// at height h; the web is laid in that plane from 4 to 44 up, 33 wide, which is just inside the
+	// legs' centres at its top edge (16.8 either way) and so caught in them there, and hangs in the
+	// wider gap below. The model's legs are at 30, 150 and 270 degrees, the lamp turned 20: the pair
+	// at 170 and 290 has its chord facing 230, towards the middle of the room.
 	{
-		const float LegYaw = 50.f;
-		const FVector Out(FMath::Cos(FMath::DegreesToRadians(LegYaw)), FMath::Sin(FMath::DegreesToRadians(LegYaw)), 0.f);
-		Web(Build, FloorLampSeat() + Out * 11.f + FVector(0.f, 0.f, 62.f), FRotator(0.f, LegYaw, 90.f), 18.f, 70.f);
+		const float LampYaw = 20.f;
+		const float ChordYaw = FMath::DegreesToRadians(LampYaw + 210.f);
+		const FVector Radial(FMath::Cos(ChordYaw), FMath::Sin(ChordYaw), 0.f);
+		const FVector AlongChord(-Radial.Y, Radial.X, 0.f);
+		auto ChordOff = [](float H) { return (30.f - 27.f * H / 112.f) * 0.5f; };
+		const float Z0 = 4.f;
+		const float Z1 = 44.f;
+		const FVector Bottom = FloorLampSeat() + Radial * ChordOff(Z0) + FVector(0.f, 0.f, Z0);
+		const FVector Top = FloorLampSeat() + Radial * ChordOff(Z1) + FVector(0.f, 0.f, Z1);
+		const FVector Up = Top - Bottom;
+		Web(Build, (Bottom + Top) * 0.5f, FRotationMatrix::MakeFromXY(AlongChord, Up.GetSafeNormal()).Rotator(), 33.f, Up.Size());
 	}
 	// Between the back of the dresser's top and the wall, past the jewellery box.
 	Web(Build, FVector(DresserSeat().X + 25.f, NorthY() + NorthWallGap + 4.f, DresserTop + 4.5f), FRotator(0.f, 0.f, -45.f), 24.f, 14.f);
