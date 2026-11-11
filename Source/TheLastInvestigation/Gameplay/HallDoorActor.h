@@ -36,6 +36,13 @@ struct FHallDoorSetup
 	 * studded with nails, strap hinges, and a ring pull on a lock plate instead of a knob.
 	 */
 	bool bIronBound = false;
+	/**
+	 * A leaf generated in Blender instead of the joinery built here (the study's black door): the
+	 * model's origin on the hinge, the leaf along +Y, its corridor face to +X, as this actor's. Its
+	 * slots are dressed by name from LeafSlots; Width and Height still size the collision.
+	 */
+	const TCHAR* LeafModel = nullptr;
+	TArray<TPair<FName, UMaterialInterface*>> LeafSlots;
 };
 
 /**

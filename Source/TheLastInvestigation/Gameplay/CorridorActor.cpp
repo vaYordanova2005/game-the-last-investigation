@@ -7,6 +7,7 @@
 #include "GrandStaircaseActor.h"
 #include "NurseryActor.h"
 #include "BathroomActor.h"
+#include "StudyActor.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -80,6 +81,7 @@ void ACorridorActor::Configure(const FCorridorSetup& InSetup, AStormWindowActor*
 		{ ESide::North, Setup.StartDoorCenterX, Setup.StartDoorWidth * 0.5f, Setup.StartDoorHeight },
 		{ ESide::South, NurseryDoorU, DoorHalf, HallDoorHeight },
 		{ ESide::South, BathroomDoorU, DoorHalf, HallDoorHeight },
+		{ ESide::North, StudyDoorU, AStudyActor::DoorOpeningWidth * 0.5f, AStudyActor::DoorOpeningHeight },
 		{ ESide::East, CenterY(), WindowWidth * 0.5f, WindowTop, WindowSill },
 		{ ESide::West, CenterY(), StairOpeningWidth * 0.5f, StairOpeningHeight },
 	};
@@ -115,6 +117,7 @@ void ACorridorActor::BeginPlay()
 	SpawnStairHall();
 	SpawnNursery();
 	SpawnBathroom();
+	SpawnStudy();
 	BuildClues();
 }
 
@@ -190,9 +193,14 @@ bool ACorridorActor::IsOnOpening(ESide Side, float U, float V, float HalfU, floa
 {
 	for (const FOpening& Opening : Openings)
 	{
+		// The study's case stands out past its opening to its cornice's reach and up to its top: a decal
+		// on the wall there would lie across it.
+		const bool bStudy = Opening.Side == ESide::North && Opening.CenterU == StudyDoorU;
+		const float CaseU = bStudy ? AStudyActor::DoorCaseReach : 0.f;
+		const float TopV = bStudy ? AStudyActor::DoorCaseTop : Opening.TopV;
 		if (Opening.Side == Side
-			&& FMath::Abs(U - Opening.CenterU) < Opening.HalfU + HalfU
-			&& V > Opening.BottomV - HalfV && V < Opening.TopV + HalfV)
+			&& FMath::Abs(U - Opening.CenterU) < Opening.HalfU + CaseU + HalfU
+			&& V > Opening.BottomV - HalfV && V < TopV + HalfV)
 		{
 			return true;
 		}
@@ -356,9 +364,11 @@ void ACorridorActor::BuildBackRooms(FRoomBuilder& Build)
 	const float H = Setup.Height;
 	for (const FOpening& Opening : Openings)
 	{
-		// The girl's room and the bathroom are real rooms (ANurseryActor, ABathroomActor), not black boxes.
+		// The girl's room, the bathroom and the study are real rooms (ANurseryActor, ABathroomActor,
+		// AStudyActor), not black boxes.
 		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || Opening.CenterU == Setup.StartDoorCenterX
-			|| (Opening.Side == ESide::South && (Opening.CenterU == NurseryDoorU || Opening.CenterU == BathroomDoorU)))
+			|| (Opening.Side == ESide::South && (Opening.CenterU == NurseryDoorU || Opening.CenterU == BathroomDoorU))
+			|| (Opening.Side == ESide::North && Opening.CenterU == StudyDoorU))
 		{
 			continue;
 		}
@@ -721,7 +731,8 @@ void ACorridorActor::BuildDoorCasings(FRoomBuilder& Build)
 	// same casing and nothing grander: it is important because of what is in front of it.
 	for (const FOpening& Opening : Openings)
 	{
-		if (Opening.Side != ESide::North && Opening.Side != ESide::South)
+		// The study's door has a case of its own through the wall (AStudyActor builds it, both faces).
+		if ((Opening.Side != ESide::North && Opening.Side != ESide::South) || (Opening.Side == ESide::North && Opening.CenterU == StudyDoorU))
 		{
 			continue;
 		}
@@ -1242,6 +1253,27 @@ void ACorridorActor::SpawnDoors()
 			Doors.Add(Door);
 		}
 	}
+
+	// The study's: a tall black door with gilt beading, generated (AStudyActor::DoorLeafModel), shut
+	// but for a crack. Hinged on the east jamb like every north door, 2 inside the opening.
+	{
+		FHallDoorSetup DoorSetup;
+		DoorSetup.Width = AStudyActor::DoorLeafWidth;
+		DoorSetup.Height = AStudyActor::DoorLeafHeight;
+		DoorSetup.AjarYaw = 2.f;
+		DoorSetup.OpenYaw = StudyDoorOpenYaw;
+		DoorSetup.Seed = Seed++;
+		DoorSetup.LeafModel = AStudyActor::DoorLeafModel();
+		DoorSetup.LeafSlots = AStudyActor::DoorLeafSlots(this);
+		const FVector Hinge(StudyDoorU + AStudyActor::DoorOpeningWidth * 0.5f - 2.f, NorthFace() - 2.6f, 0.f);
+		const FTransform Transform(FRotator(0.f, 90.f, 0.f), GetActorTransform().TransformPosition(Hinge));
+		if (AHallDoorActor* Door = GetWorld()->SpawnActorDeferred<AHallDoorActor>(AHallDoorActor::StaticClass(), Transform, this))
+		{
+			Door->Configure(DoorSetup);
+			Door->FinishSpawning(Transform);
+			Doors.Add(Door);
+		}
+	}
 }
 
 void ACorridorActor::SpawnWindow()
@@ -1328,6 +1360,32 @@ void ACorridorActor::SpawnBathroom()
 		BathSetup.CorridorHeight = Setup.Height;
 		Bathroom->Configure(BathSetup);
 		Bathroom->FinishSpawning(Transform);
+	}
+}
+
+void ACorridorActor::SpawnStudy()
+{
+	// The study, behind the north door between the stair end and the bedroom. Same frame as the
+	// corridor; its south face is the far side of the corridor's north wall, its east face the far side
+	// of the bedroom's west wall. The corridor hangs its door (SpawnDoors), hinged on the east jamb.
+	const FTransform Transform = GetActorTransform();
+	Study = GetWorld()->SpawnActorDeferred<AStudyActor>(AStudyActor::StaticClass(), Transform, this);
+	if (Study)
+	{
+		const float T = Setup.WallThickness;
+		FStudySetup StudySetup;
+		StudySetup.SouthFace = NorthFace() - T;
+		StudySetup.WestX = WestFace;
+		StudySetup.EastX = -Setup.RoomHalfWidth - T * 0.5f;
+		StudySetup.WallThickness = T;
+		StudySetup.DoorX = StudyDoorU;
+		StudySetup.HingeX = StudyDoorU + AStudyActor::DoorOpeningWidth * 0.5f - 2.f;
+		StudySetup.DoorLeafWidth = AStudyActor::DoorLeafWidth;
+		StudySetup.DoorOpenYaw = StudyDoorOpenYaw;
+		StudySetup.CorridorHeight = Setup.Height;
+		StudySetup.BedroomNorthY = -Setup.RoomHalfDepth - T * 0.5f;
+		Study->Configure(StudySetup, LeadStorm);
+		Study->FinishSpawning(Transform);
 	}
 }
 

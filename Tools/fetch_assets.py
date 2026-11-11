@@ -70,6 +70,13 @@ TEXTURES = {
     # The master bedroom (Room01): wide engineered oak boards, laid in the renovation, tinted to a
     # dark natural oak.
     "wood_floor": "the master bedroom's oak floor",
+    # The study: black lacquer, burgundy leather, gold. Photographed surfaces rather than flat colours,
+    # because a flat colour on a desk the player walks up to reads as a plastic toy.
+    "flamed_black_veneer": "the study's black lacquered furniture and panelling",
+    "leather_red_02": "the study's burgundy leather: the Chesterfields, the desk top, his chair",
+    "velour_velvet": "the study's burgundy velvet drapes",
+    "metal_plate_02": "the study's gilt (tinted gold) and the safe's steel (tinted black)",
+    "painted_plaster_wall": "the study's ceiling",
 }
 
 # The three maps the master material wants. nor_dx because UE expects DirectX-convention normals;
@@ -191,6 +198,9 @@ def fetch_textures(list_only):
         files = fetch_json("{}/files/{}".format(API, asset_id))
         for map_name in TEXTURE_MAPS:
             entry = files.get(map_name)
+            # A few sets ship their colour as a "coll1" map instead of a Diffuse (leather_red_02).
+            if entry is None and map_name == "Diffuse":
+                entry = files.get("coll1")
             if not entry or RESOLUTION not in entry:
                 print("    ! {} has no {} map".format(asset_id, map_name))
                 continue
