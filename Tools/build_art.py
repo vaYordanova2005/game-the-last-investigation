@@ -21,6 +21,8 @@ What it produces:
     /Game/Materials/M_RoomGlassCrack the fracture on a struck pane, from the baked crack map
     /Game/Materials/M_RoomStainedGlass  the stair window's glass, from Tools/make_stained_glass.py
     /Game/Materials/M_RoomLeadCame      the lead that glass is held in, which is what casts shadow
+    /Game/Materials/M_RoomSky       the night sky outside: clouds, moon, lightning (Tools/make_storm_art.py)
+    /Game/Materials/M_RoomFoliage   the forest's trees, with their wind
     /Game/Materials/MI_<set>        an instance per texture set (floor, wallpaper, plaster, ...)
     /Game/Textures/T_*              the imported maps
     /Game/Meshes/<Model>            the imported props, with their materials already assigned
@@ -1370,6 +1372,270 @@ def build_stained_glass_masters():
     unreal.log("Built " + LEAD_CAME_PATH)
 
 
+SKY_PATH = MATERIAL_PACKAGE + "/M_RoomSky"
+FOLIAGE_PATH = MATERIAL_PACKAGE + "/M_RoomFoliage"
+
+# The whole night sky, as one expression. A graph of forty nodes says the same thing less readably,
+# and this is arithmetic on a direction: where on the cloud deck a ray lands, how thick the cloud is
+# there, how far it is from the moon and from the strike.
+SKY_CODE = """
+float3 d = normalize(WP - Centre);
+float el = d.z;
+
+// The cloud deck: a flat layer overhead, so it crowds together towards the horizon and drifts
+// across the sky in a straight line. Two samples at different scales and speeds.
+float2 p = d.xy / (max(el, 0.0) + 0.30);
+float2 uvA = p * 0.11 + Time * Drift * float2(0.0030, 0.0012);
+float2 uvB = p * 0.23 + Time * Drift * float2(0.0052, 0.0031) + float2(0.37, 0.61);
+float3 cA = Texture2DSample(Cloud, CloudSampler, uvA).rgb;
+float3 cB = Texture2DSample(Cloud, CloudSampler, uvB).rgb;
+
+float3 M = normalize(MoonDir);
+float mdot = dot(d, M);
+// Thinner round the moon: it is seen through a break, not through the belly of a cloud.
+float thick = saturate(cA.r * 1.55 + (cB.g - 0.5) * 0.35 + (cB.b - 0.5) * 0.3 - 0.22 - 0.30 * pow(saturate(mdot), 24.0));
+float thin = exp(-3.4 * thick);
+float3 belly = float3(0.050, 0.060, 0.085) * (0.55 + 0.9 * cB.g);
+float3 col = lerp(belly, float3(0.42, 0.52, 0.74), thin * 0.8);
+
+// The moon: a disc cut by angle, its face from the map, and the light it puts into thin cloud.
+float cr = 0.9990;
+float disc = smoothstep(cr - 0.00012, cr + 0.00012, mdot);
+float3 mr = normalize(cross(float3(0.0, 0.0, 1.0), M));
+float3 mu = cross(M, mr);
+float2 muv = float2(dot(d, mr), -dot(d, mu)) / sqrt(1.0 - cr * cr) * 0.5 + 0.5;
+float face = Texture2DSample(Moon, MoonSampler, muv).r;
+float corona = pow(saturate(mdot), 900.0) * 1.6 + pow(saturate(mdot), 90.0) * 0.5 + pow(saturate(mdot), 12.0) * 0.12;
+col += float3(0.80, 0.86, 1.0) * (disc * face * 14.0 * exp(-5.0 * thick) + corona * (0.25 + thin));
+
+float hz = smoothstep(-0.02, 0.20, el);
+col = lerp(float3(0.030, 0.038, 0.055), col, hz);
+
+// The strike: the cloud round it lit from inside, and the whole deck a little.
+float3 F = normalize(FlashDir);
+float fdot = dot(d, F);
+float local = exp((fdot - 1.0) * 26.0) + 0.35 * exp((fdot - 1.0) * 5.0);
+col += float3(0.70, 0.80, 1.0) * Flash * (0.3 + 0.7 * hz) * (local * (0.35 + 1.5 * thin + 1.0 * cA.g) * 0.5 + 0.14 * (0.25 + thin));
+
+// And the channel itself, laid on the sky about the strike's direction.
+float3 br = normalize(cross(float3(0.0, 0.0, 1.0), F));
+float3 bu = cross(F, br);
+float2 q = float2(dot(d, br), dot(d, bu)) / BoltSize;
+float2 buv = float2(q.x * BoltFlip * 0.5 + BOLT_X, BOLT_Y - q.y * 0.5);
+float inside = step(0.0, buv.x) * step(buv.x, 1.0) * step(0.0, buv.y) * step(buv.y, 1.0) * step(0.0, fdot);
+float2 bolt = Texture2DSample(Bolts, BoltsSampler, saturate(buv) * 0.5 + BoltCell.xy).rg * inside;
+col += float3(0.78, 0.86, 1.0) * Bolt * (bolt.r * 48.0 * (0.55 + 0.45 * thin) + bolt.g * 1.8);
+
+return col * Brightness;
+"""
+
+# Wind, as a vertex offset. UV1.x is how far up the tree the vertex is and UV1.y how loose it is
+# (Tools/make_forest.py). The whole tree leans downwind by the square of its height and rocks about
+# that lean; the phase comes from where the vertex stands, so a gust runs through the wood as a wave
+# rather than every tree nodding at once. Boughs and leaves shiver on top.
+WIND_CODE = """
+float h = UV1.x;
+float loose = UV1.y;
+float phase = dot(WP.xy, float2(0.0011, 0.0017));
+float sway = 0.55 + 0.6 * sin(Time * 0.9 + phase) + 0.25 * sin(Time * 2.3 + phase * 1.7);
+float3 offset = float3(Wind.xy, 0.0) * (h * h) * Wind.z * sway;
+float f1 = sin(Time * 7.0 + WP.x * 0.031 + WP.z * 0.045);
+float f2 = sin(Time * 5.3 + WP.y * 0.037 + WP.z * 0.020);
+offset += float3(f1, f2, f1 * f2 - 0.3) * loose * Flutter;
+return offset;
+"""
+
+
+# Night air between the eye and a tree: the further off it stands, the more of the sky's own grey it
+# takes on. Without it a wood at night is one black cut-out however deep it is; with it the near
+# trunks stand dark against the ones behind, and those against the far wall.
+HAZE_CODE = """
+float away = length(WP - Eye);
+return Haze * saturate((away - 900.0) / HazeDistance);
+"""
+
+
+def import_storm_texture(file_name, asset_name, srgb, compression, clamp_x, clamp_y):
+    path = os.path.join(GENERATED_SOURCE, file_name)
+    if not os.path.isfile(path):
+        unreal.log_error("Missing {} — run: python Tools/make_storm_art.py".format(path))
+        return None
+    task = unreal.AssetImportTask()
+    task.filename = path
+    task.destination_path = TEXTURE_PACKAGE
+    task.destination_name = asset_name
+    task.automated = True
+    task.replace_existing = True
+    task.save = True
+    ASSET_TOOLS.import_asset_tasks([task])
+    texture = ASSET_LIB.load_asset("{}/{}".format(TEXTURE_PACKAGE, asset_name))
+    if not texture:
+        unreal.log_error("Failed to import " + path)
+        return None
+    texture.set_editor_property("compression_settings", compression)
+    texture.set_editor_property("srgb", srgb)
+    texture.set_editor_property("address_x", unreal.TextureAddress.TA_CLAMP if clamp_x else unreal.TextureAddress.TA_WRAP)
+    texture.set_editor_property("address_y", unreal.TextureAddress.TA_CLAMP if clamp_y else unreal.TextureAddress.TA_WRAP)
+    ASSET_LIB.save_loaded_asset(texture)
+    return texture
+
+
+def custom_node(material, code, output_type, input_names, x, y):
+    node = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionCustom, x, y)
+    node.set_editor_property("code", code)
+    node.set_editor_property("output_type", output_type)
+    inputs = []
+    for name in input_names:
+        entry = unreal.CustomInput()
+        entry.set_editor_property("input_name", name)
+        inputs.append(entry)
+    node.set_editor_property("inputs", inputs)
+    return node
+
+
+def build_storm_masters():
+    """
+    M_RoomSky: the night sky outside every window, one unlit dome round the house.
+        Emissive = cloud deck (drifting, moonlit at its thin edges) + moon + the strike lighting the
+                   cloud from inside + the lightning channel itself (SKY_CODE).
+    C++ (AStormForestActor) says where the moon is and, at every strike, where the strike is.
+
+    M_RoomFoliage: the forest. Masked, two-sided, lit.
+        BaseColor = FoliageMap.RGB * Tint      OpacityMask = FoliageMap.A
+        WorldPositionOffset = wind (WIND_CODE)
+        Emissive = Haze * distance from the eye (HAZE_CODE)
+    One material for a whole tree, bark and all: the bark is a cell of the same atlas, so a tree is
+    one draw.
+    """
+    masks = unreal.TextureCompressionSettings.TC_MASKS
+    clouds = import_storm_texture("storm_clouds.png", "T_storm_clouds", False, masks, False, False)
+    bolts = import_storm_texture("storm_bolts.png", "T_storm_bolts", False, masks, True, True)
+    moon = import_storm_texture("storm_moon.png", "T_storm_moon", False, masks, True, True)
+    foliage = import_storm_texture("forest_foliage.png", "T_forest_foliage", True,
+                                   unreal.TextureCompressionSettings.TC_DEFAULT, True, True)
+    ring = import_storm_texture("forest_ring.png", "T_forest_ring", True,
+                                unreal.TextureCompressionSettings.TC_DEFAULT, False, True)
+    if not (clouds and bolts and moon and foliage and ring):
+        return
+
+    for path in (SKY_PATH, FOLIAGE_PATH):
+        if ASSET_LIB.does_asset_exist(path):
+            ASSET_LIB.delete_asset(path)
+
+    def scalar(material, name, value, x, y):
+        node = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionScalarParameter, x, y)
+        node.set_editor_property("parameter_name", name)
+        node.set_editor_property("default_value", value)
+        return node
+
+    def vector(material, name, value, x, y):
+        node = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionVectorParameter, x, y)
+        node.set_editor_property("parameter_name", name)
+        node.set_editor_property("default_value", unreal.LinearColor(value[0], value[1], value[2], 1.0))
+        return node
+
+    def texture_object(material, name, texture, x, y):
+        node = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x, y)
+        node.set_editor_property("parameter_name", name)
+        node.set_editor_property("texture", texture)
+        node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
+        return node
+
+    # ---- the sky ----
+    sky = ASSET_TOOLS.create_asset("M_RoomSky", MATERIAL_PACKAGE, unreal.Material, unreal.MaterialFactoryNew())
+    sky.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    sky.set_editor_property("two_sided", True)
+
+    names = ["WP", "Centre", "Time", "Drift", "Cloud", "Moon", "Bolts", "MoonDir", "FlashDir", "Flash",
+             "Bolt", "BoltSize", "BoltFlip", "BoltCell", "Brightness"]
+    # Tools/make_storm_art.py: BOLT_ORIGIN.
+    code = SKY_CODE.replace("BOLT_X", "0.5").replace("BOLT_Y", "0.25")
+    body = custom_node(sky, code, unreal.CustomMaterialOutputType.CMOT_FLOAT3, names, -300, 0)
+    sources = {
+        "WP": MAT_LIB.create_material_expression(sky, unreal.MaterialExpressionWorldPosition, -900, -500),
+        "Centre": vector(sky, "Centre", (0.0, 0.0, 0.0), -900, -400),
+        "Time": MAT_LIB.create_material_expression(sky, unreal.MaterialExpressionTime, -900, -250),
+        "Drift": scalar(sky, "Drift", 1.0, -900, -180),
+        "Cloud": texture_object(sky, "CloudMap", clouds, -900, -100),
+        "Moon": texture_object(sky, "MoonMap", moon, -900, 60),
+        "Bolts": texture_object(sky, "BoltMap", bolts, -900, 220),
+        "MoonDir": vector(sky, "MoonDir", (0.9, 0.15, 0.4), -900, 380),
+        "FlashDir": vector(sky, "FlashDir", (1.0, 0.0, 0.4), -900, 540),
+        "Flash": scalar(sky, "Flash", 0.0, -900, 700),
+        "Bolt": scalar(sky, "Bolt", 0.0, -900, 780),
+        "BoltSize": scalar(sky, "BoltSize", 0.3, -900, 860),
+        "BoltFlip": scalar(sky, "BoltFlip", 1.0, -900, 940),
+        "BoltCell": vector(sky, "BoltCell", (0.0, 0.0, 0.0), -900, 1020),
+        "Brightness": scalar(sky, "Brightness", 1.0, -900, 1180),
+    }
+    for name in names:
+        MAT_LIB.connect_material_expressions(sources[name], "", body, name)
+    MAT_LIB.connect_material_property(body, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MAT_LIB.recompile_material(sky)
+    ASSET_LIB.save_loaded_asset(sky)
+    unreal.log("Built " + SKY_PATH)
+
+    # ---- the forest ----
+    leaf = ASSET_TOOLS.create_asset("M_RoomFoliage", MATERIAL_PACKAGE, unreal.Material, unreal.MaterialFactoryNew())
+    leaf.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    leaf.set_editor_property("two_sided", True)
+    leaf.set_editor_property("opacity_mask_clip_value", 0.36)
+
+    sample = MAT_LIB.create_material_expression(leaf, unreal.MaterialExpressionTextureSampleParameter2D, -700, -200)
+    sample.set_editor_property("parameter_name", "FoliageMap")
+    sample.set_editor_property("texture", foliage)
+    sample.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    tint = vector(leaf, "Tint", (1.0, 1.0, 1.0), -700, -420)
+    tinted = MAT_LIB.create_material_expression(leaf, unreal.MaterialExpressionMultiply, -350, -300)
+    MAT_LIB.connect_material_expressions(sample, "RGB", tinted, "A")
+    MAT_LIB.connect_material_expressions(tint, "", tinted, "B")
+    rough = scalar(leaf, "Roughness", 0.9, -700, 100)
+    specular = scalar(leaf, "Specular", 0.15, -700, 180)
+
+    wind_names = ["WP", "UV1", "Time", "Wind", "Flutter"]
+    wind = custom_node(leaf, WIND_CODE, unreal.CustomMaterialOutputType.CMOT_FLOAT3, wind_names, -300, 400)
+    position = MAT_LIB.create_material_expression(leaf, unreal.MaterialExpressionWorldPosition, -700, 300)
+    try:
+        position.set_editor_property("world_position_shader_offset",
+                                     unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
+    except Exception as error:
+        unreal.log_warning("Foliage: world position left at its default ({})".format(error))
+    uv1 = MAT_LIB.create_material_expression(leaf, unreal.MaterialExpressionTextureCoordinate, -700, 400)
+    uv1.set_editor_property("coordinate_index", 1)
+    wind_sources = {
+        "WP": position,
+        "UV1": uv1,
+        "Time": MAT_LIB.create_material_expression(leaf, unreal.MaterialExpressionTime, -700, 480),
+        # XY the way the wind blows, Z how far (cm) it carries a treetop.
+        "Wind": vector(leaf, "Wind", (0.0, -1.0, 40.0), -700, 560),
+        "Flutter": scalar(leaf, "Flutter", 3.0, -700, 720),
+    }
+    for name in wind_names:
+        MAT_LIB.connect_material_expressions(wind_sources[name], "", wind, name)
+
+    MAT_LIB.connect_material_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    MAT_LIB.connect_material_property(sample, "A", unreal.MaterialProperty.MP_OPACITY_MASK)
+    MAT_LIB.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    MAT_LIB.connect_material_property(specular, "", unreal.MaterialProperty.MP_SPECULAR)
+    MAT_LIB.connect_material_property(wind, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+
+    haze_names = ["WP", "Eye", "Haze", "HazeDistance"]
+    haze = custom_node(leaf, HAZE_CODE, unreal.CustomMaterialOutputType.CMOT_FLOAT3, haze_names, -300, 800)
+    haze_sources = {
+        "WP": MAT_LIB.create_material_expression(leaf, unreal.MaterialExpressionWorldPosition, -700, 800),
+        "Eye": MAT_LIB.create_material_expression(leaf, unreal.MaterialExpressionCameraPositionWS, -700, 880),
+        "Haze": vector(leaf, "Haze", (0.0, 0.0, 0.0), -700, 960),
+        "HazeDistance": scalar(leaf, "HazeDistance", 8000.0, -700, 1120),
+    }
+    for name in haze_names:
+        MAT_LIB.connect_material_expressions(haze_sources[name], "", haze, name)
+    MAT_LIB.connect_material_property(haze, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    allow_instancing(leaf)
+    MAT_LIB.recompile_material(leaf)
+    ASSET_LIB.save_loaded_asset(leaf)
+    unreal.log("Built " + FOLIAGE_PATH)
+
+
 def stage_requested():
     """-ArtStage=<name> on the command line, or None for the whole pipeline.
 
@@ -1406,6 +1672,7 @@ STANDALONE_STAGES = {
     "surfaces": rebuild_surfaces,
     "stainedglass": build_stained_glass_masters,
     "usage": rebuild_usage,
+    "storm": build_storm_masters,
 }
 
 
@@ -1438,6 +1705,7 @@ def run():
     build_web_master()
     build_glass_crack_master()
     build_stained_glass_masters()
+    build_storm_masters()
 
     build_surface_instances(master, sets)
     build_models(master)
