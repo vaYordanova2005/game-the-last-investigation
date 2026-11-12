@@ -27,7 +27,6 @@ namespace
 		const TCHAR* Armchair = TEXT("bedroom_armchair");
 		const TCHAR* Ottoman = TEXT("bedroom_ottoman");
 		const TCHAR* SideTable = TEXT("bedroom_side_table");
-		const TCHAR* FloorLamp = TEXT("bedroom_floor_lamp");
 		const TCHAR* Mirror = TEXT("bedroom_mirror");
 		const TCHAR* Suitcase = TEXT("bedroom_suitcase");
 		const TCHAR* Plant = TEXT("bedroom_plant");
@@ -237,7 +236,6 @@ void AMasterBedroomActor::CacheMaterials(FRoomBuilder& Build)
 	MatLinen = Sheet(RoomSurfaces::Drapery, FLinearColor(0.64f, 0.43f, 0.24f), 1.15f);
 	MatMattress = Sheet(RoomSurfaces::Drapery, FLinearColor(0.64f, 0.43f, 0.25f), 1.15f);
 	MatThrow = Sheet(RoomSurfaces::Drapery, FLinearColor(0.60f, 0.32f, 0.14f), 1.2f);
-	MatShade = Sheet(RoomSurfaces::Drapery, FLinearColor(0.70f, 0.47f, 0.26f), 1.1f);
 	MatShirt = Sheet(RoomSurfaces::Drapery, FLinearColor(0.70f, 0.49f, 0.34f), 1.1f);
 	MatShirtBlue = Sheet(RoomSurfaces::Drapery, FLinearColor(0.25f, 0.22f, 0.21f), 1.1f);
 	// Her dress, a deep wine, and a knit in oatmeal.
@@ -1031,7 +1029,7 @@ void AMasterBedroomActor::BuildMirror(FRoomBuilder& Build)
 void AMasterBedroomActor::BuildSittingCorner(FRoomBuilder& Build)
 {
 	// The white armchair by the window, turned to the storm, the ottoman in front of it with a
-	// blanket folded on it, the side table with her coffee and two books, the lamp behind.
+	// blanket folded on it, the side table with her coffee and two books.
 	const FRotator Turn(0.f, ArmchairYaw, 0.f);
 	Place(Build, BedroomProps::Armchair, ArmchairSeat(), Turn, { { TEXT("Upholstery"), MatUpholstery }, { TEXT("Oak"), MatOak } });
 	Blocker(Build, ArmchairSeat() + FVector(0.f, 0.f, 40.f), FVector(94.f, 90.f, 80.f), Turn.Yaw);
@@ -1050,9 +1048,6 @@ void AMasterBedroomActor::BuildSittingCorner(FRoomBuilder& Build)
 	Place(Build, BedroomProps::Book, Top + FVector(6.f, 4.f, 3.f), FRotator(0.f, 41.f, 0.f), { { TEXT("Cover"), F(TEXT("CoverD")) }, { TEXT("Pages"), F(TEXT("Pages")) } });
 	Dust(Build, Top, FVector2D(46.f, 46.f), 0.f, 0.4f);
 
-	Place(Build, BedroomProps::FloorLamp, FloorLampSeat(), FRotator(0.f, 20.f, 0.f),
-		{ { TEXT("Oak"), MatOak }, { TEXT("Brass"), F(TEXT("Brass")) }, { TEXT("Shade"), MatShade } });
-	Blocker(Build, FloorLampSeat() + FVector(0.f, 0.f, 80.f), FVector(36.f, 36.f, 160.f), 0.f);
 }
 
 void AMasterBedroomActor::BuildFloorThings(FRoomBuilder& Build)
@@ -1334,29 +1329,6 @@ void AMasterBedroomActor::BuildDecay(FRoomBuilder& Build)
 	for (const float Side : { -1.f, 1.f })
 	{
 		Web(Build, FVector(MediaSeat().X + Side * 82.f, SouthY() - 7.8f, 7.8f), FRotator(0.f, 0.f, 45.f), 24.f, 22.f);
-	}
-	// Low across the lamp's tripod, between the two legs that face the room: the lamp stands clear
-	// of the east wall now the chair has moved off the window, so the web that ran from its shade to
-	// the wall would have been a metre of thread in the air. There is no stem below the collar to
-	// hang one from (make_bedroom.py, floor_lamp: three legs from 30 out at the floor to 3 out at
-	// 112, the collar at 108..116, the stem from there up), so it is strung between legs. Two legs
-	// lie in one plane that leans in towards the lamp's axis, their chord R/2 off it, R = 30 - 27h/112
-	// at height h; the web is laid in that plane from 4 to 44 up, 33 wide, which is just inside the
-	// legs' centres at its top edge (16.8 either way) and so caught in them there, and hangs in the
-	// wider gap below. The model's legs are at 30, 150 and 270 degrees, the lamp turned 20: the pair
-	// at 170 and 290 has its chord facing 230, towards the middle of the room.
-	{
-		const float LampYaw = 20.f;
-		const float ChordYaw = FMath::DegreesToRadians(LampYaw + 210.f);
-		const FVector Radial(FMath::Cos(ChordYaw), FMath::Sin(ChordYaw), 0.f);
-		const FVector AlongChord(-Radial.Y, Radial.X, 0.f);
-		auto ChordOff = [](float H) { return (30.f - 27.f * H / 112.f) * 0.5f; };
-		const float Z0 = 4.f;
-		const float Z1 = 44.f;
-		const FVector Bottom = FloorLampSeat() + Radial * ChordOff(Z0) + FVector(0.f, 0.f, Z0);
-		const FVector Top = FloorLampSeat() + Radial * ChordOff(Z1) + FVector(0.f, 0.f, Z1);
-		const FVector Up = Top - Bottom;
-		Web(Build, (Bottom + Top) * 0.5f, FRotationMatrix::MakeFromXY(AlongChord, Up.GetSafeNormal()).Rotator(), 33.f, Up.Size());
 	}
 	// Between the back of the dresser's top and the wall, past the jewellery box.
 	Web(Build, FVector(DresserSeat().X + 25.f, NorthY() + NorthWallGap + 4.f, DresserTop + 4.5f), FRotator(0.f, 0.f, -45.f), 24.f, 14.f);

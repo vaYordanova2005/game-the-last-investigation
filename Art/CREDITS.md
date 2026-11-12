@@ -68,6 +68,16 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | `wooden_crate_02` | model | the storage crate |
 | `wooden_lantern_01` | model | the lantern hung on a pier |
 
+## Study — Poly Haven (CC0 / public domain)
+
+| Asset ID | Kind | Used for |
+|---|---|---|
+| `flamed_black_veneer` | texture | the study's black lacquered furniture, panelling and door |
+| `leather_red_02` | texture | the burgundy leather: Chesterfields, desk top, his chair |
+| `velour_velvet` | texture | the burgundy velvet drapes, the card table's baize, the lamp shades, the hat |
+| `metal_plate_02` | texture | the gilt (tinted gold) and the safe's and telephone's steel |
+| `painted_plaster_wall` | texture | the study's dark ceiling |
+
 ## Generated in-repo
 
 | File | Made by | Used for |
@@ -90,6 +100,8 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | `Art/Source/Models/bathroom_*` | `Tools/make_bathroom.py` (Blender) | the bathroom's claw-foot bath and its filler, the shower's screen, riser, rose and drain, the vanity, the mirror and its bulbs (whole and smashed), the broken pendant and sconces and their glass on the floor, the WC and its high cistern, the towel rail and towels, the bentwood chair, the dead fern, the bath rack, the duck, the things on the vanity, the fallen tiles, the tile trim |
 | `Art/Source/Textures/bathroom_*` | `Tools/make_bathroom_art.py` | the bevelled wall tiles and the hexagon mosaic floor |
 | `Art/Source/Textures/music_*` | `Tools/make_music_art.py` | the emerald velvet, the silk damask, the scores, manuscript, programme and certificates, the photographs, the spines of the music, the three paintings |
+| `Art/Source/Models/study_*` | `Tools/make_study.py` (Blender) | the study's black door and its case, desk, Chesterfield club chairs and sofa, coffee and card tables, cards and chips, drinks cabinet and tray, tumblers, safe, bookcases, file boxes, case board, portrait and map frames, sconces, coat stand, hat, telephone, cigar box, ashtray, case files and prints |
+| `Art/Source/Textures/study_*` | `Tools/make_study_art.py` | the case board, the portrait of the man in the black hat, the city map, the case file's cover, two prints, the burgundy carpet |
 
 The stained-glass inscription, the wine labels, the crate brands, the library's spines, maps and calendar and the music room's scores, programme, certificates and spines are set in Cinzel (SIL Open Font License, `Content/Fonts/OFL.txt`).
 

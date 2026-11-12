@@ -15,6 +15,7 @@ class AClueActor;
 class AGrandStaircaseActor;
 class ANurseryActor;
 class ABathroomActor;
+class AStudyActor;
 
 /** The bedroom this corridor runs past, handed over by the room that spawns it. */
 struct FCorridorSetup
@@ -83,9 +84,17 @@ public:
 	/** How far the bathroom's door opens: as hers, it stops short of the casing on the room side. */
 	static constexpr float BathroomDoorOpenYaw = 89.f;
 	// The doors that stood on the stretches west of the girl's door and of the bedroom (-470 and -880
-	// south, -690 and -1060 north) are gone: the walls are blank. The library and the music room that
-	// were behind them are over the living room and the kitchen now (AGrandStaircaseActor spawns them),
-	// through arches off the stair hall's side galleries.
+	// south, -690 and -1060 north) are gone. The library and the music room that were behind them are
+	// over the living room and the kitchen now (AGrandStaircaseActor spawns them), through arches off
+	// the stair hall's side galleries.
+	/**
+	 * The study's door (AStudyActor), on the north wall between the stair end and the bedroom: a tall
+	 * black door with gilt beading, in a case of its own (the room builds it, through the wall), clear
+	 * of the portrait at -640 and the scratches at -1014.
+	 */
+	static constexpr float StudyDoorU = -830.f;
+	/** How far the study's door opens: short of the case's lining on the room side. */
+	static constexpr float StudyDoorOpenYaw = 88.f;
 
 private:
 	enum class ESide : uint8 { North, South, East, West };
@@ -126,6 +135,7 @@ private:
 	void SpawnStairHall();
 	void SpawnNursery();
 	void SpawnBathroom();
+	void SpawnStudy();
 
 	/** Places a thin panel on a wall's corridor face. */
 	void FacePanel(FRoomBuilder& Build, ESide Side, float U, float V, float SizeU, float SizeV, UMaterialInterface* Mat) const;
@@ -167,6 +177,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ABathroomActor> Bathroom;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AStudyActor> Study;
 
 	/** The two shapes at the far end of the corridor that are only there while the sky is lit. */
 	UPROPERTY(Transient)

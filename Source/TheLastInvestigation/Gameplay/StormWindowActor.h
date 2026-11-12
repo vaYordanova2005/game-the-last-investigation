@@ -12,6 +12,7 @@ class UPointLightComponent;
 class URectLightComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class AStormForestActor;
 struct FRoomSurface;
 
 /** Geometry of the wall opening this storm is seen through, handed over by the room that spawns it. */
@@ -46,20 +47,19 @@ struct FStormWindowSetup
 	int32 PaneColumns = 4;
 
 	/**
-	 * For a follower (see SetLead) on another side of the house: builds its own sky, treeline,
-	 * rain and bolts rather than borrowing the lead's, which are all on the lead's side. The lead's
-	 * directional light cannot come in through a window facing away from it, so an own-view
-	 * follower also carries the strike's shadows itself — its glow is moved far out, made to cast,
-	 * and thrown somewhere new on every strike.
+	 * For a follower (see SetLead) on another side of the house. The lead's directional light
+	 * cannot come in through a window facing away from it, so an own-view follower carries the
+	 * strike's shadows itself: its glow is moved far out, made to cast, and thrown somewhere new on
+	 * every strike. It also has its own rain. The ground, the forest and the sky it looks out on
+	 * are the one set round the whole house (AStormForestActor); it used to build its own.
 	 */
 	bool bOwnView = false;
 
 	/**
-	 * For a follower on the lead's side of the house but well along from it: its own trees and
-	 * rain, in front of the lead's sky and ground. The lead's trees and rain stand in a band in
-	 * front of the lead's window, and through a window eight metres along the same wall there was
-	 * nothing out there but the flat sky over the flat ground. A second sky and ground would stand
-	 * in the same place as the lead's, which is what bOwnView is for and this is not.
+	 * For a follower on the lead's side of the house but well along from it: its own rain. The
+	 * lead's rain falls in a band in front of the lead's window, and eight metres along the same
+	 * wall there is none. (The name is from when such a window also planted its own trees; the
+	 * forest is all round the house now.)
 	 */
 	bool bOwnTrees = false;
 
@@ -114,10 +114,12 @@ struct FStormWindowSetup
  * Everything on the far side of the glass, plus the storm lighting that reaches into the room.
  *
  * Owns three things that have to stay in sync: the window itself (frame, cracked glass, torn
- * curtains), the world outside it (ground, treeline, falling rain), and the lightning. The
- * lightning is a *shadow-casting directional light* rather than the point light the greybox used,
- * because the brief's "long moving shadows" only happen if the flash comes from far away and
- * outside — a point light at the window casts shadows that fan out from the opening instead.
+ * curtains), the rain falling past it, and the lightning. The lightning is a *shadow-casting
+ * directional light* rather than the point light the greybox used, because the brief's "long
+ * moving shadows" only happen if the flash comes from far away and outside — a point light at the
+ * window casts shadows that fan out from the opening instead. What the window looks out on (the
+ * ground, the forest, the sky with its clouds, moon and lightning) is AStormForestActor, which the
+ * lead window spawns and drives.
  *
  * Convention: the actor is spawned facing so that +X is outward, away from the room.
  */
@@ -209,8 +211,8 @@ public:
 	 * There is one sky over the house. A second window has to flash when the first one does, and it
 	 * must not bring a second directional light with it — two of them make the renderer pick one
 	 * arbitrarily for the fog and the translucency. So a follower builds only its window, its
-	 * curtains and its own sky portal, looks out at the lead's trees, rain and bolts, and takes its
-	 * flash from the lead every frame.
+	 * curtains and its own sky portal, looks out at the lead's forest and sky, and takes its flash
+	 * from the lead every frame.
 	 */
 	void SetLead(AStormWindowActor* InLead)
 	{
@@ -224,13 +226,8 @@ public:
 
 private:
 	void BuildWindow();
-	void BuildOutsideWorld();
-	/** The trees outside, on their own: part of BuildOutsideWorld, and all of a bOwnTrees follower's. */
-	void BuildTreeline();
 	void BuildRain();
-	void BuildLightningBolts();
 	void TickCurtains(float DeltaTime);
-	void TickTrees(float DeltaTime);
 	void TickRain(float DeltaTime);
 	void TickLightning(float DeltaTime);
 	void BeginStrike();
@@ -270,43 +267,20 @@ private:
 	/** See GetTieHooks. */
 	TArray<FVector> TieHooks;
 
+	/** The world outside, on the lead window only: ground, forest, sky. */
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<USceneComponent>> Trees;
+	TObjectPtr<AStormForestActor> Forest;
 
-	/**
-	 * The strikes themselves, seen through the window. Three are built up front and one is shown
-	 * per strike: a bolt has to be a fixed shape for the fraction of a second it exists, and
-	 * rebuilding its geometry mid-flash would cost more than keeping three spare ones around.
-	 */
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<USceneComponent>> Bolts;
-
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UMaterialInstanceDynamic>> BoltMaterials;
-
-	/** The overcast sky behind the trees, brightened while a flash lasts. */
-	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> SkyMaterial;
-
-	/** Whether the sky is already at its between-strikes floor, so the tick can leave it be. */
-	bool bSkyAtFloor = false;
-
-	int32 ActiveBolt = INDEX_NONE;
-	/** The bolt currently shown and lit, or none. Only ShowBolt changes it. */
-	int32 LitBolt = INDEX_NONE;
 	int32 StrikeCount = 0;
-
-	/**
-	 * Shows and lights one bolt (INDEX_NONE for none) and puts out the one before it. Does nothing
-	 * when that bolt is already the lit one, so it can be called every frame for nothing.
-	 */
-	void ShowBolt(int32 Index);
 
 	/** An own-view follower's copy of the lead's strike count, so each strike is placed once. */
 	int32 FollowedStrike = 0;
 
-	/** Follower side of TickLightning: bolts, sky and the far flash for an own-view window. */
+	/** Follower side of TickLightning: the far flash for an own-view window. */
 	void FollowOwnView();
+
+	/** How many times over the sky portal brightens at the top of the current flash. */
+	float PortalFlood() const;
 
 	/** Set on a follower window; see SetLead. */
 	UPROPERTY(Transient)
@@ -322,27 +296,43 @@ private:
 
 	/** Scratch buffer for the per-frame instance update, kept alive so the tick allocates nothing. */
 	TArray<FTransform> RainTransforms;
-	TArray<float> TreePhases;
 
 	FRandomStream Random;
 	float ElapsedTime = 0.f;
 
-	// Lightning state. A strike is a burst of 2-5 sub-flashes rather than a single blink, which is
-	// what makes real lightning read as unpredictable instead of as a metronome.
+	// Lightning state. A strike is a burst of sub-flashes rather than a single blink, which is what
+	// makes real lightning read as unpredictable instead of as a metronome: two to five return
+	// strokes for a strike to ground, three to eight flickers for a discharge inside the cloud.
 	float TimeUntilNextStrike = 4.f;
 	int32 SubFlashesRemaining = 0;
 	float SubFlashTimer = 0.f;
 	bool bSubFlashOn = false;
 	float StrikeIntensity = 0.f;
 	float FlashAlpha = 0.f;
+	/** Whether the discharge in progress is a strike to ground, and whether its channel shows. */
+	bool bGroundStrike = false;
+	bool bChannel = false;
+	/** -StormFlash: the held strike has been given its place in the sky. */
+	bool bForcedStrikePlaced = false;
 
-	/** Seconds between strikes. Short — the brief asks for a relentless, frequent storm. */
+	/**
+	 * Seconds between discharges. It was 3.5 to 9, every one a full strike: a strobe. A storm
+	 * overhead gives something every ten to twenty-five seconds, and most of that is in the cloud.
+	 */
 	UPROPERTY(EditAnywhere, Category = "Storm")
-	FVector2f StrikeInterval = FVector2f(3.5f, 9.f);
+	FVector2f StrikeInterval = FVector2f(9.f, 26.f);
 
-	/** Lux at the peak of a flash. Cold blue-white, and bright enough to momentarily flatten the lantern. */
+	/** How many of the discharges are strikes to ground: the ones that light the room. */
+	UPROPERTY(EditAnywhere, Category = "Storm")
+	float GroundStrikeShare = 0.38f;
+
+	/** Lux at the peak of a strike to ground. Cold blue-white, and bright enough to momentarily flatten the lantern. */
 	UPROPERTY(EditAnywhere, Category = "Storm")
 	FVector2f StrikeLux = FVector2f(60.f, 150.f);
+
+	/** Lux at the peak of a flicker inside the cloud: a pulse in the window's light, not a flash. */
+	UPROPERTY(EditAnywhere, Category = "Storm")
+	FVector2f CloudFlashLux = FVector2f(6.f, 22.f);
 
 	UPROPERTY(EditAnywhere, Category = "Storm")
 	int32 RainDropCount = 420;
@@ -365,8 +355,4 @@ private:
 	 */
 	UPROPERTY(EditAnywhere, Category = "Storm")
 	float SkyPortalCandelas = 310.f;
-
-	/** How brightly the overcast sky glows between strikes, in emissive units. */
-	UPROPERTY(EditAnywhere, Category = "Storm")
-	float SkyGlowFloor = 1.8f;
 };

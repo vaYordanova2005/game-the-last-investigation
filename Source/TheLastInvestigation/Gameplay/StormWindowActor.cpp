@@ -1,5 +1,6 @@
 #include "StormWindowActor.h"
 #include "RoomBuildLibrary.h"
+#include "StormForestActor.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -468,23 +469,20 @@ void AStormWindowActor::BeginPlay()
 		// The lead's directional light already lights the whole world; a second one is the thing
 		// SetLead exists to avoid. Hidden rather than destroyed, so nothing else needs a case for it.
 		LightningLight->SetVisibility(false);
-		if (Setup.bOwnView)
+		// The ground, the forest and the sky are the lead's, one of each for the whole house
+		// (AStormForestActor). What a window with a view of its own still brings is its rain, which
+		// falls in a band in front of the glass it is seen through.
+		if (Setup.bOwnView || Setup.bOwnTrees)
 		{
-			BuildOutsideWorld();
-			BuildRain();
-			BuildLightningBolts();
-		}
-		else if (Setup.bOwnTrees)
-		{
-			BuildTreeline();
 			BuildRain();
 		}
 	}
 	else
 	{
-		BuildOutsideWorld();
 		BuildRain();
-		BuildLightningBolts();
+		FActorSpawnParameters Params;
+		Params.Owner = this;
+		Forest = GetWorld()->SpawnActor<AStormForestActor>(AStormForestActor::StaticClass(), FTransform::Identity, Params);
 	}
 
 	const float WindowCenterZ = (Setup.SillHeight + Setup.TopHeight) * 0.5f;
@@ -518,7 +516,7 @@ void AStormWindowActor::BeginPlay()
 		LightningGlow->SetRelativeLocation(FVector(2000.f, 0.f, WindowCenterZ + 700.f));
 	}
 
-	TimeUntilNextStrike = Random.FRandRange(1.2f, 2.4f); // one early strike, while the player is still getting oriented
+	TimeUntilNextStrike = Random.FRandRange(2.5f, 4.5f); // one early strike, while the player is still getting oriented
 }
 
 void AStormWindowActor::BuildWindow()
@@ -910,167 +908,6 @@ void AStormWindowActor::BuildWindow()
 	}
 }
 
-void AStormWindowActor::BuildOutsideWorld()
-{
-	FRoomBuilder Build(this, StormRoot);
-
-	// The sky is emissive, not lit. It is the brightest thing in the frame and the only reason
-	// the treeline reads as a silhouette at all — a shaded backdrop at this albedo, lit by the
-	// same six lux that lights the room, would come out as black as the wall beside the window.
-	SkyMaterial = Build.Emissive(FLinearColor(0.42f, 0.52f, 0.68f), SkyGlowFloor);
-
-	// REVERSED: the treeline and the ground are lit surfaces again, and very dark ones.
-	//
-	// They were made emissive at a fifth of the sky to stop a *hole* in the window reading as a
-	// black rectangle — on the theory that rain scatters the sky into anything forty metres off,
-	// so a wood at night goes the colour of the sky and darker rather than black. The theory is
-	// sound and it was fixing the wrong thing: the black rectangle was a winding bug in the
-	// generated panes (see FRoomBuilder::Pane), and with that fixed, all the emissive treeline did
-	// was take the silhouette away. A wood lit to a fifth of the sky behind it is a flat grey
-	// cut-out; a wood at two per cent albedo against a storm sky is a shape, and the shape is the
-	// whole of what a window at night has to show.
-	UMaterialInstanceDynamic* GroundMat = Build.Flat(FLinearColor(0.020f, 0.022f, 0.018f), 1.f);
-
-	// A backdrop far enough out that it never enters the lantern's reach — it exists so the player
-	// sees storm-lit distance through the window instead of the empty void past the level.
-	//
-	// The sky may not cast a shadow, and that is not a performance nicety. The storm's light
-	// is a *directional* light: it arrives from beyond the treeline, so a sixty-metre slab of sky
-	// standing between it and the window puts the entire room inside one enormous shadow. That is
-	// precisely what it did — the window went black and not one photon of storm light reached the
-	// far wall.
-	if (UStaticMeshComponent* Sky = Build.Box(FVector(3200.f, 0.f, 900.f), FRotator::ZeroRotator, FVector(40.f, 6000.f, 3600.f), SkyMaterial, /*bBlockingCollision*/ false))
-	{
-		Sky->SetCastShadow(false);
-	}
-	// The ground starts at the wall's outer face and goes out. It used to start a metre *inside* the
-	// wall, under the floor of whatever room the window is in, where nobody could see it — until the
-	// living room was built on the storey under the stair window, and sixty metres of black ground
-	// stood out of its west wall at mantel height, straight through the fireplace.
-	//
-	// Unlike the sky, the ground does cast a shadow. It lies below every window's sill, so no light
-	// on its way in through a window ever crosses it; what it shades is what is under it, and the
-	// cellar runs out under the stair window's ground. Without it the storm's shadowed lights came
-	// down through the earth and lit the cellar corridor's ceiling from below at every strike.
-	const float GroundNear = Setup.WallThickness * 0.5f;
-	const float GroundFar = 3300.f;
-	Build.Box(FVector((GroundNear + GroundFar) * 0.5f, 0.f, -40.f), FRotator::ZeroRotator, FVector(GroundFar - GroundNear, 6000.f, 40.f), GroundMat, /*bBlockingCollision*/ false);
-
-	BuildTreeline();
-}
-
-void AStormWindowActor::BuildTreeline()
-{
-	FRoomBuilder Build(this, StormRoot);
-	UMaterialInstanceDynamic* TrunkMat = Build.Flat(FLinearColor(0.016f, 0.014f, 0.012f), 1.f);
-	UMaterialInstanceDynamic* LeafMat = Build.Flat(RoomPalette::Foliage, 1.f);
-
-	// Treeline. Dense and close: through a window this size the player sees a narrow cone, and it
-	// wants to be full of wet black branches rather than showing the gap between two of them.
-	// Trunk plus stacked cones, each on its own pivot at the base so it bends rather than slides.
-	const int32 TreeCount = 16;
-	for (int32 i = 0; i < TreeCount; ++i)
-	{
-		USceneComponent* Pivot = NewObject<USceneComponent>(this, MakeUniqueObjectName(this, USceneComponent::StaticClass(), TEXT("TreePivot")));
-		Pivot->SetMobility(EComponentMobility::Movable);
-		Pivot->AttachToComponent(StormRoot, FAttachmentTransformRules::KeepRelativeTransform);
-		Pivot->SetRelativeLocation(FVector(Random.FRandRange(620.f, 2400.f), Random.FRandRange(-1100.f, 1100.f), -40.f));
-		Pivot->RegisterComponent();
-		AddInstanceComponent(Pivot);
-
-		FRoomBuilder TreeBuild(this, Pivot);
-		const float TreeHeight = Random.FRandRange(500.f, 980.f);
-
-		// Nothing out here casts a shadow. A treeline is a solid wall to a light arriving almost
-		// horizontally, and with shadows on it simply switched the storm off — the room went black
-		// and the window with it.
-		auto NoShadow = [](UStaticMeshComponent* Part)
-		{
-			if (Part)
-			{
-				Part->SetCastShadow(false);
-			}
-		};
-
-		NoShadow(TreeBuild.Cyl(FVector(0.f, 0.f, TreeHeight * 0.5f), FRotator::ZeroRotator, FVector(Random.FRandRange(26.f, 44.f), Random.FRandRange(26.f, 44.f), TreeHeight), TrunkMat, /*bBlockingCollision*/ false));
-
-		const int32 CanopyLayers = Random.RandRange(2, 4);
-		for (int32 Layer = 0; Layer < CanopyLayers; ++Layer)
-		{
-			const float LayerFraction = 1.f - Layer * 0.22f;
-			NoShadow(TreeBuild.Add(
-				FRoomShapes::Cone(),
-				FVector(0.f, 0.f, TreeHeight * (0.55f + Layer * 0.18f)),
-				FRotator::ZeroRotator,
-				FVector(TreeHeight * 0.62f * LayerFraction, TreeHeight * 0.62f * LayerFraction, TreeHeight * 0.45f * LayerFraction),
-				LeafMat,
-				/*bBlockingCollision*/ false));
-		}
-
-		Trees.Add(Pivot);
-		TreePhases.Add(Random.FRandRange(0.f, 100.f));
-	}
-}
-
-void AStormWindowActor::BuildLightningBolts()
-{
-	// Three bolts, built once and hidden. Each is a jagged walk downward with two forks off it —
-	// the shape matters less than the fact that it is different every strike, because a player
-	// who sees the same bolt twice stops believing in the weather.
-	const int32 BoltCount = 3;
-	for (int32 BoltIndex = 0; BoltIndex < BoltCount; ++BoltIndex)
-	{
-		USceneComponent* Pivot = NewObject<USceneComponent>(this, MakeUniqueObjectName(this, USceneComponent::StaticClass(), TEXT("BoltPivot")));
-		Pivot->SetMobility(EComponentMobility::Movable);
-		Pivot->AttachToComponent(StormRoot, FAttachmentTransformRules::KeepRelativeTransform);
-		Pivot->SetRelativeLocation(FVector(2400.f, 0.f, 0.f));
-		Pivot->RegisterComponent();
-		AddInstanceComponent(Pivot);
-
-		FRoomBuilder BoltBuild(this, Pivot);
-		UMaterialInstanceDynamic* BoltMat = BoltBuild.Emissive(RoomPalette::Lightning, 0.f);
-
-		// Draws one jagged run of segments between two heights, and returns where it ended so a
-		// fork can be hung off it.
-		auto DrawRun = [&](FVector From, float ToZ, int32 Segments, float Spread, float Thickness) -> FVector
-		{
-			FVector Current = From;
-			for (int32 i = 0; i < Segments; ++i)
-			{
-				const float Alpha = (i + 1) / static_cast<float>(Segments);
-				const FVector Next(
-					From.X + Random.FRandRange(-Spread, Spread),
-					From.Y + Random.FRandRange(-Spread, Spread) + (Alpha - 0.5f) * Spread,
-					FMath::Lerp(From.Z, ToZ, Alpha));
-
-				const FVector Delta = Next - Current;
-				const float Length = Delta.Size();
-				if (Length > KINDA_SMALL_NUMBER)
-				{
-					const float Taper = FMath::Lerp(Thickness, Thickness * 0.35f, Alpha);
-					BoltBuild.Cyl(
-						Current + Delta * 0.5f,
-						FRotationMatrix::MakeFromZ(Delta / Length).Rotator(),
-						FVector(Taper, Taper, Length * 1.06f), // overlapped a little so the joints do not show gaps
-						BoltMat,
-						/*bBlockingCollision*/ false);
-				}
-				Current = Next;
-			}
-			return Current;
-		};
-
-		const FVector Head(0.f, 0.f, 1500.f);
-		const FVector Tail = DrawRun(Head, 40.f, 11, 130.f, 9.f);
-		DrawRun(FVector(Tail.X, Tail.Y, 780.f), 260.f, 4, 180.f, 5.f);
-		DrawRun(FVector(Tail.X, Tail.Y, 1080.f), 620.f, 3, 150.f, 4.f);
-
-		Pivot->SetVisibility(false, /*bPropagateToChildren*/ true);
-		Bolts.Add(Pivot);
-		BoltMaterials.Add(BoltMat);
-	}
-}
-
 void AStormWindowActor::BuildRain()
 {
 	FRoomBuilder Build(this, StormRoot);
@@ -1124,26 +961,6 @@ void AStormWindowActor::TickCurtains(float DeltaTime)
 	}
 }
 
-void AStormWindowActor::TickTrees(float DeltaTime)
-{
-	const float Gust = GetWindGust();
-
-	for (int32 i = 0; i < Trees.Num(); ++i)
-	{
-		USceneComponent* Pivot = Trees[i];
-		if (!Pivot)
-		{
-			continue;
-		}
-
-		const float Phase = TreePhases.IsValidIndex(i) ? TreePhases[i] : 0.f;
-		// Violent, not decorative: a heavy lean driven by the gust plus a fast whip on top.
-		const float Lean = FMath::Lerp(2.f, 13.f, Gust) * (0.7f + 0.3f * FMath::Sin(ElapsedTime * 0.8f + Phase));
-		const float Whip = FMath::Sin(ElapsedTime * 3.3f + Phase) * FMath::Lerp(0.8f, 4.f, Gust);
-		Pivot->SetRelativeRotation(FRotator(0.f, 0.f, -(Lean + Whip)));
-	}
-}
-
 void AStormWindowActor::TickRain(float DeltaTime)
 {
 	if (!RainInstances || RainPositions.Num() == 0)
@@ -1181,12 +998,29 @@ void AStormWindowActor::TickRain(float DeltaTime)
 
 void AStormWindowActor::BeginStrike()
 {
-	// Each strike is a short burst of two to five sub-flashes (RandRange is inclusive at both
-	// ends). The first is the brightest; the rest are the flickering afterbeats that make
-	// lightning feel like a discharge rather than a light switch.
 	++StrikeCount;
-	SubFlashesRemaining = Random.RandRange(2, 5);
-	StrikeIntensity = Random.FRandRange(StrikeLux.X, StrikeLux.Y);
+
+	// Two kinds of lightning, and most of it is the quiet kind. A discharge inside the cloud lights
+	// a part of the sky from within, flickers for a third of a second and barely reaches the room.
+	// A strike to ground is the one with a channel down to the trees, and it throws the window
+	// across the far wall. A storm that sends one of those every few seconds is a strobe, not
+	// weather.
+	bGroundStrike = Random.FRand() < GroundStrikeShare;
+	if (bGroundStrike)
+	{
+		// Return strokes: the first is the brightest, and two to four more follow down the same
+		// channel.
+		SubFlashesRemaining = Random.RandRange(2, 5);
+		StrikeIntensity = Random.FRandRange(StrikeLux.X, StrikeLux.Y);
+		bChannel = true;
+	}
+	else
+	{
+		SubFlashesRemaining = Random.RandRange(3, 8);
+		StrikeIntensity = Random.FRandRange(CloudFlashLux.X, CloudFlashLux.Y);
+		// One in three of them shows something: a crawler running out under the cloud base.
+		bChannel = Random.FRand() < 0.34f;
+	}
 	bSubFlashOn = true;
 	SubFlashTimer = Random.FRandRange(0.05f, 0.12f);
 
@@ -1194,18 +1028,10 @@ void AStormWindowActor::BeginStrike()
 	const FRotator Aim(Random.FRandRange(-20.f, -6.f), Random.FRandRange(108.f, 136.f), 0.f);
 	LightningLight->SetRelativeRotation(Aim);
 
-	// Show the strike, not just its effect. One of the prebuilt bolts is moved out beyond the
-	// treeline and switched on for the leading sub-flash — near enough to be framed by the
-	// window, far enough that it reads as weather rather than as an object in the garden.
-	// It is shown by TickLightning, for as long as a sub-flash is discharging.
-	if (Bolts.Num() > 0)
+	// A strike held in the sky for a still (-StormFlash, -StormSkyFlash) stays where it was put.
+	if (Forest && !bForcedStrikePlaced)
 	{
-		ActiveBolt = Random.RandRange(0, Bolts.Num() - 1);
-		if (USceneComponent* Bolt = Bolts[ActiveBolt])
-		{
-			Bolt->SetRelativeLocation(FVector(Random.FRandRange(1500.f, 2900.f), Random.FRandRange(-700.f, 700.f), 0.f));
-			Bolt->SetRelativeRotation(FRotator(0.f, Random.FRandRange(-25.f, 25.f), 0.f));
-		}
+		Forest->PlaceStrike(Random, bGroundStrike);
 	}
 
 	// PlayThunder() belongs here — deliberately unwired until a free-licensed thunder cue is
@@ -1221,7 +1047,7 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 		StrikeIntensity = Lead->GetStrikeIntensity();
 		const float GlowScale = (bViewUnderground || bViewSealed) ? 0.f : (Setup.bOwnView ? 900.f : 260.f) * Setup.GlowScale;
 		LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * GlowScale);
-		SkyPortal->SetIntensity(SkyPortalCandelas * Setup.PortalScale * (1.f + LitFlash() * 9.f));
+		SkyPortal->SetIntensity(SkyPortalCandelas * Setup.PortalScale * (1.f + LitFlash() * PortalFlood()));
 		if (Setup.bOwnView)
 		{
 			FollowOwnView();
@@ -1242,14 +1068,20 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 				--SubFlashesRemaining;
 				if (SubFlashesRemaining <= 0)
 				{
-					TimeUntilNextStrike = Random.FRandRange(StrikeInterval.X, StrikeInterval.Y);
+					// Now and then a second discharge follows the first within a couple of seconds;
+					// otherwise the sky is left alone for a good while.
+					const bool bAgain = Random.FRand() < 0.16f;
+					const float Soon = Random.FRandRange(1.1f, 2.6f);
+					const float Later = Random.FRandRange(StrikeInterval.X, StrikeInterval.Y);
+					TimeUntilNextStrike = bAgain ? Soon : Later;
 				}
 			}
 			else
 			{
 				bSubFlashOn = true;
 				SubFlashTimer = Random.FRandRange(0.03f, 0.1f);
-				StrikeIntensity *= Random.FRandRange(0.45f, 0.8f); // afterbeats fall off
+				// Return strokes fall off; a flicker in the cloud goes up as well as down.
+				StrikeIntensity *= bGroundStrike ? Random.FRandRange(0.45f, 0.8f) : Random.FRandRange(0.6f, 1.25f);
 			}
 		}
 	}
@@ -1266,14 +1098,27 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 	// cutting to black and the flash leaves an afterimage.
 	const float Target = (SubFlashesRemaining > 0 && bSubFlashOn) ? 1.f : 0.f;
 	FlashAlpha = (Target > FlashAlpha) ? Target : FMath::FInterpTo(FlashAlpha, Target, DeltaTime, 14.f);
+	bool bDischarging = SubFlashesRemaining > 0 && bSubFlashOn;
 
 	// -StormFlash: the sky held at full flash, so where a strike's light reaches can be checked in a
-	// -RoomShot (a strike cannot be timed into a still). Without the flag nothing changes.
+	// -RoomShot (a strike cannot be timed into a still). -StormFlashYaw=<degrees> says where in the
+	// sky the strike stands (world yaw; 0 is out of the bedroom window), so it can be put in front
+	// of whichever window the shot is taken through. Without the flag nothing changes.
 	static const bool bForceFlash = FParse::Param(FCommandLine::Get(), TEXT("StormFlash"));
 	if (bForceFlash)
 	{
 		FlashAlpha = 1.f;
 		StrikeIntensity = StrikeLux.Y;
+		bDischarging = true;
+		bChannel = true;
+		if (!bForcedStrikePlaced && Forest)
+		{
+			bForcedStrikePlaced = true;
+			float Yaw = 0.f;
+			FParse::Value(FCommandLine::Get(), TEXT("-StormFlashYaw="), Yaw);
+			FRandomStream Fixed(1104);
+			Forest->PlaceStrike(Fixed, /*bGroundStrike*/ true, Yaw);
+		}
 	}
 
 	// Never drops to zero: the floor value is the overcast sky the storm sits under, and it is what
@@ -1282,74 +1127,49 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 	LightningGlow->SetIntensity((bViewUnderground || bViewSealed) ? 0.f : FlashAlpha * StrikeIntensity * 260.f);
 	// The window itself floods when the sky goes off: from inside a room, that — not the bolt — is
 	// what a strike actually looks like.
-	SkyPortal->SetIntensity(SkyPortalCandelas * (1.f + LitFlash() * 9.f));
+	SkyPortal->SetIntensity(SkyPortalCandelas * (1.f + LitFlash() * PortalFlood()));
 
-	// The channel is only lit while it is actually discharging — it snaps off with the sub-flash
-	// rather than fading, which is what stops it looking like a hanging neon tube. Visibility
-	// follows the discharge both ways, so every sub-flash of a strike shows its channel.
-	const bool bDischarging = SubFlashesRemaining > 0 && bSubFlashOn;
-	ShowBolt(bDischarging ? ActiveBolt : INDEX_NONE);
-
-	// The whole sky lights up with the discharge, not just the channel — from inside the room that
-	// is most of what a distant strike looks like. Between strikes it sits at its floor, and is
-	// left alone there.
-	if (SkyMaterial && (FlashAlpha > 0.f || !bSkyAtFloor))
+	// The sky: the cloud round the strike lit from inside for as long as the flash lasts, and the
+	// channel only while it is actually discharging. It snaps off with the sub-flash rather than
+	// fading, which is what stops it looking like a hanging neon tube.
+	if (Forest)
 	{
-		SkyMaterial->SetScalarParameterValue(TEXT("Intensity"), SkyGlowFloor + FlashAlpha * 5.f);
-		bSkyAtFloor = FlashAlpha <= 0.f;
+		// -StormSkyFlash: the strike held in the sky only, at -StormFlashYaw, with the room's lights
+		// left as they are between strikes. -StormFlash whites the room out; this is for looking at
+		// the bolt and the lit cloud through a window in a still.
+		static const bool bSkyOnly = FParse::Param(FCommandLine::Get(), TEXT("StormSkyFlash"));
+		if (bSkyOnly && !bForcedStrikePlaced)
+		{
+			bForcedStrikePlaced = true;
+			float Yaw = 0.f;
+			FParse::Value(FCommandLine::Get(), TEXT("-StormFlashYaw="), Yaw);
+			FRandomStream Fixed(1104);
+			Forest->PlaceStrike(Fixed, /*bGroundStrike*/ true, Yaw);
+		}
+		const float Strength = FMath::Clamp(StrikeIntensity / StrikeLux.Y, 0.f, 1.f);
+		Forest->UpdateStorm(bSkyOnly ? 1.f : FlashAlpha * FMath::Lerp(0.3f, 1.f, Strength), bSkyOnly || (bDischarging && bChannel), GetWindGust());
 	}
 }
 
-void AStormWindowActor::ShowBolt(int32 Index)
+float AStormWindowActor::PortalFlood() const
 {
-	if (Index == LitBolt)
-	{
-		return;
-	}
-	for (const int32 i : { LitBolt, Index })
-	{
-		const bool bShow = i == Index;
-		if (Bolts.IsValidIndex(i) && Bolts[i])
-		{
-			Bolts[i]->SetVisibility(bShow, /*bPropagateToChildren*/ true);
-		}
-		if (BoltMaterials.IsValidIndex(i) && BoltMaterials[i])
-		{
-			BoltMaterials[i]->SetScalarParameterValue(TEXT("Intensity"), bShow ? 14.f : 0.f);
-		}
-	}
-	LitBolt = Index;
+	// How many times over the sky in the opening brightens at the top of a flash: tenfold for the
+	// strongest strike to ground, and in proportion for a flicker in the cloud, which is a pulse
+	// in the window's light and no more.
+	return 9.f * FMath::Clamp(StrikeIntensity / StrikeLux.Y, 0.f, 1.f);
 }
 
 void AStormWindowActor::FollowOwnView()
 {
-	// Same strike as the lead, seen out of a different side of the house: a new bolt somewhere in
-	// this window's own sky, and the flash thrown from a new place, once per strike.
+	// Same strike as the lead, seen out of a different side of the house: the flash thrown from a
+	// new place, once per strike. The strike itself is in the one sky (AStormForestActor), and from
+	// this side it may be no more than the cloud lighting up.
 	const int32 LeadStrike = Lead->GetStrikeCount();
 	if (LeadStrike != FollowedStrike)
 	{
 		FollowedStrike = LeadStrike;
 		LightningGlow->SetRelativeLocation(FVector(Random.FRandRange(1600.f, 2400.f), Random.FRandRange(-900.f, 900.f),
 			(Setup.SillHeight + Setup.TopHeight) * 0.5f + Random.FRandRange(450.f, 1000.f)));
-		if (Bolts.Num() > 0)
-		{
-			ActiveBolt = Random.RandRange(0, Bolts.Num() - 1);
-			if (USceneComponent* Bolt = Bolts[ActiveBolt])
-			{
-				Bolt->SetRelativeLocation(FVector(Random.FRandRange(1500.f, 2900.f), Random.FRandRange(-700.f, 700.f), 0.f));
-				Bolt->SetRelativeRotation(FRotator(0.f, Random.FRandRange(-25.f, 25.f), 0.f));
-			}
-		}
-	}
-
-	// The lead does not say whether a sub-flash is on, only how bright the sky is; near the top of
-	// a flash is close enough, and it still snaps off between afterbeats.
-	const bool bDischarging = FlashAlpha > 0.6f;
-	ShowBolt(bDischarging ? ActiveBolt : INDEX_NONE);
-	if (SkyMaterial && (FlashAlpha > 0.f || !bSkyAtFloor))
-	{
-		SkyMaterial->SetScalarParameterValue(TEXT("Intensity"), SkyGlowFloor + FlashAlpha * 5.f);
-		bSkyAtFloor = FlashAlpha <= 0.f;
 	}
 }
 
@@ -1361,6 +1181,5 @@ void AStormWindowActor::Tick(float DeltaTime)
 
 	TickLightning(DeltaTime);
 	TickCurtains(DeltaTime);
-	TickTrees(DeltaTime);
 	TickRain(DeltaTime);
 }

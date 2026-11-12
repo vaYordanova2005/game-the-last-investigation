@@ -64,6 +64,27 @@ void AHallDoorActor::BuildLeaf()
 	const float LeafZ = H * 0.5f;
 	const float LeafHalf = 2.25f;
 
+	if (Setup.LeafModel)
+	{
+		// A generated leaf: an invisible slab for the collision and the trace, the model for the eye.
+		if (UStaticMeshComponent* Slab = Build.Box(FVector(0.f, LeafY, LeafZ), FRotator::ZeroRotator, FVector(LeafHalf * 2.f, W, H), VoidMat))
+		{
+			Slab->SetVisibility(false);
+			Slab->SetCastShadow(false);
+		}
+		if (UStaticMeshComponent* Leaf = Build.Prop(Setup.LeafModel, FVector::ZeroVector, FRotator::ZeroRotator, 0.f, /*bBlockingCollision*/ false))
+		{
+			for (const TPair<FName, UMaterialInterface*>& Slot : Setup.LeafSlots)
+			{
+				if (Slot.Value && Leaf->GetMaterialIndex(Slot.Key) != INDEX_NONE)
+				{
+					Leaf->SetMaterialByName(Slot.Key, Slot.Value);
+				}
+			}
+		}
+		return;
+	}
+
 	// The leaf itself blocks; everything laid on it is decoration.
 	Build.Box(FVector(0.f, LeafY, LeafZ), FRotator::ZeroRotator, FVector(LeafHalf * 2.f, W, H), WoodMat);
 
