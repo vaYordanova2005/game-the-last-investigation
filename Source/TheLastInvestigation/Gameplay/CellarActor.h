@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "WineCellarActor.h"
 #include "LaundryActor.h"
+#include "DarkroomActor.h"
 #include "CellarActor.generated.h"
 
 class FRoomBuilder;
@@ -51,13 +52,14 @@ struct FCellarSetup
  * The first room on the left, across the corridor from the maid's room, is her laundry
  * (ALaundryActor), which builds its own shell like the wine cellar.
  *
- * The last room is a bare cellar room — brick, flags, joists, damp — behind a plank door that
- * stands a crack open and gives when pushed. What goes in it is not decided yet.
+ * The second room on the right, past the maid's room, is the father's darkroom (ADarkroomActor):
+ * the cellar builds its brick shell and its plank door, and the darkroom furnishes it, its red
+ * safelight still burning.
  *
  *                       north
  *            +-----------+ +----------------------+
- *            |  room N2  | |  bedroom (Room01's   |
- *            |  (bare)   | |  furniture)          |
+ *            | darkroom  | |  bedroom (Room01's   |
+ *            |  (red)    | |  furniture)          |
  *            +---[d]-----+ +-------[opening]------+
  *            | corridor  <---------------------------- foot <-- stair, down westward -- top | door (hall)
  *  +-------------[D]--------+ +----[d]-------+
@@ -134,6 +136,8 @@ private:
 		bool bWine = false;
 		/** The laundry, which builds its own shell too (ALaundryActor). */
 		bool bLaundry = false;
+		/** The darkroom: the cellar's shell, furnished by ADarkroomActor. */
+		bool bDarkroom = false;
 	};
 
 	float FloorZ() const { return Setup.GroundZ - DepthBelowHall; }
@@ -168,6 +172,7 @@ private:
 	void SpawnDoor(const FCellarRoom& Room);
 	void SpawnWineCellar(const FCellarRoom& Room);
 	void SpawnLaundry(const FCellarRoom& Room);
+	void SpawnDarkroom(const FCellarRoom& Room);
 
 	UPROPERTY(VisibleAnywhere, Category = "Cellar")
 	TObjectPtr<USceneComponent> CellarRoot;
@@ -183,6 +188,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ALaundryActor> Laundry;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ADarkroomActor> Darkroom;
 
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatBrick;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatTread;
@@ -219,3 +227,7 @@ static_assert(ALaundryActor::WallThickness == ACellarActor::WallThickness, "The 
 static_assert(ALaundryActor::Height == ACellarActor::RoomHeight, "The laundry's door wall must stop where the corridor wall over it starts");
 static_assert(ALaundryActor::DoorHalf * 2.f == ACellarActor::BareDoorWidth && ALaundryActor::DoorHeight == ACellarActor::BareDoorHeight,
 	"The laundry's doorway must be the bare rooms' doorway, which the cellar hangs its door in");
+static_assert(ADarkroomActor::WallThickness == ACellarActor::WallThickness && ADarkroomActor::Height == ACellarActor::RoomHeight,
+	"The darkroom stands in the cellar's shell: its walls and height must be the cellar's");
+static_assert(ADarkroomActor::DoorHalf * 2.f == ACellarActor::BareDoorWidth && ADarkroomActor::DoorHeight == ACellarActor::BareDoorHeight,
+	"The darkroom's doorway is a bare room's");
