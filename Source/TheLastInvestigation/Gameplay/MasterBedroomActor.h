@@ -49,7 +49,7 @@ struct FMasterBedroomSetup
  *  W   |  wardrobes     [  foot  ]                                       |  window
  *  E   |  (west wall,      bench                          wake *         | (east, the
  *  S   |   one open)                                        armchair  ottoman storm)
- *  T   |  suitcase            (hook)                 lamp  side table    |
+ *  T   |  suitcase            (hook)                       side table    |
  *      |                                                                 |
  *      +----------- TV over the cabinet ------- MIRROR [door] -----------+
  *                        south (the corridor)
@@ -148,13 +148,6 @@ private:
 	 * through the arm, and the mug on it in the upholstery.
 	 */
 	FVector SideTableSeat() const { return FVector(248.f, 103.f, 0.f); }
-	/**
-	 * On the window side of the table, out of the waking view (behind the chair it stood across the
-	 * door), and clear of the south drape: its pole stands 26 off the wall (X 374) and, with the
-	 * window 280 wide, the drape hangs from Y 124 to 188 and swings. The shade is 22.6 across its
-	 * radius; here it reaches X 283 and Y 199..245.
-	 */
-	FVector FloorLampSeat() const { return FVector(260.f, 222.f, 0.f); }
 	/** In front of the chair, square to it, 6 clear of its front (45 out), the ottoman 48 deep. */
 	FVector OttomanSeat() const { return FVector(276.f, 15.f, 0.f); }
 	FVector PlantSeat() const { return FVector(350.f, -272.f, 0.f); }
@@ -244,7 +237,6 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatLinen;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatMattress;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatThrow;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatShade;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatShirt;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatShirtBlue;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MatDress;
