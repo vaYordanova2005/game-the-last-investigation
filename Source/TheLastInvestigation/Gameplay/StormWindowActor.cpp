@@ -761,7 +761,11 @@ void AStormWindowActor::BuildWindow()
 	{
 		const float SideSign = Side == 0 ? -1.f : 1.f;
 		Build.Sph(FVector(PoleX, SideSign * (HalfWidth + 44.f), PoleZ), 7.f, IronMat);
-		Build.Box(FVector(PoleX + 8.f, SideSign * (HalfWidth + 38.f), PoleZ), FRotator::ZeroRotator, FVector(18.f, 4.f, 4.f), IronMat, /*bBlockingCollision*/ false);
+		const FVector Bracket(PoleX + 8.f, SideSign * (HalfWidth + 38.f), PoleZ);
+		Build.Box(Bracket, FRotator::ZeroRotator, FVector(18.f, PoleBracketSection, PoleBracketSection), IronMat, /*bBlockingCollision*/ false);
+		// The bracket runs back to within a few centimetres of the plaster, for whoever lays decals on
+		// that wall (GetPoleBrackets).
+		PoleBrackets.Add(StormRoot->GetComponentTransform().TransformPosition(Bracket));
 	}
 
 	// The curtains, and they are the one thing in this room that cannot be made out of boxes.

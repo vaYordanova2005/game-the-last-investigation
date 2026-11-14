@@ -53,7 +53,7 @@ TArray<ACellarActor::FCellarRoom> ACellarActor::Rooms() const
 	// west and deepened south: its east wall where S2's was, its door near its own east end.
 	const float BedCentreX = BedroomDoorX() - DoorOpeningCenterX;
 	const float BedWestOuter = BedCentreX - (RoomWidth + WallThickness) * 0.5f;
-	const float NorthTwoX = BedWestOuter - 10.f - (600.f + WallThickness) * 0.5f;
+	const float NorthTwoX = BedWestOuter - 10.f - (ADarkroomActor::Width + WallThickness) * 0.5f;
 	const float SouthOneX = FootX() - 42.f - (ALaundryActor::Width + WallThickness) * 0.5f;
 	const float WineX = SouthOneX - (ALaundryActor::Width + WallThickness) * 0.5f - 10.f - (AWineCellarActor::Width + WallThickness) * 0.5f;
 	FCellarRoom Wine{ WineX, AWineCellarActor::Width, AWineCellarActor::Depth, false, WineX + AWineCellarActor::DoorX, false, 6303 };
@@ -61,9 +61,12 @@ TArray<ACellarActor::FCellarRoom> ACellarActor::Rooms() const
 	// The laundry, across the corridor from the maid's room: the room that was S1.
 	FCellarRoom LaundryRoom{ SouthOneX, ALaundryActor::Width, ALaundryActor::Depth, false, SouthOneX + ALaundryActor::DoorX, false, 6202 };
 	LaundryRoom.bLaundry = true;
+	// The darkroom, past the maid's room: the room that was N2, its size and door kept.
+	FCellarRoom DarkroomRoom{ NorthTwoX, ADarkroomActor::Width, ADarkroomActor::Depth, true, NorthTwoX + ADarkroomActor::DoorX, false, 6101 };
+	DarkroomRoom.bDarkroom = true;
 	return {
 		{ BedCentreX, RoomWidth, RoomDepth, true, BedroomDoorX(), true, 6000 },
-		{ NorthTwoX, 600.f, 500.f, true, NorthTwoX - 110.f, false, 6101 },
+		DarkroomRoom,
 		LaundryRoom,
 		Wine,
 	};
@@ -133,6 +136,10 @@ void ACellarActor::BeginPlay()
 			{
 				SpawnBedroom(Room);
 				BuildMaidsCorner(Build, Room);
+			}
+			else if (Room.bDarkroom)
+			{
+				SpawnDarkroom(Room);
 			}
 			else
 			{
@@ -833,6 +840,17 @@ void ACellarActor::SpawnLaundry(const FCellarRoom& Room)
 	if (Laundry)
 	{
 		Laundry->FinishSpawning(Transform);
+	}
+}
+
+void ACellarActor::SpawnDarkroom(const FCellarRoom& Room)
+{
+	// In the cellar's frame, translated to the room's centre on its floor, like the laundry.
+	const FTransform Transform(FRotator::ZeroRotator, GetActorTransform().TransformPosition(RoomCentre(Room)));
+	Darkroom = GetWorld()->SpawnActorDeferred<ADarkroomActor>(ADarkroomActor::StaticClass(), Transform, this);
+	if (Darkroom)
+	{
+		Darkroom->FinishSpawning(Transform);
 	}
 }
 

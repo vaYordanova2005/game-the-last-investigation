@@ -249,8 +249,12 @@ private:
 	FVector WallPoint(EWall Wall, float U, float Z, float Proud) const;
 	/** The yaw that turns a model's local +Y — the way every model here faces — out of a wall. */
 	static float FacingYaw(EWall Wall);
-	/** The openings of a wall, with the trim round them. */
-	TArray<FBox2D> Holes(EWall Wall) const;
+	/**
+	 * The openings of a wall, with the trim round them. The door case is its whole extent (cornice
+	 * reach to its top) for the decals; with bFinishes, the outline the walls' finishes butt against:
+	 * the architraves below the frieze, the cornice's reach only from the frieze up.
+	 */
+	TArray<FBox2D> Holes(EWall Wall, bool bFinishes = false) const;
 	/** A sheet of the damask over pieces of a wall, its UVs in centimetres from the wall's origin. */
 	void DamaskSheet(EWall Wall, const TArray<FBox2D>& Pieces);
 	/** A lacquered panel on a wall, on its own instance with the repeats written out (the 10-09 rule). */
