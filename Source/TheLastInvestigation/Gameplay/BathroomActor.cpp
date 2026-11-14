@@ -424,8 +424,9 @@ void ABathroomActor::Blocker(FRoomBuilder& Build, const FVector& Centre, const F
 void ABathroomActor::Dust(FRoomBuilder& Build, const FVector& Top, const FVector2D& Size, float Yaw, float Opacity) const
 {
 	// Aimed down, a decal lays its first size along world Y and its second along X (09-27): Size is
-	// (X, Y) in the piece's own frame and swapped here, the roll turning it with the piece.
-	Build.Stain(RoomSurfaces::Paint, Top + FVector(0.f, 0.f, 4.f), FRotator(-90.f, 0.f, Yaw), FVector2D(Size.Y, Size.X), BathFilm, Opacity * 0.8f, 0.45f);
+	// (X, Y) in the piece's own frame and swapped here. With pitch -90 the decal's X points down, and
+	// a roll R about it turns the footprint by a yaw of -R, so the roll is -Yaw to turn it with the piece.
+	Build.Stain(RoomSurfaces::Paint, Top + FVector(0.f, 0.f, 4.f), FRotator(-90.f, 0.f, -Yaw), FVector2D(Size.Y, Size.X), BathFilm, Opacity * 0.8f, 0.45f);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -586,7 +587,10 @@ bool ABathroomActor::WallDecalHitsSomething(EWall Wall, float U, float Z, const 
 bool ABathroomActor::FloorDecalReachesDoor(const FVector2D& Centre, const FVector2D& Size, float Roll) const
 {
 	// The leaf sweeps a quarter disc into the room from its hinge on the west jamb; the sill is the
-	// opening's width across the wall. Both by the decal's rolled footprint, not its centre.
+	// opening's width across the wall. Both by the decal's rolled footprint, not its centre. Opened
+	// past ninety degrees the leaf's end crosses the hinge's line west of the jamb by
+	// LeafWidth * sin(OpenYaw - 90) (Room01's ReachesDoorSwing), so that half-plane is pushed out by
+	// it; at the bathroom's 89 degrees it is zero.
 	const FVector2D Half = BathRolledHalf(Size, Roll);
 	const FBox2D Footprint(Centre - Half, Centre + Half);
 	const FBox2D Sill(FVector2D(Setup.DoorX - Setup.DoorHalf - 10.f, NorthY() - 25.f), FVector2D(Setup.DoorX + Setup.DoorHalf + 10.f, NorthY() + 10.f));
@@ -596,7 +600,8 @@ bool ABathroomActor::FloorDecalReachesDoor(const FVector2D& Centre, const FVecto
 	}
 	const FVector2D Hinge(Setup.HingeX, NorthY());
 	const float Reach = Setup.DoorLeafWidth + 12.f;
-	if (Footprint.Max.X < Hinge.X - 10.f || Footprint.Max.Y < Hinge.Y)
+	const float Overswing = Setup.DoorLeafWidth * FMath::Sin(FMath::DegreesToRadians(FMath::Max(0.f, Setup.DoorOpenYaw - 90.f)));
+	if (Footprint.Max.X < Hinge.X - 10.f - Overswing || Footprint.Max.Y < Hinge.Y)
 	{
 		return false;
 	}

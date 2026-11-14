@@ -26,7 +26,8 @@ struct FBathroomSetup
 	float DoorHeight = 212.f;
 	/**
 	 * The leaf's hinge, on the door's west jamb, and how far it opens into the room: the floor's
-	 * decals keep off the quarter disc it sweeps (the 10-05 rule).
+	 * decals keep off the quarter disc it sweeps, and off its overswing past the hinge if it opens
+	 * beyond ninety degrees (the 10-05 rule; none at 89).
 	 */
 	float HingeX = -568.f;
 	float DoorLeafWidth = 96.f;
