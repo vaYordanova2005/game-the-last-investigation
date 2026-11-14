@@ -98,6 +98,10 @@ namespace
 		const float T = X / HalfSpan;
 		return Top - 7.f * (1.f - T * T);
 	}
+
+	/** Where the family's own prints hang on the line: the print and its clue marker both read these. */
+	constexpr float DarkroomWeddingX = -232.f;
+	constexpr float DarkroomViolinX = -34.f;
 }
 
 ADarkroomActor::ADarkroomActor()
@@ -448,7 +452,7 @@ void ADarkroomActor::BuildWetBench(FRoomBuilder& Build)
 }
 
 // ---------------------------------------------------------------------------------------------
-// The safelight: a red lamp on the wall over the sink, still burning.
+// The safelight: a red pendant from the middle joist, still burning.
 // ---------------------------------------------------------------------------------------------
 
 void ADarkroomActor::BuildSafelight(FRoomBuilder& Build)
@@ -493,8 +497,17 @@ void ADarkroomActor::BuildCameraCabinet(FRoomBuilder& Build)
 	// end nearer the room's door. Opened by a negative yaw in the cabinet's frame.
 	const float HalfW = CabinetWidth * 0.5f;
 	const float HalfD = CabinetDepth * 0.5f;
-	Place(Build, DarkroomProps::CabinetDoor, InCabinet(FVector(HalfW - 2.f, HalfD - 2.1f, CabinetShelves[0])), FRotator(0.f, 180.f - 78.f, 0.f),
+	const FVector DoorHinge = InCabinet(FVector(HalfW - 2.f, HalfD - 2.1f, CabinetShelves[0]));
+	const float DoorYaw = 180.f - 78.f;
+	Place(Build, DarkroomProps::CabinetDoor, DoorHinge, FRotator(0.f, DoorYaw, 0.f),
 		{ { TEXT("Wood"), MatCabinet }, { TEXT("Glass"), MatCaseGlass }, { TEXT("Chrome"), MatSteel } });
+	// The open leaf stands out into the room past the cabinet's blocker: a thin one of its own along
+	// it, or the detective walks through the glass. The leaf runs along the model's -X from the hinge
+	// and is 2.2 thick towards its +Y; from the case's floor to the door's top (CabinetHeight - 3).
+	const FRotator DoorRot(0.f, DoorYaw, 0.f);
+	const float LeafHeight = CabinetHeight - 3.f - CabinetShelves[0];
+	const FVector LeafMiddle = DoorHinge + DoorRot.RotateVector(FVector(-CabinetDoorWidth * 0.5f, 1.1f, LeafHeight * 0.5f));
+	Blocker(Build, LeafMiddle, FVector(CabinetDoorWidth, 4.f, LeafHeight), DoorYaw);
 
 	// Each thing in the cabinet's frame: X along it (-X behind the shut door), Y out of it, Z its shelf.
 	struct FItem { const TCHAR* Model; float X; float Y; int32 Shelf; float Yaw; float Lift; };
@@ -630,18 +643,22 @@ void ADarkroomActor::BuildDryingLine(FRoomBuilder& Build)
 			Part->SetCastShadow(true);
 		}
 	}
+	// The eye bolts go into the brick along X (pitch 90 lays a cylinder's axis along X; roll would lay
+	// it along the wall): 2cm in the wall, 3 proud of it, the line's end inside the proud part.
+	const float BoltLength = 5.f;
+	const float BoltInWall = 2.f;
 	for (const float Side : { -1.f, 1.f })
 	{
-		Build.Cyl(FVector(Side * (HalfX - 2.f), LineY, LineZ), FRotator(0.f, 0.f, 90.f), FVector(1.2f, 1.2f, 5.f), MatIron, false);
+		Build.Cyl(FVector(Side * (HalfX + BoltInWall - BoltLength * 0.5f), LineY, LineZ), FRotator(90.f, 0.f, 0.f), FVector(1.2f, 1.2f, BoltLength), MatIron, false);
 	}
 
 	// The prints, as he hung them: the family's pictures, and the ones that went wrong. Clear of the
 	// eye's way through the middle of the room, and the dark ones where the red light falls.
-	HangPrint(Build, TEXT("wedding"), -232.f, 16.f, 20.f, -6.f);
+	HangPrint(Build, TEXT("wedding"), DarkroomWeddingX, 16.f, 20.f, -6.f);
 	HangPrint(Build, TEXT("dark_b"), -186.f, 20.f, 16.f, 4.f);
 	HangPrint(Build, TEXT("family"), -128.f, 20.f, 16.f, -3.f);
 	HangPrint(Build, TEXT("negs"), -86.f, 3.f, 24.f, 8.f);
-	HangPrint(Build, TEXT("violin"), -34.f, 16.f, 20.f, 5.f);
+	HangPrint(Build, TEXT("violin"), DarkroomViolinX, 16.f, 20.f, 5.f);
 	HangPrint(Build, TEXT("dark_a"), 28.f, 16.f, 20.f, -8.f);
 	HangPrint(Build, TEXT("house"), 84.f, 20.f, 16.f, 2.f);
 	HangPrint(Build, TEXT("negs"), 128.f, 3.f, 24.f, -5.f);
@@ -656,8 +673,8 @@ void ADarkroomActor::BuildDryingLine(FRoomBuilder& Build)
 		Fallen->SetCastShadow(false);
 	}
 	// The wedding and the violin are the family's own prints: markers for the clues to come.
-	SpawnClue(FVector(-232.f, LineY, LineZ - 20.f), FRotator::ZeroRotator);
-	SpawnClue(FVector(28.f, LineY, LineZ - 20.f), FRotator::ZeroRotator);
+	SpawnClue(FVector(DarkroomWeddingX, LineY, LineZ - 20.f), FRotator::ZeroRotator);
+	SpawnClue(FVector(DarkroomViolinX, LineY, LineZ - 20.f), FRotator::ZeroRotator);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -801,7 +818,7 @@ void ADarkroomActor::BuildCobwebs(FRoomBuilder& Build)
 				FRotator(0.f, Corner.X * Corner.Y > 0.f ? 45.f : -45.f, 180.f), FVector2D(Inset * 1.6f, Inset * 1.6f));
 		}
 	}
-	// Between the safelight's flex and the wall, under the dry bench, between the line's end and the corner.
+	// On top of the camera cabinet up to the wall, under the dry bench, between the line's end and the corner.
 	Web(Build, Cabinet() + FVector(0.f, -2.f, CabinetHeight + 18.f), Upright(0.f), FVector2D(60.f, 26.f));
 	Web(Build, DryBench() + FVector(0.f, -DryLength * 0.5f + 8.f, 40.f), Upright(0.f), FVector2D(DryDepth - 12.f, 30.f));
 	Web(Build, FVector(HalfX - 12.f, LineY - 10.f, LineZ + 20.f), Upright(90.f), FVector2D(22.f, 40.f));

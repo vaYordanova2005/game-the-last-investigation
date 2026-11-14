@@ -484,7 +484,7 @@ float AStudyActor::FacingYaw(EWall Wall)
 	}
 }
 
-TArray<FBox2D> AStudyActor::Holes(EWall Wall) const
+TArray<FBox2D> AStudyActor::Holes(EWall Wall, bool bFinishes) const
 {
 	TArray<FBox2D> Out;
 	for (const FOpening& Opening : Openings)
@@ -493,10 +493,19 @@ TArray<FBox2D> AStudyActor::Holes(EWall Wall) const
 		{
 			continue;
 		}
-		if (Opening.Wall == EWall::South)
+		if (Opening.Wall == EWall::South && bFinishes)
 		{
-			// The door case stands out to its cornice's reach either side and up to its top: the walls'
-			// finishes stop at it.
+			// The finishes butt the case: its architraves are DoorCaseWidth wide up to the frieze, and
+			// only the frieze and cornice over them reach further. Cut at the cornice's reach all the
+			// way down, a strip of bare wall showed beside each architrave.
+			const float FriezeZ = DoorOpeningHeight + DoorCaseWidth;
+			Out.Add(FBox2D(FVector2D(Opening.CenterU - Opening.HalfU - DoorCaseWidth, 0.f), FVector2D(Opening.CenterU + Opening.HalfU + DoorCaseWidth, FriezeZ)));
+			Out.Add(FBox2D(FVector2D(Opening.CenterU - Opening.HalfU - DoorCaseReach, FriezeZ), FVector2D(Opening.CenterU + Opening.HalfU + DoorCaseReach, DoorCaseTop)));
+		}
+		else if (Opening.Wall == EWall::South)
+		{
+			// For the decals: the door case stands out to its cornice's reach either side and up to its
+			// top, and a decal anywhere over that would lie across it.
 			Out.Add(FBox2D(FVector2D(Opening.CenterU - Opening.HalfU - DoorCaseReach, 0.f), FVector2D(Opening.CenterU + Opening.HalfU + DoorCaseReach, DoorCaseTop)));
 		}
 		else
@@ -758,7 +767,7 @@ void AStudyActor::BuildWalls(FRoomBuilder& Build)
 	const float DamaskTop = RoomHeight - CorniceDrop + 4.f;
 	for (const FRun& R : Walls)
 	{
-		const TArray<FBox2D> Cut = Holes(R.Wall);
+		const TArray<FBox2D> Cut = Holes(R.Wall, /*bFinishes*/ true);
 		// Black lacquered panelling to the dado, cut round the openings, and on it a gilt bolection
 		// round each field: a field every ninety-odd centimetres along each stretch of wall.
 		for (const FBox2D& Piece : RoomWalls::CutAround(Cut, R.U0, R.U1, 0.f, DadoTop))
@@ -862,7 +871,8 @@ void AStudyActor::BuildDoorCase(FRoomBuilder& Build)
 {
 	// The case round the door is one model through the wall, both faces at once: its origin in the
 	// wall's middle plane at the foot of the opening, +Y into the room.
-	PlaceStudy(Build, StudyProps::DoorCase, FVector(Setup.DoorX, SouthY() + Setup.WallThickness * 0.5f, 0.f), FRotator(0.f, 180.f, 0.f));
+	// Its plinths stand on the floor inside a floor decal's reach: the dust keeps off them.
+	KeepFloorDustOff(PlaceStudy(Build, StudyProps::DoorCase, FVector(Setup.DoorX, SouthY() + Setup.WallThickness * 0.5f, 0.f), FRotator(0.f, 180.f, 0.f)));
 }
 
 void AStudyActor::BuildCeiling(FRoomBuilder& Build)
@@ -891,6 +901,8 @@ void AStudyActor::BuildCeiling(FRoomBuilder& Build)
 					{ { TEXT("Plaster"), MatGilt } }))
 				{
 					Mesh->SetRelativeScale3D(FVector(Piece / 100.f, 1.f, 1.f));
+					// The ceiling's stains and crack would lie across the gilt (the cornice's rule).
+					Mesh->SetReceivesDecals(false);
 				}
 			}
 		}
@@ -935,7 +947,10 @@ void AStudyActor::BuildChandelier(FRoomBuilder& Build)
 	// The chandelier from a gilt rose over the middle of the room: the hall's Chandelier_03 at half its
 	// size, dead, its brass dulled and its crystal grey with dust.
 	const FVector Hook = ChandelierHook();
-	Place(Build, StudyProps::CeilingRose, Hook, FRotator(0.f, 11.f, 0.f), { { TEXT("Plaster"), MatGilt } });
+	if (UStaticMeshComponent* Rose = Place(Build, StudyProps::CeilingRose, Hook, FRotator(0.f, 11.f, 0.f), { { TEXT("Plaster"), MatGilt } }))
+	{
+		Rose->SetReceivesDecals(false);
+	}
 	const float Chain = 60.f;
 	const float RoseDepth = 9.f;
 	for (int32 Link = 0; Link * 6.f < Chain; ++Link)
@@ -1078,7 +1093,9 @@ void AStudyActor::BuildWestWall(FRoomBuilder& Build)
 		}
 		Place(Build, StudyProps::BookPiles[Seed % 2], Bay.TransformPosition(FVector(-22.f, 0.f, CaseShelves[3])), FRotator(0.f, Yaw + 8.f, 0.f), { { TEXT("Books"), MatBooks } });
 		PlaceStudy(Build, StudyProps::Humidor, Bay.TransformPosition(FVector(30.f, 2.f, CaseShelves[3])), FRotator(0.f, Yaw - 6.f, 0.f));
-		Dust(Build, Bay.TransformPosition(FVector(0.f, 0.f, CaseH)), FVector2D(CaseD, CaseW), 0.45f);
+		// Aimed down, a decal lays its first size along world Y (09-27): the cases stand on the east and
+		// west walls, so their width runs along Y.
+		Dust(Build, Bay.TransformPosition(FVector(0.f, 0.f, CaseH)), FVector2D(CaseW, CaseD), 0.45f);
 	};
 	FillCase(WestCaseSeat(), FacingYaw(EWall::West), 7101);
 	for (int32 i = 0; i < 2; ++i)
@@ -1400,6 +1417,13 @@ void AStudyActor::SpawnWindows()
 		{
 			const FVector Local = GetActorTransform().InverseTransformPosition(Hook);
 			WallKeepOuts.Add({ EWall::North, FVector2D(Local.X - HookReach, Local.X + HookReach), FVector2D(Local.Z - HookReach, Local.Z + HookReach) });
+		}
+		// The pole's brackets run back to within a few centimetres of the plaster beside each window.
+		const float BracketReach = AStormWindowActor::PoleBracketSection * 0.5f + 1.f;
+		for (const FVector& Bracket : Window->GetPoleBrackets())
+		{
+			const FVector Local = GetActorTransform().InverseTransformPosition(Bracket);
+			WallKeepOuts.Add({ EWall::North, FVector2D(Local.X - BracketReach, Local.X + BracketReach), FVector2D(Local.Z - BracketReach, Local.Z + BracketReach) });
 		}
 	}
 }

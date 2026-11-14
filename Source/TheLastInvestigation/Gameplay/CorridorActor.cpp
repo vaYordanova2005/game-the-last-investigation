@@ -663,9 +663,38 @@ void ACorridorActor::BuildWainscot(FRoomBuilder& Build)
 		Build.Box(Location + Normal * (ProudBase + Depth * 0.5f), FRotator::ZeroRotator, Size, Mat, false);
 	};
 
+	// The runs stop at the openings, and at the study's door they stop at its case: the architraves
+	// stand DoorCaseWidth out from the opening up to the frieze, the frieze and cornice reach further
+	// over it. Cut only at the opening, the chair rail ran through both architraves and stood out of
+	// their face.
+	auto TrimCut = [&](ESide Side, float U0, float U1, float V0, float V1)
+	{
+		TArray<FBox2D> Holes;
+		for (const FOpening& Opening : Openings)
+		{
+			if (Opening.Side != Side)
+			{
+				continue;
+			}
+			if (Opening.Side == ESide::North && Opening.CenterU == StudyDoorU)
+			{
+				const float FriezeV = AStudyActor::DoorOpeningHeight + AStudyActor::DoorCaseWidth;
+				const float CaseHalf = Opening.HalfU + AStudyActor::DoorCaseWidth;
+				const float CorniceHalf = Opening.HalfU + AStudyActor::DoorCaseReach;
+				Holes.Add(FBox2D(FVector2D(Opening.CenterU - CaseHalf, Opening.BottomV), FVector2D(Opening.CenterU + CaseHalf, FriezeV)));
+				Holes.Add(FBox2D(FVector2D(Opening.CenterU - CorniceHalf, FriezeV), FVector2D(Opening.CenterU + CorniceHalf, AStudyActor::DoorCaseTop)));
+			}
+			else
+			{
+				Holes.Add(FBox2D(FVector2D(Opening.CenterU - Opening.HalfU, Opening.BottomV), FVector2D(Opening.CenterU + Opening.HalfU, Opening.TopV)));
+			}
+		}
+		return RoomWalls::CutAround(Holes, U0, U1, V0, V1);
+	};
+
 	auto FaceBoxRun = [&](ESide Side, float U0, float U1, float V0, float V1, float Depth, float ProudBase, UMaterialInterface* Mat)
 	{
-		for (const FBox2D& Piece : CutAround(Side, U0, U1, V0, V1))
+		for (const FBox2D& Piece : TrimCut(Side, U0, U1, V0, V1))
 		{
 			const FVector2D C = Piece.GetCenter();
 			const FVector2D S = Piece.GetSize();

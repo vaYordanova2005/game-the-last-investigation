@@ -102,7 +102,9 @@ private:
 	/** The pendant's rose, on the underside of the middle joist (the joists are 52 apart from -HalfX + 30). */
 	static FVector Pendant() { return FVector(-HalfX + 30.f + 52.f * 5.f, -30.f, Height - 18.f); }
 	/** The camera cabinet against the door wall, east of the door (on the left as you face the door
-	 *  from inside), clear of the hinge jamb; the leaf swings the other way. It faces -Y. */
+	 *  from inside). The room door's leaf is hinged on this (east) jamb, the cabinet's side; open, it
+	 *  stands short of square to the wall, so the cabinet, 18 off the jamb, clears its sweep by ~18cm.
+	 *  It faces -Y. */
 	static FVector Cabinet() { return FVector(DoorX + DoorHalf + 18.f + CabinetWidth * 0.5f, HalfY - CabinetDepth * 0.5f - 1.f, 0.f); }
 	/** A point in the cabinet's own frame (front +Y, turned 180 into the room) in the room's. */
 	static FVector InCabinet(const FVector& P) { return Cabinet() + FVector(-P.X, -P.Y, P.Z); }

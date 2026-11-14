@@ -205,6 +205,14 @@ public:
 	const TArray<FVector>& GetTieHooks() const { return TieHooks; }
 
 	/**
+	 * The middle of each curtain pole bracket, in world space, filled when the window is built. A
+	 * bracket is PoleBracketSection square and runs back from the pole to within a few centimetres of
+	 * the plaster, inside the reach of any decal laid on that wall.
+	 */
+	const TArray<FVector>& GetPoleBrackets() const { return PoleBrackets; }
+	static constexpr float PoleBracketSection = 4.f;
+
+	/**
 	 * Makes this a second window onto another storm rather than a storm of its own. Must be called
 	 * before BeginPlay.
 	 *
@@ -266,6 +274,8 @@ private:
 
 	/** See GetTieHooks. */
 	TArray<FVector> TieHooks;
+	/** See GetPoleBrackets. */
+	TArray<FVector> PoleBrackets;
 
 	/** The world outside, on the lead window only: ground, forest, sky. */
 	UPROPERTY(Transient)
