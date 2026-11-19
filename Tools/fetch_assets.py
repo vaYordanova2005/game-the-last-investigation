@@ -77,6 +77,13 @@ TEXTURES = {
     "velour_velvet": "the study's burgundy velvet drapes",
     "metal_plate_02": "the study's gilt (tinted gold) and the safe's steel (tinted black)",
     "painted_plaster_wall": "the study's ceiling",
+    # The house from outside: soot-dark Victorian brick, weathered stone dressings, an old slate
+    # roof, the gravel drive and the overgrown lawn round the walls.
+    "brick_wall_10": "the outside walls: dark, weathered red-brown brick",
+    "concrete_wall_007": "the stone dressings: quoins, window surrounds, string courses, the plinth",
+    "roof_slates_02": "the slate roofs",
+    "gravel_stones": "the drive up to the front porch",
+    "forrest_ground_01": "the overgrown lawn round the house",
 }
 
 # The three maps the master material wants. nor_dx because UE expects DirectX-convention normals;

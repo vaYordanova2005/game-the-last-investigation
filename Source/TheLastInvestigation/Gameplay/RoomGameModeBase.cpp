@@ -1,4 +1,7 @@
 #include "RoomGameModeBase.h"
+#include "Components/LightComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Character.h"
 #include "DetectiveCharacter.h"
 #include "RoomHUD.h"
 #include "InvestigationRoomActor.h"
@@ -75,7 +78,33 @@ void ARoomGameModeBase::ScheduleHeadlessScreenshot()
 
 			if (APawn* Pawn = PC->GetPawn())
 			{
+				// -RoomShotFly holds the camera where it is put: outside the house nothing collides
+				// (AMansionExteriorActor), and a pawn standing on nothing falls for the half second
+				// before the capture.
+				if (FParse::Param(FCommandLine::Get(), TEXT("RoomShotFly")))
+				{
+					if (ACharacter* Character = Cast<ACharacter>(Pawn))
+					{
+						Character->GetCharacterMovement()->GravityScale = 0.f;
+						Character->GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+						Character->GetCharacterMovement()->StopMovementImmediately();
+					}
+				}
 				Pawn->SetActorLocationAndRotation(Spot, FRotator::ZeroRotator);
+				// -RoomShotNoLantern puts the lantern out and hides the hand: for judging the house
+				// from outside by the light out there, not by a flame at the lens.
+				if (FParse::Param(FCommandLine::Get(), TEXT("RoomShotNoLantern")))
+				{
+					TArray<USceneComponent*> Parts;
+					Pawn->GetComponents<USceneComponent>(Parts);
+					for (USceneComponent* Part : Parts)
+					{
+						if (Part->IsA<ULightComponent>() || Part->IsA<UPrimitiveComponent>())
+						{
+							Part->SetVisibility(false);
+						}
+					}
+				}
 			}
 
 			// -RoomShotYaw=<degrees> turns the camera off the waking pose, for looking at one wall

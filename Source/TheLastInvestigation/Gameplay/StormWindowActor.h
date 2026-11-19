@@ -134,6 +134,9 @@ public:
 	/** Must be called before BeginPlay (i.e. via a deferred spawn) so the frame matches the wall gap. */
 	void Configure(const FStormWindowSetup& InSetup);
 
+	/** The opening this window was configured with: what the house's outside cuts its walls round. */
+	const FStormWindowSetup& GetSetup() const { return Setup; }
+
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
@@ -157,6 +160,7 @@ private:
 	/** See SetViewUnderground and SetViewSealed. One player, one world: plain statics are enough. */
 	static inline bool bViewUnderground = false;
 	static inline bool bViewSealed = false;
+	static inline bool bViewOutside = false;
 
 public:
 
@@ -178,6 +182,15 @@ public:
 	 * and the rest of the storm's light stays at its floor (LitFlash).
 	 */
 	static void SetViewSealed(bool bSealed) { bViewSealed = bSealed; }
+
+	/**
+	 * Whether the eye is outside the house (set by AMansionExteriorActor every frame; only ever true
+	 * for a camera shot, the detective never leaves). The sky portals are the night sky as seen from
+	 * inside a room, a light the size of the window just past the glass, and from outside it is
+	 * seen lighting the sash's outer face at a hand's distance: every window glowed white, as if the
+	 * house were lit. While this is set the portals are off and the rooms behind the glass are dark.
+	 */
+	static void SetViewOutside(bool bOutside) { bViewOutside = bOutside; }
 
 private:
 	/**

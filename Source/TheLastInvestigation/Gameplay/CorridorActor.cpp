@@ -405,8 +405,8 @@ void ACorridorActor::BuildStairs(FRoomBuilder& Build)
 	//
 	// REPLACED: there used to be a narrow flight here, going down through the end wall into the
 	// dark and boarded across from this side. The house's stairs are the grand stair now, and the
-	// boards — and what the detective is told about them — went down to the front door, which is
-	// the one place in the house where "whoever did it meant to stay" says more.
+	// boards went down to the front door, and from there (2026-11-19) to its outside, across the
+	// black double door on the east front (AMansionExteriorActor).
 	const float Y = CenterY();
 	const float Half = StairOpeningWidth * 0.5f;
 	const float H = StairOpeningHeight;
