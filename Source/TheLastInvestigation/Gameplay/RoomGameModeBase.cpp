@@ -194,5 +194,18 @@ void ARoomGameModeBase::HandleStartingNewPlayer_Implementation(APlayerController
 		// slight downward pitch is a man opening his eyes on the floor, not a camera on a tripod.
 		NewPlayer->SetControlRotation(Facing);
 		UE_LOG(LogTemp, Log, TEXT("Room01: player placed at %s"), *Pawn->GetActorLocation().ToString());
+
+		// -Fly: no gravity, for looking at the house from outside, where nothing collides
+		// (AMansionExteriorActor). The detective moves at the height he was started at.
+		if (FParse::Param(FCommandLine::Get(), TEXT("Fly")))
+		{
+			if (ACharacter* Character = Cast<ACharacter>(Pawn))
+			{
+				Character->GetCharacterMovement()->GravityScale = 0.f;
+				Character->GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+				Character->GetCharacterMovement()->MaxFlySpeed = 600.f;
+				Character->GetCharacterMovement()->BrakingDecelerationFlying = 2000.f;
+			}
+		}
 	}
 }

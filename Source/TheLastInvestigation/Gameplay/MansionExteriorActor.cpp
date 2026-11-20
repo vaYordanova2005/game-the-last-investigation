@@ -378,7 +378,309 @@ void AMansionExteriorActor::Tick(float DeltaTime)
 	{
 		Moonlight->SetVisibility(bOutside);
 		SkyFill->SetVisibility(bOutside);
+		for (UInstancedStaticMeshComponent* Part : { RainDrops.Get(), RainCurtains.Get(), RainSplashes.Get() })
+		{
+			if (Part)
+			{
+				Part->SetVisibility(bOutside);
+			}
+		}
+		bRainPrimed = false;
 	}
+	if (bOutside)
+	{
+		TickRain(DeltaTime, Eye);
+	}
+}
+
+namespace
+{
+	/** The box of single drops round the eye: half its width, and how far above and below the eye. */
+	constexpr float ExtRainHalf = 1200.f;
+	constexpr float ExtRainAbove = 800.f;
+	constexpr float ExtRainBelow = 450.f;
+	constexpr int32 ExtRainCount = 4500;
+	/** A drop's card: the streak in rain_streak.png is about a third of the card's width. */
+	constexpr float ExtStreakCard = 2.4f;
+	/** Curtains: a grid of cells round the eye, a pool of sheets laid in the nearest of them. */
+	constexpr float ExtCurtainCell = 650.f;
+	constexpr float ExtCurtainReach = 3400.f;
+	constexpr float ExtCurtainNear = 900.f;
+	constexpr int32 ExtCurtainCount = 72;
+	constexpr float ExtCurtainWidth = 700.f;
+	constexpr float ExtCurtainHeight = 1100.f;
+	/** rain_sheet.png covers this much of a curtain, each way. */
+	constexpr float ExtSheetTexel = 260.f;
+	constexpr int32 ExtSplashCount = 900;
+	constexpr float ExtSplashLife = 0.18f;
+
+	/** A card's frame: local Y along the streak, local Z turned to the eye as far as the streak lets it. */
+	FQuat ExtFacing(const FVector& Along, const FVector& At, const FVector& Eye)
+	{
+		FVector ToEye = Eye - At;
+		FVector Face = (ToEye - Along * FVector::DotProduct(ToEye, Along)).GetSafeNormal();
+		if (Face.IsNearlyZero())
+		{
+			Face = FVector::CrossProduct(Along, FVector(1.f, 0.f, 0.f)).GetSafeNormal();
+		}
+		const FVector Side = FVector::CrossProduct(Along, Face);
+		return FQuat(FMatrix(Side, Along, Face, FVector::ZeroVector));
+	}
+
+	float ExtHash(int32 X, int32 Y)
+	{
+		uint32 H = static_cast<uint32>(X) * 73856093u ^ static_cast<uint32>(Y) * 19349663u;
+		H ^= H >> 13;
+		H *= 0x5bd1e995u;
+		H ^= H >> 15;
+		return (H & 0xFFFFu) / 65535.f;
+	}
+}
+
+float AMansionExteriorActor::RainFloor(float X, float Y) const
+{
+	// The roofs, worked out the way they were built: a ridge, fifty-degree slopes down to the eaves.
+	if (FVector2D::Distance(FVector2D(X, Y), ExtTurretCentre) < ExtTurretApothem + 20.f)
+	{
+		const float R = FVector2D::Distance(FVector2D(X, Y), ExtTurretCentre);
+		return TurretEavesZ + (ExtTurretApothem - R) * FMath::Tan(FMath::DegreesToRadians(ExtTurretPitchDeg)) + ExtRoofThick;
+	}
+	if (X > WestFace - ExtEavesOver && X < BlockEastFace + ExtEavesOver && Y > NorthFace - ExtRakeOver && Y < SouthFace + ExtRakeOver)
+	{
+		const float Mid = (WestFace + BlockEastFace) * 0.5f;
+		const float Half = (BlockEastFace - WestFace) * 0.5f;
+		return BlockEavesZ + (Half - FMath::Abs(X - Mid)) * ExtTan + ExtRoofThick;
+	}
+	if (X > BlockEastFace && X < EastFace + ExtEavesOver && Y > NorthFace - ExtRakeOver && Y < WingSouthFace + ExtRakeOver)
+	{
+		const float Valley = EastFace - 830.f;
+		const float Mid = X > Valley ? (EastFace + Valley) * 0.5f : (Valley + BlockEastFace) * 0.5f;
+		return WingEavesZ + (415.f - FMath::Abs(X - Mid)) * ExtTan + ExtRoofThick;
+	}
+	// The porch: dry under its roof.
+	if (X > EastFace && X < EastFace + 280.f && Y > FrontDoorY - 230.f && Y < FrontDoorY + 230.f)
+	{
+		return 20.f;
+	}
+	return Forest ? Forest->GroundHeight(X, Y) + 10.f : -370.f;
+}
+
+void AMansionExteriorActor::BuildRain()
+{
+	FRoomBuilder Build(this, ExteriorRoot);
+	UMaterialInterface* Master = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_RoomRain.M_RoomRain"));
+	UStaticMesh* Plane = FRoomShapes::Plane();
+	if (!Master || !Plane)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("M_RoomRain not found: run Tools/build_art.py -ArtStage=rain"));
+		return;
+	}
+	auto Make = [&](const TCHAR* Map, float Opacity, const FVector2D& Near, const FVector2D& Far) -> UInstancedStaticMeshComponent*
+	{
+		UMaterialInstanceDynamic* Mat = UMaterialInstanceDynamic::Create(Master, this);
+		if (UTexture* Texture = LoadObject<UTexture>(nullptr, *FString::Printf(TEXT("/Game/Textures/%s.%s"), Map, Map)))
+		{
+			Mat->SetTextureParameterValue(TEXT("StreakMap"), Texture);
+		}
+		Mat->SetScalarParameterValue(TEXT("Opacity"), Opacity);
+		Mat->SetVectorParameterValue(TEXT("FadeNear"), FLinearColor(Near.X, Near.Y, 0.f, 1.f));
+		Mat->SetVectorParameterValue(TEXT("FadeFar"), FLinearColor(Far.X, Far.Y, 0.f, 1.f));
+		RainMaterials.Add(Mat);
+		UInstancedStaticMeshComponent* Ism = Build.Instances(Plane, Mat);
+		if (Ism)
+		{
+			Ism->SetCastShadow(false);
+			Ism->SetReceivesDecals(false);
+			Ism->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Ism->SetTranslucentSortPriority(1);
+		}
+		return Ism;
+	};
+	RainDrops = Make(TEXT("T_rain_streak"), 0.75f, FVector2D(25.f, 160.f), FVector2D(ExtRainHalf * 0.75f, ExtRainHalf * 1.05f));
+	RainCurtains = Make(TEXT("T_rain_sheet"), 0.42f, FVector2D(700.f, 1400.f), FVector2D(2600.f, ExtCurtainReach));
+	RainSplashes = Make(TEXT("T_rain_splash"), 0.7f, FVector2D(20.f, 90.f), FVector2D(900.f, 1500.f));
+	if (!RainDrops || !RainCurtains || !RainSplashes)
+	{
+		return;
+	}
+	const FTransform Zero(FQuat::Identity, FVector::ZeroVector, FVector::ZeroVector);
+	TArray<FTransform> Initial;
+	Initial.Init(Zero, ExtRainCount);
+	RainDrops->AddInstances(Initial, false, true);
+	Initial.Init(Zero, ExtCurtainCount);
+	RainCurtains->AddInstances(Initial, false, true);
+	Initial.Init(Zero, ExtSplashCount);
+	RainSplashes->AddInstances(Initial, false, true);
+
+	RainPositions.SetNum(ExtRainCount);
+	RainSpeeds.SetNum(ExtRainCount);
+	RainLengths.SetNum(ExtRainCount);
+	RainFloors.SetNum(ExtRainCount);
+	for (int32 i = 0; i < ExtRainCount; ++i)
+	{
+		RainSpeeds[i] = RainRandom.FRandRange(1350.f, 1950.f);
+		// How long a drop's streak is on the eye: the distance it falls while the eye takes it in.
+		RainLengths[i] = RainSpeeds[i] * RainRandom.FRandRange(0.028f, 0.05f);
+	}
+	SplashPositions.Init(FVector::ZeroVector, ExtSplashCount);
+	SplashAges.Init(ExtSplashLife, ExtSplashCount);
+
+	for (TActorIterator<AStormWindowActor> It(GetWorld()); It; ++It)
+	{
+		StormWindows.Add(*It);
+	}
+	for (UInstancedStaticMeshComponent* Part : { RainDrops.Get(), RainCurtains.Get(), RainSplashes.Get() })
+	{
+		Part->SetVisibility(false);
+	}
+}
+
+void AMansionExteriorActor::TickRain(float DeltaTime, const FVector& Eye)
+{
+	if (!RainDrops || !RainCurtains || !RainSplashes)
+	{
+		return;
+	}
+	RainTime += DeltaTime;
+
+	// The strike lights the rain: every drop is a smear of whatever light there is.
+	float Flash = 0.f;
+	for (const TWeakObjectPtr<AStormWindowActor>& Window : StormWindows)
+	{
+		if (Window.IsValid())
+		{
+			Flash = FMath::Max(Flash, Window->GetFlashAlpha());
+		}
+	}
+	const float Glow = 1.f + Flash * 7.f;
+	if (RainMaterials.Num() == 3)
+	{
+		RainMaterials[0]->SetScalarParameterValue(TEXT("Intensity"), 6.5f * Glow);
+		RainMaterials[1]->SetScalarParameterValue(TEXT("Intensity"), 4.0f * Glow);
+		RainMaterials[2]->SetScalarParameterValue(TEXT("Intensity"), 5.0f * Glow);
+	}
+
+	// The wind from the west and a little south, gusting; the rain leans with it.
+	const float Gust = FMath::PerlinNoise1D(RainTime * 0.13f) * 0.5f + 0.5f;
+	const FVector Drift = FVector(0.93f, 0.37f, 0.f) * FMath::Lerp(220.f, 650.f, Gust);
+	const FVector Fall = (Drift - FVector(0.f, 0.f, 1650.f)).GetSafeNormal();
+	const FVector Along = -Fall;
+
+	const auto Scatter = [&](float Z0, float Z1)
+	{
+		return FVector(Eye.X + RainRandom.FRandRange(-ExtRainHalf, ExtRainHalf), Eye.Y + RainRandom.FRandRange(-ExtRainHalf, ExtRainHalf), RainRandom.FRandRange(Z0, Z1));
+	};
+	if (!bRainPrimed)
+	{
+		for (int32 i = 0; i < RainPositions.Num(); ++i)
+		{
+			RainPositions[i] = Scatter(Eye.Z - ExtRainBelow, Eye.Z + ExtRainAbove);
+			RainFloors[i] = RainFloor(RainPositions[i].X, RainPositions[i].Y);
+		}
+		bRainPrimed = true;
+	}
+
+	// ---- single drops ----
+	RainTransforms.Reset(RainPositions.Num());
+	for (int32 i = 0; i < RainPositions.Num(); ++i)
+	{
+		FVector& P = RainPositions[i];
+		P += (Drift - FVector(0.f, 0.f, RainSpeeds[i])) * DeltaTime;
+		for (int32 Axis = 0; Axis < 2; ++Axis)
+		{
+			const float Rel = P[Axis] - Eye[Axis];
+			if (Rel > ExtRainHalf)
+			{
+				P[Axis] -= ExtRainHalf * 2.f;
+			}
+			else if (Rel < -ExtRainHalf)
+			{
+				P[Axis] += ExtRainHalf * 2.f;
+			}
+		}
+		if (P.Z < RainFloors[i])
+		{
+			if (FVector::DistSquared(P, Eye) < 1300.f * 1300.f)
+			{
+				SplashPositions[NextSplash] = FVector(P.X, P.Y, RainFloors[i]);
+				SplashAges[NextSplash] = 0.f;
+				NextSplash = (NextSplash + 1) % SplashPositions.Num();
+			}
+			P = Scatter(Eye.Z + ExtRainAbove - 150.f, Eye.Z + ExtRainAbove);
+			RainFloors[i] = RainFloor(P.X, P.Y);
+		}
+		else if (P.Z < Eye.Z - ExtRainBelow)
+		{
+			P = Scatter(Eye.Z + ExtRainAbove - 150.f, Eye.Z + ExtRainAbove);
+			RainFloors[i] = RainFloor(P.X, P.Y);
+		}
+		// The card's middle trails the drop by half its streak.
+		const FVector Mid = P + Along * (RainLengths[i] * 0.5f);
+		RainTransforms.Add(FTransform(ExtFacing(Along, Mid, Eye), Mid, FVector(ExtStreakCard / 100.f, RainLengths[i] / 100.f, 1.f)));
+	}
+	RainDrops->BatchUpdateInstancesTransforms(0, RainTransforms, true, true, true);
+
+	// ---- curtains: still in the world, each in a cell of a grid round the eye ----
+	CurtainTransforms.Reset(ExtCurtainCount);
+	const int32 CX = FMath::FloorToInt(Eye.X / ExtCurtainCell);
+	const int32 CY = FMath::FloorToInt(Eye.Y / ExtCurtainCell);
+	const int32 Span = FMath::CeilToInt(ExtCurtainReach / ExtCurtainCell);
+	struct FCell { float Dist; FVector At; };
+	TArray<FCell, TInlineAllocator<256>> Cells;
+	for (int32 GX = CX - Span; GX <= CX + Span; ++GX)
+	{
+		for (int32 GY = CY - Span; GY <= CY + Span; ++GY)
+		{
+			if (ExtHash(GX, GY) < 0.35f)
+			{
+				continue;
+			}
+			const FVector At((GX + ExtHash(GX + 7, GY)) * ExtCurtainCell, (GY + ExtHash(GX, GY + 7)) * ExtCurtainCell, 0.f);
+			const float Dist = FVector2D::Distance(FVector2D(At), FVector2D(Eye));
+			if (Dist < ExtCurtainNear || Dist > ExtCurtainReach || IsInHouse(At.X, At.Y, 250.f))
+			{
+				continue;
+			}
+			const float Ground = Forest ? Forest->GroundHeight(At.X, At.Y) : -380.f;
+			Cells.Add({ Dist, FVector(At.X, At.Y, Ground + ExtCurtainHeight * 0.5f) });
+		}
+	}
+	Cells.Sort([](const FCell& A, const FCell& B) { return A.Dist < B.Dist; });
+	for (int32 i = 0; i < ExtCurtainCount; ++i)
+	{
+		if (!Cells.IsValidIndex(i))
+		{
+			CurtainTransforms.Add(FTransform(FQuat::Identity, FVector::ZeroVector, FVector::ZeroVector));
+			continue;
+		}
+		const FVector& At = Cells[i].At;
+		CurtainTransforms.Add(FTransform(ExtFacing(Along, At, Eye), At, FVector(ExtCurtainWidth / 100.f, ExtCurtainHeight / 100.f, 1.f)));
+	}
+	RainCurtains->BatchUpdateInstancesTransforms(0, CurtainTransforms, true, true, true);
+	if (RainMaterials.Num() == 3)
+	{
+		RainMaterials[1]->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(ExtCurtainWidth / ExtSheetTexel, ExtCurtainHeight / ExtSheetTexel, 0.f, 1.f));
+		// Down the sheet at the rain's speed; its slant is the card's own.
+		RainMaterials[1]->SetVectorParameterValue(TEXT("Pan"), FLinearColor(0.f, 1650.f / ExtSheetTexel * 0.5f, 0.f, 1.f));
+	}
+
+	// ---- splashes ----
+	SplashTransforms.Reset(SplashPositions.Num());
+	for (int32 i = 0; i < SplashPositions.Num(); ++i)
+	{
+		SplashAges[i] += DeltaTime;
+		const float T = SplashAges[i] / ExtSplashLife;
+		if (T >= 1.f)
+		{
+			SplashTransforms.Add(FTransform(FQuat::Identity, FVector::ZeroVector, FVector::ZeroVector));
+			continue;
+		}
+		const float Size = FMath::Lerp(5.f, 13.f, FMath::Sqrt(T));
+		const float Height = Size * FMath::Lerp(0.9f, 0.5f, T);
+		const FVector At = SplashPositions[i] + FVector(0.f, 0.f, Height * 0.5f);
+		SplashTransforms.Add(FTransform(ExtFacing(-FVector::UpVector, At, Eye), At, FVector(Size / 100.f, Height / 100.f, 1.f)));
+	}
+	RainSplashes->BatchUpdateInstancesTransforms(0, SplashTransforms, true, true, true);
 }
 
 void AMansionExteriorActor::Configure(const AStormForestActor* InForest)
@@ -419,9 +721,11 @@ void AMansionExteriorActor::BuildExterior()
 	FRandomStream Random(18870611);
 
 	// ---- Materials --------------------------------------------------------------------------
-	UMaterialInterface* Brick = ExtSheet(this, ExtBrick, FLinearColor(0.95f, 0.95f, 0.95f));
-	UMaterialInterface* Stone = ExtSheet(this, ExtStone, FLinearColor(0.33f, 0.355f, 0.45f));
-	UMaterialInterface* Slate = ExtSheet(this, ExtSlate, FLinearColor(0.17f, 0.215f, 0.31f));
+	// Wet: the storm has been on these for hours, so a little darker and a good deal glossier than
+	// the dry photographs, which is what catches the moon and a strike along the slates.
+	UMaterialInterface* Brick = ExtSheet(this, ExtBrick, FLinearColor(0.85f, 0.85f, 0.85f), 0.72f);
+	UMaterialInterface* Stone = ExtSheet(this, ExtStone, FLinearColor(0.29f, 0.31f, 0.40f), 0.68f);
+	UMaterialInterface* Slate = ExtSheet(this, ExtSlate, FLinearColor(0.15f, 0.19f, 0.28f), 0.5f);
 	UMaterialInterface* Trim = ExtSheet(this, RoomSurfaces::RoughWood, FLinearColor(0.33f, 0.55f, 0.87f), 1.2f);
 	UMaterialInterface* ShutterPaint = ExtSheet(this, RoomSurfaces::RoughWood, FLinearColor(0.29f, 0.62f, 0.78f), 1.2f);
 	UMaterialInterface* Boards = ExtSheet(this, RoomSurfaces::RoughWood, FLinearColor(0.62f, 0.78f, 1.05f), 1.3f);
@@ -1392,6 +1696,7 @@ void AMansionExteriorActor::BuildExterior()
 	{
 		GroundMesh->SetLightingChannels(true, false, false);
 	}
+	BuildRain();
 	Moonlight->SetVisibility(false);
 	SkyFill->SetVisibility(false);
 }

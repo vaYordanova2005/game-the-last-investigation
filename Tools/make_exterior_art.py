@@ -202,6 +202,80 @@ def main():
     back.paste(filled, (0, 0), Image.fromarray((alpha * 255).astype(np.uint8), "L"))
     back.save(os.path.join(PREVIEW, "ivy_preview.png"))
     print("ivy written")
+    rain()
+
+
+GENERATED = os.path.join(ROOT, "Art", "Source", "Generated")
+
+
+def rain():
+    """
+    The rain for a camera outside (AMansionExteriorActor), three greyscale masks in the red channel,
+    written into Art/Source/Generated for build_art.py's rain stage:
+
+      rain_streak.png  one drop as the eye sees it falling at night: a soft, thin streak, brightest
+                       a third of the way down, tapering to nothing at both ends. Laid on a card
+                       several times wider than the streak, so its edge is never the card's.
+      rain_sheet.png   tileable: hundreds of thin streaks of every length and brightness, for the
+                       far curtains of rain that panned down give a downpour its density.
+      rain_splash.png  a crown thrown up where a drop lands, seen from the side: a soft fan of spray.
+
+    A lit preview of each is written to Saved/ExteriorPreview.
+    """
+    rng = np.random.default_rng(1104)
+    os.makedirs(GENERATED, exist_ok=True)
+    os.makedirs(PREVIEW, exist_ok=True)
+
+    # One streak: 64 wide, 512 long.
+    w, h = 64, 512
+    x = (np.arange(w) - (w - 1) / 2.0) / (w / 2.0)
+    y = np.linspace(0.0, 1.0, h)
+    across = np.exp(-(x / 0.16) ** 2)
+    along = np.clip(np.sin(np.pi * y) ** 0.8 * (1.0 - 0.35 * y), 0.0, 1.0)
+    flicker = 1.0 + 0.12 * np.sin(y * 37.0) * np.sin(y * 11.0)
+    streak = np.outer(along * flicker, across)
+    streak /= streak.max()
+    Image.fromarray((streak * 255).astype(np.uint8), "L").convert("RGB").save(os.path.join(GENERATED, "rain_streak.png"))
+
+    # The sheet: tileable 1024 square, streaks wrapped round both edges.
+    n = 1024
+    sheet = np.zeros((n, n), np.float32)
+    for _ in range(1400):
+        cx = rng.uniform(0, n)
+        cy = rng.uniform(0, n)
+        length = rng.uniform(30, 160)
+        bright = rng.uniform(0.15, 1.0) ** 1.6
+        width = rng.uniform(0.5, 1.3)
+        ys = np.arange(int(cy - length / 2), int(cy + length / 2))
+        t = (ys - (cy - length / 2)) / length
+        env = np.sin(np.pi * np.clip(t, 0, 1)) ** 0.8 * bright
+        for dx in range(-2, 3):
+            col = int(round(cx)) + dx
+            fall = np.exp(-((col - cx) / width) ** 2)
+            sheet[ys % n, col % n] += env * fall
+    sheet = np.clip(sheet / np.percentile(sheet[sheet > 0], 99.5), 0.0, 1.0)
+    Image.fromarray((sheet * 255).astype(np.uint8), "L").convert("RGB").save(os.path.join(GENERATED, "rain_sheet.png"))
+
+    # The splash: 128 square, a soft fan of droplets over a low ring.
+    m = 128
+    yy, xx = np.mgrid[0:m, 0:m].astype(np.float32)
+    u = (xx - m / 2) / (m / 2)
+    v = (m - 1 - yy) / m
+    crown = np.exp(-((np.abs(u) - 0.55) / 0.18) ** 2) * np.exp(-(v / 0.18) ** 2)
+    splash = crown * 0.7
+    for _ in range(26):
+        a = rng.uniform(-1.2, 1.2)
+        r = rng.uniform(0.25, 0.9)
+        px, py = np.sin(a) * r, np.cos(a) * r * 0.8
+        splash += 0.8 * np.exp(-(((u - px) / 0.045) ** 2 + ((v - py) / 0.05) ** 2))
+    splash = np.clip(splash / splash.max(), 0.0, 1.0)
+    Image.fromarray((splash * 255).astype(np.uint8), "L").convert("RGB").save(os.path.join(GENERATED, "rain_splash.png"))
+
+    # Preview: the sheet and a few streaks over the night.
+    back = np.full((n, n, 3), (10, 12, 18), np.float32)
+    back += sheet[..., None] * np.array([150, 160, 180]) * 0.6
+    Image.fromarray(np.clip(back, 0, 255).astype(np.uint8), "RGB").save(os.path.join(PREVIEW, "rain_sheet_preview.png"))
+    print("rain written")
 
 
 if __name__ == "__main__":

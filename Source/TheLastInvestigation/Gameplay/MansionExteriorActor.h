@@ -10,6 +10,8 @@ class UStaticMeshComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UDirectionalLightComponent;
+class UInstancedStaticMeshComponent;
+class AStormWindowActor;
 
 /**
  * The house from outside: a Victorian mansion of soot-dark brick with weathered stone dressings,
@@ -100,6 +102,45 @@ private:
 	/** The night sky's own faint light from overhead, for the sides the moon does not reach. */
 	UPROPERTY(VisibleAnywhere, Category = "Exterior")
 	TObjectPtr<UDirectionalLightComponent> SkyFill;
+
+	/**
+	 * Rain for a camera outside. The windows' own rain is a band in front of each window, made for
+	 * looking out through it; from outside it rained only in strips by the glass. This is rain the
+	 * way the eye sees it at night: no drop is a solid thing, every one is a faint smear of light
+	 * (M_RoomRain, translucent and unlit). Near the eye, single soft streaks on cards that always
+	 * face it, slanted on the wind; further out, curtains of streaks panning down, standing still
+	 * in the world on a grid round the eye; where a drop lands, a short soft splash. Only while the
+	 * eye is outside, and never inside the walls or under the porch roof.
+	 */
+	void BuildRain();
+	void TickRain(float DeltaTime, const FVector& Eye);
+
+	/** Where a falling drop stops: the roof over it, the porch roof, or the ground. */
+	float RainFloor(float X, float Y) const;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInstancedStaticMeshComponent> RainDrops;
+	UPROPERTY(Transient)
+	TObjectPtr<UInstancedStaticMeshComponent> RainCurtains;
+	UPROPERTY(Transient)
+	TObjectPtr<UInstancedStaticMeshComponent> RainSplashes;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> RainMaterials;
+	TArray<TWeakObjectPtr<AStormWindowActor>> StormWindows;
+
+	TArray<FVector> RainPositions;
+	TArray<float> RainSpeeds;
+	TArray<float> RainLengths;
+	TArray<float> RainFloors;
+	TArray<FTransform> RainTransforms;
+	TArray<FTransform> CurtainTransforms;
+	TArray<FVector> SplashPositions;
+	TArray<float> SplashAges;
+	TArray<FTransform> SplashTransforms;
+	int32 NextSplash = 0;
+	FRandomStream RainRandom = FRandomStream(19501104);
+	float RainTime = 0.f;
+	bool bRainPrimed = false;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInterface>> Materials;
