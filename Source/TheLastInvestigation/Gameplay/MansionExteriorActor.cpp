@@ -14,6 +14,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"
 #include "Camera/PlayerCameraManager.h"
 
 namespace
@@ -390,6 +391,19 @@ void AMansionExteriorActor::Tick(float DeltaTime)
 	if (bOutside)
 	{
 		TickRain(DeltaTime, Eye);
+	}
+
+	// -Fly (ARoomGameModeBase): nothing out here collides, so a flying detective kept the height he
+	// was started at, and over the bank and the rolling ground further out his eyes were in the
+	// grass. Outside, he is held at a man's height over whatever ground is under him.
+	static const bool bFly = FParse::Param(FCommandLine::Get(), TEXT("Fly"));
+	APawn* Pawn = PC->GetPawn();
+	if (bFly && bOutside && Pawn)
+	{
+		const FVector At = Pawn->GetActorLocation();
+		// A standing detective's origin is 90 over the ground, his eye 74 over that.
+		const float Target = Forest->GroundHeight(At.X, At.Y) + 10.f + 92.f;
+		Pawn->SetActorLocation(FVector(At.X, At.Y, FMath::FInterpTo(At.Z, Target, DeltaTime, 6.f)));
 	}
 }
 
