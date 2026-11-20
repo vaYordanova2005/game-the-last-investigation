@@ -1636,6 +1636,94 @@ def build_storm_masters():
     unreal.log("Built " + FOLIAGE_PATH)
 
 
+RAIN_PATH = MATERIAL_PACKAGE + "/M_RoomRain"
+
+RAIN_CODE = """
+float2 uv = UV * Tiling.xy + Pan.xy * Time;
+float a = Texture2DSample(Streak, StreakSampler, uv).r;
+float d = distance(WP, Eye);
+float nearFade = saturate((d - Fade.x) / max(Fade.y - Fade.x, 1.0));
+float farFade = 1.0 - saturate((d - FadeFar.x) / max(FadeFar.y - FadeFar.x, 1.0));
+return a * nearFade * farFade;
+"""
+
+
+def build_rain_master():
+    """
+    M_RoomRain: rain seen from outside the house (AMansionExteriorActor). Translucent and unlit:
+    at night a drop is not a lit object, it is a thin smear of the light round it, so it is drawn
+    as a faint glow with no surface, and the strike brightens it (C++ drives Intensity).
+        Alpha    = StreakMap.R at UV * Tiling + Pan * Time, faded in from the lens and out with distance
+        Emissive = Tint * Intensity * Alpha      Opacity = Alpha * Opacity
+    One master for the near streaks, the far curtains and the splashes: each is an instance with
+    its own map (Tools/make_exterior_art.py: rain).
+    """
+    masks = unreal.TextureCompressionSettings.TC_MASKS
+    streak = import_storm_texture("rain_streak.png", "T_rain_streak", False, masks, True, True)
+    sheet = import_storm_texture("rain_sheet.png", "T_rain_sheet", False, masks, False, False)
+    splash = import_storm_texture("rain_splash.png", "T_rain_splash", False, masks, True, True)
+    if not (streak and sheet and splash):
+        return
+    if ASSET_LIB.does_asset_exist(RAIN_PATH):
+        ASSET_LIB.delete_asset(RAIN_PATH)
+    material = ASSET_TOOLS.create_asset("M_RoomRain", MATERIAL_PACKAGE, unreal.Material, unreal.MaterialFactoryNew())
+    material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    material.set_editor_property("two_sided", True)
+
+    def scalar(name, value, x, y):
+        node = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionScalarParameter, x, y)
+        node.set_editor_property("parameter_name", name)
+        node.set_editor_property("default_value", value)
+        return node
+
+    def vector(name, value, x, y):
+        node = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionVectorParameter, x, y)
+        node.set_editor_property("parameter_name", name)
+        node.set_editor_property("default_value", unreal.LinearColor(value[0], value[1], value[2], 1.0))
+        return node
+
+    texture = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, -900, -300)
+    texture.set_editor_property("parameter_name", "StreakMap")
+    texture.set_editor_property("texture", streak)
+    texture.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
+
+    names = ["UV", "Streak", "Tiling", "Pan", "Time", "WP", "Eye", "Fade", "FadeFar"]
+    alpha = custom_node(material, RAIN_CODE, unreal.CustomMaterialOutputType.CMOT_FLOAT1, names, -400, 0)
+    sources = {
+        "UV": MAT_LIB.create_material_expression(material, unreal.MaterialExpressionTextureCoordinate, -900, -400),
+        "Streak": texture,
+        "Tiling": vector("TilingXY", (1.0, 1.0, 0.0), -900, -150),
+        "Pan": vector("Pan", (0.0, 0.0, 0.0), -900, -50),
+        "Time": MAT_LIB.create_material_expression(material, unreal.MaterialExpressionTime, -900, 50),
+        "WP": MAT_LIB.create_material_expression(material, unreal.MaterialExpressionWorldPosition, -900, 150),
+        "Eye": MAT_LIB.create_material_expression(material, unreal.MaterialExpressionCameraPositionWS, -900, 250),
+        "Fade": vector("FadeNear", (20.0, 120.0, 0.0), -900, 350),
+        "FadeFar": vector("FadeFar", (1500.0, 2600.0, 0.0), -900, 450),
+    }
+    for name in names:
+        MAT_LIB.connect_material_expressions(sources[name], "", alpha, name)
+
+    tint = vector("Tint", (0.55, 0.62, 0.75), -400, -400)
+    intensity = scalar("Intensity", 0.3, -400, -300)
+    opacity = scalar("Opacity", 0.5, -400, 300)
+    glow = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, -150, -350)
+    MAT_LIB.connect_material_expressions(tint, "", glow, "A")
+    MAT_LIB.connect_material_expressions(intensity, "", glow, "B")
+    lit = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, 50, -250)
+    MAT_LIB.connect_material_expressions(glow, "", lit, "A")
+    MAT_LIB.connect_material_expressions(alpha, "", lit, "B")
+    seen = MAT_LIB.create_material_expression(material, unreal.MaterialExpressionMultiply, 50, 200)
+    MAT_LIB.connect_material_expressions(alpha, "", seen, "A")
+    MAT_LIB.connect_material_expressions(opacity, "", seen, "B")
+    MAT_LIB.connect_material_property(lit, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MAT_LIB.connect_material_property(seen, "", unreal.MaterialProperty.MP_OPACITY)
+    allow_instancing(material)
+    MAT_LIB.recompile_material(material)
+    ASSET_LIB.save_loaded_asset(material)
+    unreal.log("Built " + RAIN_PATH)
+
+
 def stage_requested():
     """-ArtStage=<name> on the command line, or None for the whole pipeline.
 
@@ -1673,6 +1761,7 @@ STANDALONE_STAGES = {
     "stainedglass": build_stained_glass_masters,
     "usage": rebuild_usage,
     "storm": build_storm_masters,
+    "rain": build_rain_master,
 }
 
 

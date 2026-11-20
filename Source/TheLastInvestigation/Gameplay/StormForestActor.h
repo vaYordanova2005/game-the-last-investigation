@@ -64,6 +64,9 @@ public:
 	/** How far the ground lies under a window actor's origin on the ground floor's level. */
 	static constexpr float GroundDrop = 40.f;
 
+	/** Height of the ground at a point, world space. Valid once the forest is built. */
+	float GroundHeight(float X, float Y) const;
+
 private:
 	void Build();
 	void BuildGround();
@@ -71,8 +74,6 @@ private:
 	void BuildFarWall();
 	void BuildSky();
 
-	/** Height of the ground at a point, world space. */
-	float GroundHeight(float X, float Y) const;
 	/** Distance from a point to the house's footprint; zero inside it. */
 	float DistanceToHouse(float X, float Y) const;
 

@@ -1,5 +1,6 @@
 #include "StormForestActor.h"
 #include "StormWindowActor.h"
+#include "MansionExteriorActor.h"
 #include "RoomBuildLibrary.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -174,6 +175,18 @@ void AStormForestActor::Build()
 	BuildTrees();
 	BuildFarWall();
 	BuildSky();
+
+	// The house's own outside, built round the rooms now that the ground it stands on is known.
+	// -NoExterior leaves it out, for comparing a room with and without it.
+	if (FParse::Param(FCommandLine::Get(), TEXT("NoExterior")))
+	{
+		return;
+	}
+	if (AMansionExteriorActor* Exterior = GetWorld()->SpawnActorDeferred<AMansionExteriorActor>(AMansionExteriorActor::StaticClass(), FTransform::Identity, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+	{
+		Exterior->Configure(this);
+		Exterior->FinishSpawning(FTransform::Identity);
+	}
 }
 
 void AStormForestActor::BuildGround()

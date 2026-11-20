@@ -845,12 +845,32 @@ void ARoomDressingActor::BuildCeiling(FRoomBuilder& Build)
 	const float CeilingZ = Setup.Height;
 
 	// The ceiling surface itself, then the beams that show where the plaster has come down.
-	Build.Mark(FVector(0.f, 0.f, CeilingZ - 1.f), FRotator(0.f, 0.f, 180.f), FVector2D(WidthHalf * 2.f, DepthHalf * 2.f), MatCeiling);
+	// Out to the plaster on every side and a little into it: at the room's half-sizes it stopped ten
+	// centimetres short of the walls (they stand at the half-size plus half a wall), and down that
+	// strip the cellar's untextured slab over the room showed, which along the east wall read as a
+	// grey beam (the user, 2026-11-20).
+	Build.Mark(FVector(0.f, 0.f, CeilingZ - 1.f), FRotator(0.f, 0.f, 180.f), FVector2D(WidthHalf * 2.f + 24.f, DepthHalf * 2.f + 24.f), MatCeiling);
 
 	for (int32 i = 0; i < 4; ++i)
 	{
 		const float X = -WidthHalf + (WidthHalf * 2.f) * (i + 0.5f) / 4.f;
-		Build.Box(FVector(X, 0.f, CeilingZ - 9.f), FRotator::ZeroRotator, FVector(24.f, DepthHalf * 2.f, 18.f), MatRoughWood);
+		// Turned so the beam's length is its local X: the builder lays the long repeat count along X,
+		// and with the length on Y the planks' photograph was squeezed across the beam and stretched
+		// down it, which read as plaster, not timber (the user, 2026-11-20).
+		// And on an instance of its own with its repeats written out: through the builder's tiling
+		// one of the four came out a grey, near-untextured slab that went black under the lantern.
+		UMaterialInterface* BeamMat = MatRoughWood;
+		if (UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr,
+			*FString::Printf(TEXT("/Game/Materials/MI_%s.MI_%s"), RoomSurfaces::RoughWood.Set, RoomSurfaces::RoughWood.Set)))
+		{
+			UMaterialInstanceDynamic* Mat = UMaterialInstanceDynamic::Create(Parent, this);
+			const float Texel = RoomSurfaces::RoughWood.TexelSizeCm;
+			Mat->SetVectorParameterValue(TEXT("Tint"), FLinearColor(0.402f, 0.409f, 0.391f));
+			Mat->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(DepthHalf * 2.f / Texel, 24.f / Texel, 0.f, 1.f));
+			Mat->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(0.23f * i, 0.37f * i, 0.f, 1.f));
+			BeamMat = Mat;
+		}
+		Build.Box(FVector(X, 0.f, CeilingZ - 9.f), FRotator(0.f, 90.f, 0.f), FVector(DepthHalf * 2.f, 24.f, 18.f), BeamMat);
 	}
 
 	// Water damage: rings of stain thrown up at the ceiling, darkest and smallest at the centre

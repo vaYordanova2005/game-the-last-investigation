@@ -418,6 +418,9 @@ AStormWindowActor::AStormWindowActor()
 	LightningLight->SetIntensity(StormAmbientLux);
 	LightningLight->SetLightColor(LightningColor);
 	LightningLight->SetCastShadows(true); // the whole point: hard, long shadows thrown across the room
+	// The light forward shading, the glass and the fog use, over the house's moonlight (which is on
+	// the outside's lighting channel only: AMansionExteriorActor).
+	LightningLight->SetForwardShadingPriority(1);
 
 	LightningGlow = CreateDefaultSubobject<UPointLightComponent>(TEXT("LightningGlow"));
 	LightningGlow->SetupAttachment(StormRoot);
@@ -1051,7 +1054,7 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 		StrikeIntensity = Lead->GetStrikeIntensity();
 		const float GlowScale = (bViewUnderground || bViewSealed) ? 0.f : (Setup.bOwnView ? 900.f : 260.f) * Setup.GlowScale;
 		LightningGlow->SetIntensity(FlashAlpha * StrikeIntensity * GlowScale);
-		SkyPortal->SetIntensity(SkyPortalCandelas * Setup.PortalScale * (1.f + LitFlash() * PortalFlood()));
+		SkyPortal->SetIntensity(bViewOutside ? 0.f : SkyPortalCandelas * Setup.PortalScale * (1.f + LitFlash() * PortalFlood()));
 		if (Setup.bOwnView)
 		{
 			FollowOwnView();
@@ -1131,7 +1134,7 @@ void AStormWindowActor::TickLightning(float DeltaTime)
 	LightningGlow->SetIntensity((bViewUnderground || bViewSealed) ? 0.f : FlashAlpha * StrikeIntensity * 260.f);
 	// The window itself floods when the sky goes off: from inside a room, that — not the bolt — is
 	// what a strike actually looks like.
-	SkyPortal->SetIntensity(SkyPortalCandelas * (1.f + LitFlash() * PortalFlood()));
+	SkyPortal->SetIntensity(bViewOutside ? 0.f : SkyPortalCandelas * (1.f + LitFlash() * PortalFlood()));
 
 	// The sky: the cloud round the strike lit from inside for as long as the flash lasts, and the
 	// channel only while it is actually discharging. It snaps off with the sub-flash rather than

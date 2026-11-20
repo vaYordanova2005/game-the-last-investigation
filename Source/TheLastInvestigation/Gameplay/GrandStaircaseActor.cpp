@@ -1,4 +1,5 @@
 #include "GrandStaircaseActor.h"
+#include "MansionExteriorActor.h"
 #include "RoomBuildLibrary.h"
 #include "HallDoorActor.h"
 #include "LivingRoomActor.h"
@@ -232,8 +233,8 @@ void AGrandStaircaseActor::Configure(const FStairHallSetup& InSetup, AStormWindo
 	Openings = {
 		// Onto the gallery from the corridor.
 		{ EWall::East, Setup.CenterY, Setup.OpeningWidth * 0.5f, 0.f, Setup.OpeningHeight },
-		// The front door, below it.
-		{ EWall::East, Setup.CenterY, 60.f, GroundZ, GroundZ + 250.f },
+		// The front door, below it: the black double door (AMansionExteriorActor).
+		{ EWall::East, Setup.CenterY, AMansionExteriorActor::DoorUnitWidth * 0.5f, GroundZ, GroundZ + AMansionExteriorActor::DoorUnitHeight },
 		// The kitchen door, and opposite it the open way into the living room.
 		{ EWall::North, SideDoorX(), SideDoorHalf, GroundZ, GroundZ + SideDoorHeight },
 		{ EWall::South, SideDoorX(), ParlourHalf, GroundZ, GroundZ + ParlourHeight },
@@ -567,7 +568,7 @@ void AGrandStaircaseActor::BuildShell(FRoomBuilder& Build)
 	// Thresholds through the wall in every doorway, and a deeper stone one at the front door.
 	Build.Box(FVector(SideDoorX(), NorthY() - T * 0.5f, GroundZ + 1.f), FRotator::ZeroRotator, FVector(SideDoorHalf * 2.f, T + 4.f, 4.f), MatOakDark);
 	Build.Box(FVector(SideDoorX(), SouthY() + T * 0.5f, GroundZ + 1.f), FRotator::ZeroRotator, FVector(ParlourHalf * 2.f, T + 4.f, 4.f), MatOakDark);
-	Build.Box(FVector(EastX() + T * 0.5f, Setup.CenterY, GroundZ + 1.5f), FRotator::ZeroRotator, FVector(T + 30.f, 130.f, 5.f), MatMarble);
+	Build.Box(FVector(EastX() + T * 0.5f, Setup.CenterY, GroundZ + 1.5f), FRotator::ZeroRotator, FVector(T + 30.f, AMansionExteriorActor::DoorUnitWidth + 10.f, 5.f), MatMarble);
 	// And through the archway from the corridor, where the two floors meet.
 	Build.Box(FVector(EastX() + T * 0.5f, Setup.CenterY, 0.f), FRotator::ZeroRotator, FVector(T + 4.f, Setup.OpeningWidth, 6.f), MatOakDark);
 }
@@ -1266,14 +1267,28 @@ void AGrandStaircaseActor::BuildWallFinish(FRoomBuilder& Build)
 
 	// The front door's casing: heavier than the others, with a cornice over it.
 	{
-		const float Half = 60.f;
-		const float H = GroundZ + 250.f;
+		const float Half = AMansionExteriorActor::DoorUnitWidth * 0.5f;
+		const float H = GroundZ + AMansionExteriorActor::DoorUnitHeight;
 		for (const float S : { -1.f, 1.f })
 		{
 			WallBox(Build, EWall::East, Setup.CenterY + S * (Half + 9.f), (GroundZ + H + 18.f) * 0.5f, 18.f, H + 18.f - GroundZ, 4.f, 0.f, MatOak);
 		}
 		WallBox(Build, EWall::East, Setup.CenterY, H + 9.f, Half * 2.f + 36.f, 18.f, 4.f, 0.f, MatOak);
 		WallBox(Build, EWall::East, Setup.CenterY, H + 22.f, Half * 2.f + 50.f, 8.f, 7.f, 0.f, MatOak);
+
+		// The door itself: the black double door that is the house's front door, seen from inside. It
+		// is never opened, so it is a model in the wall, with a blocker where the leaves are.
+		const FVector DoorAt(EastX() + Setup.WallThickness * 0.5f, Setup.CenterY, GroundZ);
+		if (UStaticMeshComponent* Door = Build.Prop(TEXT("exterior_front_door"), DoorAt, FRotator(0.f, -90.f, 0.f), 0.f, false))
+		{
+			AMansionExteriorActor::DressFrontDoor(Door, this);
+		}
+		if (UStaticMeshComponent* Blocker = Build.Box(DoorAt + FVector(0.f, 0.f, AMansionExteriorActor::DoorUnitHeight * 0.5f), FRotator::ZeroRotator,
+			FVector(Setup.WallThickness, AMansionExteriorActor::DoorUnitWidth, AMansionExteriorActor::DoorUnitHeight), MatShell, true))
+		{
+			Blocker->SetHiddenInGame(true);
+			Blocker->SetCastShadow(false);
+		}
 	}
 
 	// The casings of the kitchen door and of the open way into the living room.
@@ -1904,8 +1919,6 @@ void AGrandStaircaseActor::SpawnDoors()
 	struct FDoorSpec { FVector Hinge; float Yaw; float Width; float Height; float Ajar; float Open; FLinearColor Tint; bool bSix; };
 	const float Half = SideDoorHalf;
 	const FDoorSpec Specs[] = {
-		// The front door. Local +X is the hall side: yaw 180 on the east wall.
-		{ FVector(EastX() + 2.6f, Setup.CenterY + 60.f - 2.f, GroundZ), 180.f, 116.f, 248.f, 0.f, 0.f, FLinearColor(0.20f, 0.20f, 0.20f), true },
 		// The kitchen: swollen in its frame and standing a hand's width open, and it goes the rest of
 		// the way when pushed (89: past 90 the leaf swings through the casing, as on the girl's door).
 		{ FVector(SideDoorX() + Half - 2.f, NorthY() - 2.6f, GroundZ), 90.f, Half * 2.f - 4.f, SideDoorHeight - 2.f, 14.f, 89.f, FLinearColor(0.26f, 0.27f, 0.28f), true },
@@ -1915,7 +1928,9 @@ void AGrandStaircaseActor::SpawnDoors()
 		{ FVector(FlightEastX() - 2.f, CellarShaftNorthY() + 1.f, GroundZ), 0.f, CellarDoorWidth - 2.f, CellarDoorHeight - 1.f, 3.f, 86.f, FLinearColor(0.22f, 0.22f, 0.22f), false },
 	};
 
-	int32 Seed = 5101;
+	// 5101 was the front door's, before it became the black double door in the east wall (BuildShell):
+	// the others keep their seeds.
+	int32 Seed = 5102;
 	for (const FDoorSpec& Spec : Specs)
 	{
 		FHallDoorSetup DoorSetup;
@@ -2111,33 +2126,6 @@ AClueActor* AGrandStaircaseActor::SpawnClue(const FVector& LocalLocation, const 
 
 void AGrandStaircaseActor::BuildClues()
 {
-
-	// The front door, boarded from the inside. These are the boards that used to be across the
-	// stairs upstairs, and the line goes with them: whoever nailed them was on this side.
-	if (AClueActor* Boards = SpawnClue(FVector(EastX() - 5.f, Setup.CenterY, GroundZ + 125.f), FRotator::ZeroRotator))
-	{
-		FRoomBuilder B(Boards, Boards->GetRootScene());
-		// In the plane of the door only — roll about the wall's normal, which is X here — or a
-		// plank stands off the door at one end (the corridor's 09-26 note on the old boards).
-		struct FPlank { float Z; float Roll; float Length; float Height; };
-		const FPlank Planks[] = {
-			{ -95.f, 5.f, 168.f, 17.f }, { -60.f, -7.f, 160.f, 15.f }, { -18.f, 3.f, 172.f, 18.f }, { 18.f, 16.f, 176.f, 15.f },
-			{ 52.f, -4.f, 164.f, 16.f }, { 88.f, -13.f, 170.f, 14.f }, { 122.f, 6.f, 158.f, 17.f },
-		};
-		for (int32 i = 0; i < UE_ARRAY_COUNT(Planks); ++i)
-		{
-			const FPlank& P = Planks[i];
-			const float X = -1.8f - (i % 2) * 2.2f;
-			B.Box(FVector(X, (i % 3 - 1) * 4.f, P.Z), FRotator(0.f, 0.f, P.Roll), FVector(2.2f, P.Length, P.Height), (i % 3 == 0) ? MatOakDark.Get() : MatOak.Get(), false);
-			// Between the boards the interaction trace goes through to the door behind them.
-			const float Reach = P.Length * 0.5f - 9.f;
-			const float R = FMath::DegreesToRadians(P.Roll);
-			for (const float Side : { -1.f, 1.f })
-			{
-				B.Sph(FVector(X - 1.4f, (i % 3 - 1) * 4.f + Side * Reach * FMath::Cos(R), P.Z + Side * Reach * FMath::Sin(R)), 1.4f, MatIron);
-			}
-		}
-	}
 
 	// The cases, by the door, ready to go. vintage_suitcase is two cases standing side by side along
 	// its local X, with their faces on Y; yaw 90 stands them along the east wall.

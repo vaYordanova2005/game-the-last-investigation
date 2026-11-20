@@ -1,4 +1,7 @@
 #include "RoomGameModeBase.h"
+#include "Components/LightComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Character.h"
 #include "DetectiveCharacter.h"
 #include "RoomHUD.h"
 #include "InvestigationRoomActor.h"
@@ -75,7 +78,33 @@ void ARoomGameModeBase::ScheduleHeadlessScreenshot()
 
 			if (APawn* Pawn = PC->GetPawn())
 			{
+				// -RoomShotFly holds the camera where it is put: outside the house nothing collides
+				// (AMansionExteriorActor), and a pawn standing on nothing falls for the half second
+				// before the capture.
+				if (FParse::Param(FCommandLine::Get(), TEXT("RoomShotFly")))
+				{
+					if (ACharacter* Character = Cast<ACharacter>(Pawn))
+					{
+						Character->GetCharacterMovement()->GravityScale = 0.f;
+						Character->GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+						Character->GetCharacterMovement()->StopMovementImmediately();
+					}
+				}
 				Pawn->SetActorLocationAndRotation(Spot, FRotator::ZeroRotator);
+				// -RoomShotNoLantern puts the lantern out and hides the hand: for judging the house
+				// from outside by the light out there, not by a flame at the lens.
+				if (FParse::Param(FCommandLine::Get(), TEXT("RoomShotNoLantern")))
+				{
+					TArray<USceneComponent*> Parts;
+					Pawn->GetComponents<USceneComponent>(Parts);
+					for (USceneComponent* Part : Parts)
+					{
+						if (Part->IsA<ULightComponent>() || Part->IsA<UPrimitiveComponent>())
+						{
+							Part->SetVisibility(false);
+						}
+					}
+				}
 			}
 
 			// -RoomShotYaw=<degrees> turns the camera off the waking pose, for looking at one wall
@@ -113,7 +142,6 @@ void ARoomGameModeBase::ScheduleHeadlessScreenshot()
 			// is swallowed silently, which looks exactly like a screenshot that was taken and lost.
 			// -RoomShotUI keeps the HUD in the frame, for checking what the interaction prompt says.
 			FScreenshotRequest::RequestScreenshot(/*bShowUI*/ FParse::Param(FCommandLine::Get(), TEXT("RoomShotUI")));
-
 			// A screenshot is written at the end of the frame after the one that requested it, so
 			// the quit has to wait a beat or the file is truncated or never written at all.
 			FTimerHandle QuitTimer;
@@ -166,5 +194,18 @@ void ARoomGameModeBase::HandleStartingNewPlayer_Implementation(APlayerController
 		// slight downward pitch is a man opening his eyes on the floor, not a camera on a tripod.
 		NewPlayer->SetControlRotation(Facing);
 		UE_LOG(LogTemp, Log, TEXT("Room01: player placed at %s"), *Pawn->GetActorLocation().ToString());
+
+		// -Fly: no gravity, for looking at the house from outside, where nothing collides
+		// (AMansionExteriorActor). The detective moves at the height he was started at.
+		if (FParse::Param(FCommandLine::Get(), TEXT("Fly")))
+		{
+			if (ACharacter* Character = Cast<ACharacter>(Pawn))
+			{
+				Character->GetCharacterMovement()->GravityScale = 0.f;
+				Character->GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+				Character->GetCharacterMovement()->MaxFlySpeed = 600.f;
+				Character->GetCharacterMovement()->BrakingDecelerationFlying = 2000.f;
+			}
+		}
 	}
 }

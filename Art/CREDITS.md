@@ -78,6 +78,16 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | `metal_plate_02` | texture | the gilt (tinted gold) and the safe's and telephone's steel |
 | `painted_plaster_wall` | texture | the study's dark ceiling |
 
+## The house's outside — Poly Haven (CC0 / public domain)
+
+| Asset ID | Kind | Used for |
+|---|---|---|
+| `brick_wall_10` | texture | the outside walls: dark, weathered red-brown brick |
+| `concrete_wall_007` | texture | the stone dressings: quoins, window and door surrounds, sills, string course, plinth, the porch deck and steps |
+| `roof_slates_02` | texture | the slate roofs, the turret's cone, the porch roof |
+| `gravel_stones` | texture | the drive up to the porch |
+| `forrest_ground_01` | texture | the overgrown lawn round the house |
+
 ## Generated in-repo
 
 | File | Made by | Used for |
@@ -102,6 +112,8 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | `Art/Source/Textures/music_*` | `Tools/make_music_art.py` | the emerald velvet, the silk damask, the scores, manuscript, programme and certificates, the photographs, the spines of the music, the three paintings |
 | `Art/Source/Models/study_*` | `Tools/make_study.py` (Blender) | the study's black door and its case, desk, Chesterfield club chairs and sofa, coffee and card tables, cards and chips, drinks cabinet and tray, tumblers, safe, bookcases, file boxes, case board, portrait and map frames, sconces, coat stand, hat, telephone, cigar box, ashtray, case files and prints |
 | `Art/Source/Textures/study_*` | `Tools/make_study_art.py` | the case board, the portrait of the man in the black hat, the city map, the case file's cover, two prints, the burgundy carpet |
+| `Art/Source/Models/exterior_*` | `Tools/make_exterior.py` (Blender) | the black double front door, the porch's posts and brackets, the gable finials, the turret's spire, the chimney pots, the louvred shutters |
+| `Art/Source/Textures/exterior_ivy_*` | `Tools/make_exterior_art.py` | the ivy on the walls |
 
 The stained-glass inscription, the wine labels, the crate brands, the library's spines, maps and calendar and the music room's scores, programme, certificates and spines are set in Cinzel (SIL Open Font License, `Content/Fonts/OFL.txt`).
 
