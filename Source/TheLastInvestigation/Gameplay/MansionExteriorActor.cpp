@@ -32,8 +32,13 @@ namespace
 	constexpr float ExtSurroundProud = 4.f;
 	/** Where an opening's reveal stops, in from the wall face: short of the sash (StormWindowActor: SashX). */
 	constexpr float ExtRevealDepth = -5.f;
-	/** The bottom of every wall: below the ground everywhere, and above the cellar's ceilings. */
-	constexpr float ExtWallFoot = -420.f;
+	/**
+	 * The bottom of every wall: under the lawn (the ground is at -380, the lawn ten over it), and over
+	 * the cellar's ceiling slabs (-385..-375). The maid's room runs out under the west front, and at
+	 * -420 the wall's foot and its plinth stood 35cm down into the room along its whole ceiling, a
+	 * grey beam that was not wood (the user, 2026-11-20).
+	 */
+	constexpr float ExtWallFoot = -374.f;
 	constexpr float ExtPlinthTop = -300.f;
 	constexpr float ExtStringZ0 = -30.f;
 	constexpr float ExtStringZ1 = -14.f;

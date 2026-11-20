@@ -142,7 +142,6 @@ void ARoomGameModeBase::ScheduleHeadlessScreenshot()
 			// is swallowed silently, which looks exactly like a screenshot that was taken and lost.
 			// -RoomShotUI keeps the HUD in the frame, for checking what the interaction prompt says.
 			FScreenshotRequest::RequestScreenshot(/*bShowUI*/ FParse::Param(FCommandLine::Get(), TEXT("RoomShotUI")));
-
 			// A screenshot is written at the end of the frame after the one that requested it, so
 			// the quit has to wait a beat or the file is truncated or never written at all.
 			FTimerHandle QuitTimer;
