@@ -968,7 +968,11 @@ def build_models(master):
                 slot = "_".join(parts[: -len(map_kind.split("_"))])
                 slot = slot[len(model_id):].strip("_") or "default"
 
-                texture = import_texture(os.path.join(texture_folder, file_name), "T_" + stem, map_kind)
+                # A generated model's textures are ours and change when it is re-baked
+                # (Tools/make_hanged_man.py darkens the face into the skin), so they are
+                # re-imported every run like the model itself; downloaded maps never change.
+                texture = import_texture(os.path.join(texture_folder, file_name), "T_" + stem, map_kind,
+                                         force=os.path.isfile(os.path.join(folder, "GENERATED")))
                 if texture:
                     by_slot.setdefault(slot.lower(), {})[MAP_KINDS[map_kind][0]] = texture
 
