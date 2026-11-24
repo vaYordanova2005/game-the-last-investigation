@@ -88,6 +88,19 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | `gravel_stones` | texture | the drive up to the porch |
 | `forrest_ground_01` | texture | the overgrown lawn round the house |
 
+## The hanged man — MakeHuman / MPFB (CC0)
+
+https://static.makehumancommunity.org — the body and his clothes are built in Blender with MPFB
+2.0.18 (the MakeHuman plugin, GPL code; models made with it are the user's own) from
+`makehuman_system_assets_cc0.zip` (CC0). Built and posed by `Tools/make_hanged_man.py`.
+
+| Asset | Kind | Used for |
+|---|---|---|
+| `middleage_caucasian_male` | skin | his skin |
+| `male_elegantsuit01` | clothes | the dark suit, white shirt and tie |
+| `shoes02` | clothes | his shoes |
+| `short02` | hair | his hair |
+
 ## Generated in-repo
 
 | File | Made by | Used for |

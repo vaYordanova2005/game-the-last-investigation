@@ -71,6 +71,18 @@ public:
 	void Configure(const FMasterBedroomSetup& InSetup);
 
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	/**
+	 * The hanged man (Tools/make_hanged_man.py): from the hook's rod down to his soles. Shared with
+	 * HANG_DROP there; with the rod at 291 his feet hang 38 over the boards.
+	 */
+	static constexpr float HangedManDrop = 253.f;
+	/** The faint light over his head that keeps it a shape in the dark (BuildHangedMan). */
+	static constexpr float HangedManRimCandelas = 3.f;
+	/** The hook's bend: the shank under the plate, and the bend's radius (BuildHook). */
+	static constexpr float HookShankLength = 8.5f;
+	static constexpr float HookBendRadius = 5.4f;
 
 	// Shared with Tools/make_bedroom.py.
 	static constexpr float BedLength = 216.f;
@@ -153,6 +165,15 @@ private:
 	FVector PlantSeat() const { return FVector(350.f, -272.f, 0.f); }
 	/** The ceiling hook: where it always was, in the middle of the waking view. */
 	FVector HookAnchor() const { return FVector(95.f, 60.f, Setup.Height); }
+	/** The bottom of the hook's bend: the centre of the rod where a rope hung on it rests. */
+	FVector HookRestPoint() const { return HookAnchor() + FVector(0.f, HookBendRadius, -HookShankLength - HookBendRadius); }
+	/**
+	 * Which way the hanged man faces (his front, local +Y): his back to where the detective wakes,
+	 * a little off square. The detective's eye is half a metre under the hanged man's head, so a
+	 * bowed face turned even three-quarters towards him is looked up into; with the back to him it
+	 * never is, and as the body turns on the rope (Tick) the most it gives is the line of a jaw.
+	 */
+	static constexpr float HangedManYaw = 25.f;
 
 	void CacheMaterials(FRoomBuilder& Build);
 	void BuildFloor(FRoomBuilder& Build);
@@ -160,6 +181,8 @@ private:
 	void BuildJoinery(FRoomBuilder& Build);
 	void BuildCeiling(FRoomBuilder& Build);
 	void BuildHook(FRoomBuilder& Build);
+	/** The man on the hook: a silhouette in the detective's clothes, in a breath of mist. */
+	void BuildHangedMan(FRoomBuilder& Build);
 	void BuildBed(FRoomBuilder& Build);
 	void BuildWardrobes(FRoomBuilder& Build);
 	void BuildDresser(FRoomBuilder& Build);
@@ -219,6 +242,11 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Bedroom")
 	TObjectPtr<UDustMotesComponent> DustMotes;
+
+	/** Turns the hanged man about the hook (never the root: see the 09-20 door). */
+	UPROPERTY(Transient)
+	TObjectPtr<USceneComponent> HangPivot;
+	float HangTime = 0.f;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AClueActor>> Clues;

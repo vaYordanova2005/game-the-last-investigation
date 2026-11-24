@@ -7,6 +7,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/DecalComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/World.h"
 
@@ -16,6 +17,10 @@ namespace
 	namespace BedroomProps
 	{
 		const TCHAR* Bed = TEXT("bedroom_bed");
+		/** Tools/make_hanged_man.py: a MakeHuman body in the detective's clothes, and the rope over the hook. */
+		const TCHAR* HangedMan = TEXT("bedroom_hanged_man");
+		const TCHAR* HangedManHead = TEXT("bedroom_hanged_man_head");
+		const TCHAR* HookRope = TEXT("bedroom_hook_rope");
 		const TCHAR* Nightstand = TEXT("bedroom_nightstand");
 		const TCHAR* Bench = TEXT("bedroom_bench");
 		const TCHAR* Wardrobe = TEXT("bedroom_wardrobe");
@@ -158,7 +163,9 @@ namespace
 
 AMasterBedroomActor::AMasterBedroomActor()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	// Only for the hanged man turning on his rope.
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = true;
 
 	RoomRoot = CreateDefaultSubobject<USceneComponent>(TEXT("RoomRoot"));
 	SetRootComponent(RoomRoot);
@@ -193,6 +200,7 @@ void AMasterBedroomActor::BeginPlay()
 	BuildJoinery(Build);
 	BuildCeiling(Build);
 	BuildHook(Build);
+	BuildHangedMan(Build);
 	BuildBed(Build);
 	BuildWardrobes(Build);
 	BuildDresser(Build);
@@ -791,7 +799,7 @@ void AMasterBedroomActor::BuildHook(FRoomBuilder& Build)
 	// was turned in. Built as the old one was (ARoomDressingActor): a shank with a thread, a bend
 	// swept round fifteen segments in the room's YZ plane, drawn to a point.
 	const FVector Anchor = HookAnchor();
-	const float ShankLength = 8.5f;
+	const float ShankLength = HookShankLength;
 	Build.Cyl(Anchor + FVector(0.f, 0.f, -ShankLength * 0.5f), FRotator::ZeroRotator, FVector(2.2f, 2.2f, ShankLength), MatIron, false);
 	for (int32 Thread = 0; Thread < 4; ++Thread)
 	{
@@ -800,7 +808,7 @@ void AMasterBedroomActor::BuildHook(FRoomBuilder& Build)
 	// A plate where it meets the plaster.
 	Build.Cyl(Anchor + FVector(0.f, 0.f, -0.6f), FRotator::ZeroRotator, FVector(6.f, 6.f, 1.2f), MatIron, false);
 
-	const float HookRadius = 5.4f;
+	const float HookRadius = HookBendRadius;
 	const FVector BendCentre = Anchor + FVector(0.f, HookRadius, -ShankLength);
 	const int32 BendSegments = 15;
 	const float BendSweep = 214.f;
@@ -825,6 +833,134 @@ void AMasterBedroomActor::BuildHook(FRoomBuilder& Build)
 	Build.Crack(Anchor + FVector(0.f, 0.f, -2.f), FRotator(90.f, 0.f, 30.f), FVector2D(46.f, 38.f), 0.8f, 20.f);
 	Build.Stain(RoomSurfaces::Damp, Anchor + FVector(0.f, 0.f, -2.f), FRotator(90.f, 0.f, 24.f), FVector2D(14.f, 12.f),
 		FLinearColor(0.150f, 0.064f, 0.030f), 0.6f, 1.f);
+}
+
+void AMasterBedroomActor::BuildHangedMan(FRoomBuilder& Build)
+{
+	// The man on the hook. A MakeHuman body (Tools/make_hanged_man.py) in the detective's own
+	// clothes, posed limp, the head dropped on the chest, his face in shadow. Nobody standing in this
+	// room can say who he is.
+	const FVector Rest = HookRestPoint();
+
+	// The rope over the rod does not turn; he does, a little, about the rope (Tick).
+	UStaticMeshComponent* Loop = Place(Build, BedroomProps::HookRope, Rest, FRotator::ZeroRotator, {});
+	if (Loop)
+	{
+		BedroomNoDecals(Loop);
+	}
+
+	HangPivot = NewObject<USceneComponent>(this, TEXT("HangPivot"));
+	HangPivot->SetMobility(EComponentMobility::Movable);
+	HangPivot->AttachToComponent(RoomRoot, FAttachmentTransformRules::KeepRelativeTransform);
+	HangPivot->SetRelativeLocationAndRotation(Rest, FRotator(0.f, HangedManYaw, 0.f));
+	HangPivot->RegisterComponent();
+	AddInstanceComponent(HangPivot);
+
+	FRoomBuilder Hang(this, HangPivot);
+	UStaticMeshComponent* Man = Hang.Prop(BedroomProps::HangedMan, FVector::ZeroVector, FRotator::ZeroRotator, 0.f, /*bBlockingCollision*/ false);
+	// From the base of the neck up (the head, the hair, the noose) is a model of its own, and it
+	// takes no direct light: no lighting channel, so neither the lantern nor the storm reaches it
+	// and only the room's bounced light finds the shape of the head. Whatever the detective does
+	// with the lantern, from the collar up there is only the dark, and who he is stays in it.
+	// Darkening the face in its texture read as a black mask; a sphere of absorbing fog over the
+	// head did nothing at all.
+	UStaticMeshComponent* Head = Hang.Prop(BedroomProps::HangedManHead, FVector::ZeroVector, FRotator::ZeroRotator, 0.f, /*bBlockingCollision*/ false);
+	if (Head)
+	{
+		Head->SetLightingChannels(false, false, true);
+		// A primitive casts shadows only for the lights on its own channels, so the lantern did not
+		// see the head at all and his shadow on the wall had none. An invisible copy on the default
+		// channel casts the head's shadow and is never drawn.
+		if (UStaticMeshComponent* ShadowHead = Hang.Prop(BedroomProps::HangedManHead, FVector::ZeroVector, FRotator::ZeroRotator, 0.f, /*bBlockingCollision*/ false))
+		{
+			ShadowHead->SetHiddenInGame(true);
+			ShadowHead->SetCastHiddenShadow(true);
+			ShadowHead->SetAffectIndirectLightingWhileHidden(false);
+			BedroomNoDecals(ShadowHead);
+		}
+		// Fully unlit, the head was a flat black cut-out, a hole rather than a head in the dark.
+		// One weak light on channel 2, which nothing else in the house is on, just over the back
+		// of his head and turning with him: it greys the crown, the hair and the line of the skull
+		// so the head is a dark shape, and the bowed face, turned down, never sees it.
+		if (UPointLightComponent* Rim = NewObject<UPointLightComponent>(this, TEXT("HangedManRim")))
+		{
+			Rim->SetMobility(EComponentMobility::Movable);
+			Rim->AttachToComponent(HangPivot, FAttachmentTransformRules::KeepRelativeTransform);
+			Rim->SetRelativeLocation(FVector(0.f, -14.f, -38.f));
+			Rim->SetLightingChannels(false, false, true);
+			Rim->SetIntensityUnits(ELightUnits::Candelas);
+			Rim->SetIntensity(HangedManRimCandelas);
+			Rim->SetAttenuationRadius(70.f);
+			Rim->SetSourceRadius(12.f);
+			Rim->SetLightColor(FLinearColor(0.80f, 0.86f, 1.f));
+			Rim->SetCastShadows(false);
+			Rim->SetAffectTranslucentLighting(false);
+			Rim->SetVolumetricScatteringIntensity(0.f);
+			Rim->RegisterComponent();
+			AddInstanceComponent(Rim);
+		}
+	}
+
+	// His own colours taken down a little into the room's dark: a dark suit with a satin sheen
+	// the lantern runs along, the white of the shirt and the tie. From the chest up the textures
+	// themselves darken towards the collar (make_hanged_man.py), so he fades into the dark head. Taken nearly to black he read
+	// as burnt, and at a rough 0.8 the suit went a dusty grey; the user picked this one.
+	struct FDarken { const TCHAR* Slot; FLinearColor Tint; float Roughness; };
+	const FDarken Darken[] = {
+		{ TEXT("Suit"), FLinearColor(0.45f, 0.45f, 0.47f), 1.f },
+		{ TEXT("Skin"), FLinearColor(0.50f, 0.47f, 0.45f), 1.f },
+		{ TEXT("Hair"), FLinearColor(0.50f, 0.48f, 0.46f), 1.f },
+		{ TEXT("Shoes"), FLinearColor(0.30f, 0.30f, 0.30f), 1.f },
+	};
+	for (UStaticMeshComponent* Part : { Man, Head })
+	{
+		if (!Part)
+		{
+			continue;
+		}
+		BedroomNoDecals(Part);
+		for (const FDarken& D : Darken)
+		{
+			const int32 Index = Part->GetMaterialIndex(FName(D.Slot));
+			if (Index == INDEX_NONE)
+			{
+				continue;
+			}
+			if (UMaterialInstanceDynamic* Mat = UMaterialInstanceDynamic::Create(Part->GetMaterial(Index), this))
+			{
+				Mat->SetVectorParameterValue(TEXT("Tint"), D.Tint);
+				Mat->SetScalarParameterValue(TEXT("RoughnessScale"), D.Roughness);
+				Part->SetMaterial(Index, Mat);
+			}
+		}
+	}
+	// Old hemp, dark with years of the room's air.
+	UMaterialInterface* Rope = Build.Flat(FLinearColor(0.045f, 0.032f, 0.02f), 0.95f);
+	for (UStaticMeshComponent* Part : { Head, Loop })
+	{
+		if (Part && Part->GetMaterialIndex(TEXT("Rope")) != INDEX_NONE)
+		{
+			Part->SetMaterialByName(TEXT("Rope"), Rope);
+		}
+	}
+
+	// Nobody walks through him; the trace and the camera pass.
+	Blocker(Build, FVector(Rest.X, Rest.Y, 38.f + 95.f), FVector(46.f, 46.f, 190.f), HangedManYaw);
+}
+
+void AMasterBedroomActor::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (!HangPivot)
+	{
+		return;
+	}
+	// A hanged body turns slowly one way and back as the rope twists and untwists, and sways by
+	// almost nothing. Two slow sines out of step, so the turn never quite repeats.
+	HangTime += DeltaSeconds;
+	const float Turn = 11.f * FMath::Sin(HangTime * UE_TWO_PI / 26.f) + 3.5f * FMath::Sin(HangTime * UE_TWO_PI / 9.3f + 1.f);
+	const float Sway = 0.35f * FMath::Sin(HangTime * UE_TWO_PI / 3.1f);
+	HangPivot->SetRelativeRotation(FRotator(Sway, HangedManYaw + Turn, 0.3f * FMath::Sin(HangTime * UE_TWO_PI / 3.7f + 0.6f)));
 }
 
 // ---------------------------------------------------------------------------------------------
