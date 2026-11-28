@@ -76,6 +76,10 @@ TEXTURES = {
     "leather_red_02": "the study's burgundy leather: the Chesterfields, the desk top, his chair",
     "velour_velvet": "the study's burgundy velvet drapes",
     "metal_plate_02": "the study's gilt (tinted gold) and the safe's steel (tinted black)",
+    # The detective's hurricane lantern (Tools/make_lantern.py): galvanised tin gone to rust in
+    # spots, and the fully rusted iron of its frame and bail.
+    "rusty_metal_02": "the detective's lantern: rusted tin",
+    "rust_coarse_01": "the detective's lantern: the rusted frame and bail",
     "painted_plaster_wall": "the study's ceiling",
     # The house from outside: soot-dark Victorian brick, weathered stone dressings, an old slate
     # roof, the gravel drive and the overgrown lawn round the walls.

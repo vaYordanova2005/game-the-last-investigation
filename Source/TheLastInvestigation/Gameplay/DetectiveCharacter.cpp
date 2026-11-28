@@ -6,6 +6,7 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SceneComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Components/StaticMeshComponent.h"
 #include "RoomBuildLibrary.h"
 #include "Engine/StaticMesh.h"
@@ -16,6 +17,13 @@
 #include "InputMappingContext.h"
 #include "InputAction.h"
 #include "InputModifiers.h"
+
+namespace
+{
+	/** The detective's lantern's metal (Tools/make_lantern.py): texel sizes match its SLOTS. */
+	const FRoomSurface DetectiveLanternTin{ TEXT("rusty_metal_02"), 45.f };
+	const FRoomSurface DetectiveLanternRust{ TEXT("rust_coarse_01"), 30.f };
+}
 
 ADetectiveCharacter::ADetectiveCharacter()
 {
@@ -41,33 +49,70 @@ ADetectiveCharacter::ADetectiveCharacter()
 	LanternRig->SetupAttachment(FirstPersonCamera);
 	LanternRig->SetMobility(EComponentMobility::Movable);
 
-	// The lantern is carried low and to the left, the way you hold one you are walking with, and
-	// far enough forward that it sits in the corner of frame instead of filling it.
+	// The lantern hangs from the left fist by the top of its bail, the way the reference photograph
+	// has it: the hand a little left of and below the middle of the frame, the forearm running off
+	// its lower-left corner, the lantern hanging under the fist. The lantern's origin is the top of
+	// its bail and the hand's is the grip, so both sit at the same point.
+	const FVector Grip(GripForward, GripRight, GripUp);
+	const FRotator HandTurn(0.f, HandYaw, 0.f);
+
 	LanternMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LanternMesh"));
 	LanternMesh->SetupAttachment(LanternRig);
-	LanternMesh->SetRelativeLocation(FVector(63.f, -28.f, -45.f));
-	LanternMesh->SetRelativeRotation(FRotator(0.f, 16.f, 0.f));
+	LanternMesh->SetRelativeLocationAndRotation(Grip, HandTurn);
 	LanternMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	// The lantern must not cast a shadow. Its own flame is *inside* it, so a shadow-casting body
-	// puts the light source behind solid geometry and the lamp lights nothing at all — a bright
-	// object in a black room. Suppressing it is not a cheat; the housing is glass and pierced
-	// metal, and the shadow it would really throw is the barred pattern, not a sealed blob.
+	// puts the light source behind solid geometry and the lamp lights nothing at all: a bright
+	// object in a black room. Suppressing it is not a cheat; the housing is glass and wire, and the
+	// shadow it would really throw is the barred pattern, not a sealed blob.
 	LanternMesh->SetCastShadow(false);
 	LanternMesh->SetMobility(EComponentMobility::Movable);
+	LanternMesh->SetLightingChannels(false, false, true);
+
+	HandMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HandMesh"));
+	HandMesh->SetupAttachment(LanternRig);
+	HandMesh->SetRelativeLocationAndRotation(Grip, HandTurn);
+	HandMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// No shadow either: the flame is a hand's height under the fist, and a shadow-casting hand
+	// paints itself across the whole ceiling.
+	HandMesh->SetCastShadow(false);
+	HandMesh->SetMobility(EComponentMobility::Movable);
+	HandMesh->SetLightingChannels(false, false, true);
+
+	FlameMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FlameMesh"));
+	FlameMesh->SetupAttachment(LanternMesh);
+	FlameMesh->SetRelativeLocation(FVector(0.f, 0.f, -LanternFlameRoot));
+	FlameMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FlameMesh->SetCastShadow(false);
+	FlameMesh->SetMobility(EComponentMobility::Movable);
 
 	LanternLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("LanternLight"));
-	// Parented to the lantern, sitting where its flame is, so light and object never drift apart.
+	// Parented to the lantern, a centimetre up the candle's flame, so light and flame never drift apart.
 	LanternLight->SetupAttachment(LanternMesh);
-	// Candelas are a real photometric unit — UE's own point-light default is 8. Values in the
+	LanternLight->SetRelativeLocation(FVector(0.f, 0.f, -LanternFlameRoot + 1.f));
+	// Candelas are a real photometric unit: UE's own point-light default is 8. Values in the
 	// thousands (the legacy "unitless" scale) blow every surface to pure white.
 	LanternLight->SetIntensityUnits(ELightUnits::Candelas);
-	LanternLight->SetLightColor(FLinearColor(1.f, 0.72f, 0.34f)); // warm gold — the lantern's colour cue, and the cold storm's opposite
+	LanternLight->SetLightColor(FLinearColor(1.f, 0.72f, 0.34f)); // warm gold: the lantern's colour cue, and the cold storm's opposite
 	// Reaches across the room but falls off hard, so the near floor and the wall the detective is
 	// facing are readable while the far corners stay dark and have to be walked into.
 	LanternLight->SetAttenuationRadius(1100.f);
-	LanternLight->SetSourceRadius(6.f);
+	// A candle flame is small, so its shadows are sharper than a big wick's.
+	LanternLight->SetSourceRadius(2.5f);
 	LanternLight->SetCastShadows(true);
 	LanternLight->SetMobility(EComponentMobility::Movable);
+
+	LanternNearLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("LanternNearLight"));
+	LanternNearLight->SetupAttachment(LanternMesh);
+	LanternNearLight->SetRelativeLocation(FVector(0.f, 0.f, -LanternFlameRoot + 1.f));
+	LanternNearLight->SetLightingChannels(false, false, true);
+	LanternNearLight->SetIntensityUnits(ELightUnits::Candelas);
+	LanternNearLight->SetLightColor(FLinearColor(1.f, 0.66f, 0.30f));
+	LanternNearLight->SetAttenuationRadius(LanternNearRadius);
+	LanternNearLight->SetSourceRadius(1.5f);
+	LanternNearLight->SetCastShadows(false);
+	LanternNearLight->SetAffectTranslucentLighting(true);
+	LanternNearLight->SetVolumetricScatteringIntensity(0.f);
+	LanternNearLight->SetMobility(EComponentMobility::Movable);
 
 	LanternController = CreateDefaultSubobject<UDetectiveLanternComponent>(TEXT("LanternController"));
 	InteractionComponent = CreateDefaultSubobject<UInteractionComponent>(TEXT("InteractionComponent"));
@@ -133,87 +178,90 @@ void ADetectiveCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Loaded at BeginPlay rather than with a constructor ObjectFinder: the mesh is produced by the
-	// art pipeline, and a missing one must leave the game playable (an invisible lantern that
-	// still lights the room) rather than fail to start.
-	if (UStaticMesh* LanternAsset = FRoomShapes::Prop(RoomProps::Lantern))
-	{
-		LanternMesh->SetStaticMesh(LanternAsset);
-
-		// Scaled from its own bounds to a real lantern's height, so it does not matter what units
-		// the model was authored in.
-		const float NaturalHeight = LanternAsset->GetBoundingBox().GetSize().Z;
-		if (NaturalHeight > KINDA_SMALL_NUMBER)
-		{
-			LanternMesh->SetRelativeScale3D(FVector(27.f / NaturalHeight));
-		}
-
-		// Put the flame inside the lantern body rather than at its origin.
-		LanternLight->SetRelativeLocation(FVector(0.f, 0.f, NaturalHeight * 0.45f));
-	}
-
 	BuildLanternArm();
-
-	LanternController->Initialize(LanternLight);
 }
 
 void ADetectiveCharacter::BuildLanternArm()
 {
-	// A hand and a sleeve, from primitives. There is no rigged character in this project and no
-	// animation budget, but an unheld lamp floating in the corner of frame is worse than a crude
-	// arm: the lantern is the detective's one point of contact with the world, and the eye needs
-	// to see him holding it. It lives at the edge of the frame, lit from below by its own flame,
-	// where a plain silhouette is all that survives anyway.
+	// The hand, the lantern and its flame are generated models (Tools/make_detective_hand.py,
+	// Tools/make_lantern.py), loaded here rather than with a constructor ObjectFinder: they come out
+	// of the art pipeline, and a missing one must leave the game playable (the light still burns).
+	// The box-and-cylinder arm they replace read as a toy at arm's length from the lens.
 	FRoomBuilder Build(this, LanternRig);
+	UMaterialInstanceDynamic* FlameMat = nullptr;
 
-	UMaterialInstanceDynamic* CoatMat = Build.Flat(RoomPalette::Coat, 0.88f);
-	UMaterialInstanceDynamic* CuffMat = Build.Flat(RoomPalette::Coat * 3.2f, 0.8f);
-	UMaterialInstanceDynamic* SkinMat = Build.Flat(RoomPalette::Skin, 0.62f);
-
-	// Elbow off the bottom-left of frame, wrist above the lantern: the forearm crosses the corner
-	// of the picture diagonally rather than pointing straight at the viewer.
-	// Both points are pushed away from the camera compared with where they would sit on a real
-	// body: at arm's length from a 90 degree lens, a forearm of honest thickness fills a quarter
-	// of the frame in solid black. Far enough forward, it reads as an arm and leaves the room
-	// visible past it.
-	const FVector Elbow(34.f, -46.f, -44.f);
-	const FVector Wrist(57.f, -31.f, -23.f);
-	const FVector Forearm = Wrist - Elbow;
-	const FRotator ForearmAim = FRotationMatrix::MakeFromZ(Forearm.GetSafeNormal()).Rotator();
-
-	Build.Cyl(Elbow + Forearm * 0.5f, ForearmAim, FVector(10.5f, 10.f, Forearm.Size() * 1.1f), CoatMat, /*bBlockingCollision*/ false);
-	Build.Cyl(Wrist - Forearm.GetSafeNormal() * 4.f, ForearmAim, FVector(9.5f, 9.f, 7.f), CuffMat, /*bBlockingCollision*/ false);
-
-	// The hand: a back, a heel, four fingers curled over the bail and a thumb closing on them.
-	Build.Box(Wrist + FVector(2.f, 1.f, 0.f), FRotator(-18.f, 14.f, 6.f), FVector(9.f, 7.f, 5.f), SkinMat, /*bBlockingCollision*/ false);
-	for (int32 Finger = 0; Finger < 4; ++Finger)
+	// For the models' own UVs, which are already in repeats of each slot's texel size.
+	auto Sheet = [&Build](const FRoomSurface& Set, const FLinearColor& Tint, float RoughnessScale)
 	{
-		// Curled around a bail that runs across the hand, so each finger is a short bar laid
-		// sideways, shortest at the outside the way a real grip tapers.
-		const float Across = -3.6f + Finger * 2.6f;
-		const float Drop = -2.4f + FMath::Abs(1.5f - Finger) * 0.6f;
-		Build.Cyl(Wrist + FVector(5.5f + Across * 0.35f, 1.f, Drop - 1.f), FRotator(0.f, 0.f, 90.f),
-			FVector(2.3f, 2.3f, 6.2f - FMath::Abs(1.5f - Finger) * 0.5f), SkinMat, /*bBlockingCollision*/ false);
-	}
-	Build.Cyl(Wrist + FVector(4.f, -3.2f, -3.2f), FRotator(28.f, 0.f, 62.f), FVector(2.7f, 2.7f, 7.2f), SkinMat, /*bBlockingCollision*/ false);
-
-	// None of it casts a shadow, for the same reason the lantern does not: the flame is a hand's
-	// width below the fingers, so a shadow-casting hand paints itself across the whole ceiling.
-	TArray<USceneComponent*> RigParts;
-	LanternRig->GetChildrenComponents(/*bIncludeAllDescendants*/ true, RigParts);
-	for (USceneComponent* Part : RigParts)
-	{
-		if (UPrimitiveComponent* Primitive = Cast<UPrimitiveComponent>(Part))
+		UMaterialInstanceDynamic* Mat = Build.Surface(Set, Tint, RoughnessScale);
+		if (Mat)
 		{
-			Primitive->SetCastShadow(false);
+			Mat->SetVectorParameterValue(TEXT("TilingXY"), FLinearColor(1.f, 1.f, 0.f, 1.f));
+			Mat->SetVectorParameterValue(TEXT("UVOffset"), FLinearColor(0.f, 0.f, 0.f, 1.f));
+		}
+		return Mat;
+	};
+	auto Dress = [](UStaticMeshComponent* Part, const TCHAR* Slot, UMaterialInterface* Mat)
+	{
+		if (Part && Mat && Part->GetMaterialIndex(FName(Slot)) != INDEX_NONE)
+		{
+			Part->SetMaterialByName(FName(Slot), Mat);
+		}
+	};
+
+	if (UStaticMesh* Lantern = FRoomShapes::Prop(RoomProps::Lantern))
+	{
+		LanternMesh->SetStaticMesh(Lantern);
+		// Galvanised tin gone to rust (rusty_metal_02, linear mean 0.42/0.29/0.14) and the fully
+		// rusted wire of the frame (rust_coarse_01, 0.13/0.04/0.012), both taken down to a dark
+		// brown about 0.06 albedo: a lantern this close to the eye and paler than that is a toy.
+		Dress(LanternMesh, TEXT("Tin"), Sheet(DetectiveLanternTin, FLinearColor(0.17f, 0.16f, 0.20f), 0.9f));
+		Dress(LanternMesh, TEXT("Rust"), Sheet(DetectiveLanternRust, FLinearColor(0.42f, 0.6f, 0.9f), 1.f));
+		// The globe: clear glass a candle has been smoking for years. At the window's values a
+		// globe this near the eye is milk-white porcelain (the wine glasses, 10-08).
+		Dress(LanternMesh, TEXT("Glass"), Build.Glass(FLinearColor(0.035f, 0.031f, 0.025f), 0.06f, 0.05f));
+		Dress(LanternMesh, TEXT("Wax"), Build.Flat(FLinearColor(0.30f, 0.25f, 0.17f), 0.55f));
+		Dress(LanternMesh, TEXT("Wick"), Build.Flat(FLinearColor(0.01f, 0.009f, 0.008f), 0.9f));
+	}
+	if (UStaticMesh* Flame = FRoomShapes::Prop(RoomProps::LanternFlame))
+	{
+		FlameMesh->SetStaticMesh(Flame);
+		FlameMat = Build.Emissive(FLinearColor(1.f, 0.56f, 0.2f), 40.f);
+		Dress(FlameMesh, TEXT("Flame"), FlameMat);
+	}
+	if (UStaticMesh* Hand = FRoomShapes::Prop(RoomProps::DetectiveHand))
+	{
+		HandMesh->SetStaticMesh(Hand);
+		// His own skin and his dark suit, as on the man on the hook: the textures MakeHuman ships,
+		// taken down a little into the room's dark.
+		struct FHandTint { const TCHAR* Slot; FLinearColor Tint; };
+		const FHandTint Tints[] = {
+			{ TEXT("Skin"), FLinearColor(0.55f, 0.50f, 0.47f) },
+			{ TEXT("Suit"), FLinearColor(0.45f, 0.45f, 0.47f) },
+		};
+		for (const FHandTint& T : Tints)
+		{
+			const int32 Index = HandMesh->GetMaterialIndex(FName(T.Slot));
+			if (Index == INDEX_NONE)
+			{
+				continue;
+			}
+			if (UMaterialInstanceDynamic* Mat = UMaterialInstanceDynamic::Create(HandMesh->GetMaterial(Index), this))
+			{
+				Mat->SetVectorParameterValue(TEXT("Tint"), T.Tint);
+				HandMesh->SetMaterial(Index, Mat);
+			}
 		}
 	}
+
+	LanternController->Initialize(LanternLight, FlameMesh, FlameMat, LanternNearLight, LanternNearCandelas);
 }
 
 void ADetectiveCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	UpdateLanternSway(DeltaTime);
+	UpdateLanternSwing(DeltaTime);
 }
 
 void ADetectiveCharacter::UpdateLanternSway(float DeltaTime)
@@ -266,6 +314,55 @@ void ADetectiveCharacter::UpdateLanternSway(float DeltaTime)
 
 	LanternRig->SetRelativeLocation(Stride + SwayLag);
 	LanternRig->SetRelativeRotation(FRotator(SwayLag.Z * 0.7f, SwayLag.Y * 0.9f, -SwayLag.Y * 0.6f));
+}
+
+void ADetectiveCharacter::UpdateLanternSwing(float DeltaTime)
+{
+	if (!LanternMesh || !LanternRig || DeltaTime <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	// A lantern on a bail is a pendulum hung from the fist: when the hand moves it is left behind
+	// and swings back past plumb, a little less each time. Driven by how the grip point
+	// accelerates in the world (a step, a turn, the sway), in world X and Y, so the lantern hangs
+	// plumb whatever the camera does, and looking down at it does not tip it.
+	const FTransform Rig = LanternRig->GetComponentTransform();
+	const FVector Grip = Rig.TransformPosition(FVector(GripForward, GripRight, GripUp));
+	if (!bSwingPrimed)
+	{
+		PreviousGrip = Grip;
+		PreviousGripVelocity = FVector::ZeroVector;
+		bSwingPrimed = true;
+	}
+	const FVector Velocity = (Grip - PreviousGrip) / DeltaTime;
+	FVector Accel = (Velocity - PreviousGripVelocity) / DeltaTime;
+	PreviousGrip = Grip;
+	PreviousGripVelocity = Velocity;
+	// A teleport (the waking pose, a -RoomShot camera) is not a shove.
+	if (Accel.Size() > 6000.f)
+	{
+		Accel = FVector::ZeroVector;
+		PreviousGripVelocity = FVector::ZeroVector;
+	}
+
+	const float Stiffness = 980.f / LanternSwingLength;
+	const float Damping = 2.2f;
+	const FVector2D Drive(Accel.X / LanternSwingLength, Accel.Y / LanternSwingLength);
+	SwingRate += (-Stiffness * SwingTilt - Damping * SwingRate - Drive) * DeltaTime;
+	SwingTilt += SwingRate * DeltaTime;
+	const float MaxTilt = 0.5f;
+	if (SwingTilt.Size() > MaxTilt)
+	{
+		SwingTilt = SwingTilt.GetSafeNormal() * MaxTilt;
+		SwingRate *= 0.5f;
+	}
+
+	// SwingTilt is where the foot has swung to; the lantern's up runs from there to the fist. The
+	// bail's wire stays along the hand's.
+	const FVector Up = FVector(-SwingTilt.X, -SwingTilt.Y, 1.f).GetSafeNormal();
+	const FVector Wire = Rig.TransformVectorNoScale(FRotator(0.f, HandYaw, 0.f).Vector());
+	LanternMesh->SetWorldRotation(FRotationMatrix::MakeFromZX(Up, Wire).Rotator());
 }
 
 void ADetectiveCharacter::PossessedBy(AController* NewController)

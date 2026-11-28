@@ -76,6 +76,8 @@ Fetched by `Tools/fetch_assets.py`, imported by `Tools/build_art.py` (`-ArtStage
 | `leather_red_02` | texture | the burgundy leather: Chesterfields, desk top, his chair |
 | `velour_velvet` | texture | the burgundy velvet drapes, the card table's baize, the lamp shades, the hat |
 | `metal_plate_02` | texture | the gilt (tinted gold) and the safe's and telephone's steel |
+| `rusty_metal_02` | texture | the detective's lantern: rusted tin |
+| `rust_coarse_01` | texture | the detective's lantern: its rusted wire frame and bail |
 | `painted_plaster_wall` | texture | the study's dark ceiling |
 
 ## The house's outside — Poly Haven (CC0 / public domain)
