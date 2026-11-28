@@ -104,7 +104,11 @@ namespace RoomProps
 	extern const TCHAR* Table;
 	extern const TCHAR* WallClock;
 	extern const TCHAR* PictureFrame;
+	/** Tools/make_lantern.py: the detective's hurricane lantern, and its candle flame. */
 	extern const TCHAR* Lantern;
+	extern const TCHAR* LanternFlame;
+	/** Tools/make_detective_hand.py: his left forearm and hand, closed on the lantern's bail. */
+	extern const TCHAR* DetectiveHand;
 	extern const TCHAR* Crate;
 	/** The corner the detective wakes up in: a bed, and the things that stand around one. */
 	extern const TCHAR* Bed;
@@ -256,8 +260,6 @@ namespace RoomPalette
 	extern const FLinearColor Rain;
 	extern const FLinearColor PaintedTrim;
 	extern const FLinearColor Lightning;
-	extern const FLinearColor Coat;
-	extern const FLinearColor Skin;
 }
 
 namespace RoomWalls

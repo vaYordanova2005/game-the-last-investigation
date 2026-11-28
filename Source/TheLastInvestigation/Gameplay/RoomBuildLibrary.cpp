@@ -80,7 +80,9 @@ namespace RoomProps
 	const TCHAR* Table = TEXT("WoodenTable_01");
 	const TCHAR* WallClock = TEXT("wall_clock");
 	const TCHAR* PictureFrame = TEXT("hanging_picture_frame_01");
-	const TCHAR* Lantern = TEXT("Lantern_01");
+	const TCHAR* Lantern = TEXT("detective_lantern");
+	const TCHAR* LanternFlame = TEXT("detective_lantern_flame");
+	const TCHAR* DetectiveHand = TEXT("detective_hand");
 	const TCHAR* Crate = TEXT("wooden_crate_01");
 	const TCHAR* Bed = TEXT("GothicBed_01");
 	const TCHAR* Armchair = TEXT("ArmChair_01");
@@ -215,8 +217,6 @@ namespace RoomPalette
 	// still only a quarter albedo — a century of smoke has been into it.
 	const FLinearColor PaintedTrim(0.150f, 0.152f, 0.144f);
 	const FLinearColor Lightning(0.78f, 0.86f, 1.000f);
-	const FLinearColor Coat(0.034f, 0.032f, 0.038f);
-	const FLinearColor Skin(0.240f, 0.152f, 0.112f);
 }
 
 TArray<FBox2D> RoomWalls::CutAround(TConstArrayView<FBox2D> Holes, float U0, float U1, float V0, float V1)
